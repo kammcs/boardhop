@@ -74,7 +74,20 @@ Everything in `research/01` through `research/07` and every spike result remains
 
 ## 4. The one question that could change the answer
 
-Does any named prospect require **"Require app protection policy"** Conditional Access for Azure DevOps? That grant needs the Intune App SDK, which exists only for MAUI and native. If the answer is yes for a customer worth building around, the choice becomes MAUI Blazor Hybrid, or a Flutter mainline plus a small MAUI or native "managed" build for that segment. If the answer is no or unknown, Flutter.
+Does any named prospect require **"Require app protection policy"** Conditional Access for Azure DevOps? That grant needs the Intune App SDK, which Microsoft ships only for native iOS and Android and for MAUI. If the answer is no or unknown, Flutter.
+
+If the answer is yes, Flutter still has a path: **a kammcs-owned Flutter plugin over the native Intune SDKs**, which is how Ionic delivers Intune for Capacitor. What that involves, as of 2026-09-10:
+
+- The plugin owns MSAL sign-in with the broker and then enrolls the same account with `IntuneMAMEnrollmentManager` (iOS) and `MAMEnrollmentManager` (Android). Enrollment satisfies the Conditional Access grant.
+- Android: apply the Intune Gradle plugin; it rewrites class references at build time and can rewrite `io.flutter` host classes through its external-library option. Manifest entries overlap with the MSAL broker list.
+- iOS: link the IntuneMAM framework, add the `IntuneMAMSettings` dictionary and keychain group. The SDK swizzles UIKit, so share sheet, document picker, screen-capture blocking, PIN and wipe are enforced without app code.
+- **Flutter draws its own widgets, so clipboard policy does not apply to Flutter text fields automatically.** Microsoft's "app participation features" list already covers what the SDK cannot enforce alone; a Flutter UI extends it. The app must query policy through the plugin and enforce clipboard, save-as and open-from (`isSaveToAllowedForLocation`, `isOpenFromAllowedForLocation`), notification content (`notificationPolicy`), and file encryption of the offline cache (`isFileEncryptionRequired`) itself.
+- Public-store apps must sign the Intune App Partner Agreement (one to three months, legal); admins can target the bundle ID as a custom app meanwhile.
+- Effort: three to five weeks for the plugin plus the enforcement points, then Intune SDK updates before every major OS release. Needs an Intune-licensed Conditional Access tenant to test.
+
+That keeps Intune a contained add-on rather than a stack decision. Microsoft has no Flutter SDK and has not answered the Flutter question on its Android SDK repository (issue #190), so this would be unsupported by Microsoft, the same position as Ionic's plugin.
+
+Sources: [Intune App SDK for iOS, app participation features](https://learn.microsoft.com/en-us/intune/intune-service/developer/app-sdk-ios-phase4), [Intune App SDK for Android, get started with MAM](https://learn.microsoft.com/en-us/intune/developer/app-sdk/android-phase-3), [Android SDK issue #190](https://github.com/microsoftconnect/ms-intune-app-sdk-android/issues/190), [Ionic Intune Android installation](https://ionic.io/docs/intune/android-installation), [Appdome Intune MAM](https://www.appdome.com/enterprise-mobile-app-security/uem-mdm-mam/microsoft-intune/).
 
 ---
 
