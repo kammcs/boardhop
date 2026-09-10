@@ -222,6 +222,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/editor'),
           ),
           IconButton(
+            tooltip: 'Board probe (F4)',
+            icon: const Icon(Icons.view_kanban_outlined),
+            onPressed: () => context.push('/diagnostics/board'),
+          ),
+          IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),
             onPressed: _checks.isEmpty

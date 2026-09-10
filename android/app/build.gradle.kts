@@ -53,6 +53,11 @@ android {
         debug {
             manifestPlaceholders["msalSignatureHash"] = msalDebugSignatureHash
         }
+        // Flutter's profile build type is signed with the debug key, so it
+        // needs the debug hash too (flutter run --profile for measurements).
+        getByName("profile") {
+            manifestPlaceholders["msalSignatureHash"] = msalDebugSignatureHash
+        }
         release {
             manifestPlaceholders["msalSignatureHash"] = msalReleaseSignatureHash
             // TODO: Add your own signing config for the release build.

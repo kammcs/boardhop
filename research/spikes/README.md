@@ -56,7 +56,8 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | F1 | `msal_auth` sign-in, silent restore, org discovery, token size | Done 2026-09-10 on a Pixel 10 Pro / Android 17 emulator (browser fallback; Authenticator broker not yet exercised). Runner: the Diagnostics page in the app. |
 | F2 | Claims challenge (CAE) through `msal_auth` | Done 2026-09-10: plugin vendored and patched (`packages/msal_auth`), `forceRefresh` and `claims` verified on the emulator, 401 retry wired into `AdoClient`. Real revocation event and iOS build still untested. |
 | F3 | HTML round-trip through the candidate editors | Done 2026-09-10. Delta editors (Quill, Fleather) drop tables and mention identities; `html_editor_enhanced` is lossless on real content. Harness in `f3_harness/`, on-device probe in the app's Diagnostics. |
-| F4–F5 | Kanban drag-and-drop, diff viewer | Not started |
+| F4 | Kanban drag-and-drop | Done 2026-09-10. `drag_and_drop_lists`, `appflowy_board`, `boardview` and Flutter's own `LongPressDraggable`/`DragTarget` compared on the emulator with `f4_drive.sh`; the primitives won on drag frame times and dependency risk. Probe stays in the app's Diagnostics. |
+| F5 | Diff viewer | Not started |
 
 ## Not runnable here
 
