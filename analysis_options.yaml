@@ -14,6 +14,9 @@ analyzer:
     - build/**
     - android/**
     - ios/**
+    # The vendored plugin is its own package; without a package_config of
+    # its own (CI) the root context would analyze its sources and fail.
+    - packages/**
 
 linter:
   # The lint rules applied to this project can be customized in the
