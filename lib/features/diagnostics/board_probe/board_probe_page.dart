@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../theme/theme.dart';
+import '../frame_stats.dart';
 import 'board_probe_data.dart';
-import 'frame_stats.dart';
 import 'hand_rolled_board.dart';
 import 'probe_widgets.dart';
 

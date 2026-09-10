@@ -1,5 +1,5 @@
 import 'package:boardhop/features/diagnostics/board_probe/board_probe_data.dart';
-import 'package:boardhop/features/diagnostics/board_probe/frame_stats.dart';
+import 'package:boardhop/features/diagnostics/frame_stats.dart';
 import 'package:boardhop/features/diagnostics/board_probe/hand_rolled_board.dart';
 import 'package:boardhop/features/diagnostics/board_probe/probe_widgets.dart';
 import 'package:boardhop/theme/theme.dart';

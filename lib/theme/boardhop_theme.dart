@@ -84,7 +84,10 @@ abstract final class BoardhopTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(kMinTapTarget),
+          // Never Size.fromHeight here: an infinite minimum width forces
+          // infinite constraints on a FilledButton inside a Row. Full-width
+          // CTAs get their width from a stretched Column or a ListView.
+          minimumSize: const Size(kMinTapTarget, kMinTapTarget),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.md)),
           ),

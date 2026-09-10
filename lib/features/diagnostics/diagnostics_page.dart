@@ -227,6 +227,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/board'),
           ),
           IconButton(
+            tooltip: 'Diff probe (F5)',
+            icon: const Icon(Icons.difference_outlined),
+            onPressed: () => context.push('/diagnostics/diff'),
+          ),
+          IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),
             onPressed: _checks.isEmpty
