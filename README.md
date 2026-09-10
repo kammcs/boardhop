@@ -6,12 +6,13 @@ Boardhop is an independent product by kammcs. It works with Azure DevOps but is 
 
 ## Status
 
-Discovery is complete and the stack is decided: Flutter (see [research/08-stack-comparison.md](research/08-stack-comparison.md)). The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The Flutter app is scaffolded (sign-in through Microsoft Authenticator, organization discovery, project list, and a diagnostics page that doubles as the sign-in spike). Current state and the ordered plan are in [NEXT-STEPS.md](NEXT-STEPS.md).
+Discovery is complete and the stack is decided: Flutter (see [research/08-stack-comparison.md](research/08-stack-comparison.md)). The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The Flutter app is scaffolded (sign-in through Microsoft Authenticator, organization discovery, project list, and a diagnostics page that doubles as the sign-in spike). Current state and the ordered plan are in [NEXT-STEPS.md](NEXT-STEPS.md); design ground rules are in [DESIGN.md](DESIGN.md).
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
+| `lib/theme/` | Master theme, domain color extension, tokens, breakpoints, theme-mode controller (rules in [DESIGN.md](DESIGN.md)) |
 | `lib/core/` | Build-time config, the Azure DevOps HTTP client (host routing, pinned `api-version`, rate-limit tracking, typed errors) |
 | `lib/auth/` | `msal_auth` wrapper (broker sign-in, per-tenant silent tokens) and the auth bloc |
 | `lib/data/` | drift database, models, repositories |

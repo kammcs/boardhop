@@ -17,6 +17,7 @@
 | Repo | `git@github.com:kammcs/boardhop.git`, branch `main`. Commit and push are pre-approved. |
 | Emulator | AVD `boardhop_pixel_10_pro` (Android 17, Play image). Start with `tool/start-emulator.ps1`; the `-dns-server` flag is required on this host. |
 | Plugin fork | `packages/msal_auth` is a vendored, patched copy of msal_auth 3.5.3 (path dependency). Keep the diff small; see its README. |
+| Design system | Done 2026-09-10: `BoardhopTheme` light/dark from one seed, `BoardhopColors` extension for work item / PR / pipeline / diff colors, tokens, breakpoints, `ThemeController` (system default, persisted; Settings > Appearance). Rules in DESIGN.md. |
 | App scaffold | Done. Flutter 3.47.3 / Dart 3.13. `lib/core` (config, `AdoClient`, rate limits, typed errors), `lib/auth` (`AuthService` over `msal_auth` 3.5.3, `AuthBloc`), `lib/data` (drift: organizations, projects, pending_writes), `lib/features/*` (sign-in, org picker, project list, diagnostics; placeholders for work items, boards, PRs, pipelines, activity). Android: `assets/msal_config.json`, `BrowserTabActivity` with the hash from gitignored `android/secret.properties`. iOS: URL scheme, `LSApplicationQueriesSchemes`, keychain group entitlement, deployment target 16.0. 13 unit tests pass; `flutter analyze` is clean. |
 | Still administrative | Partner Center + MPN ID for publisher verification; Visual Studio Marketplace publisher; Apple and Google developer accounts; privacy policy; domain for boardhop. |
 
@@ -39,6 +40,8 @@
 9. **Later:** Marketplace extension + tenant relay (research/06), webhook payload capture spike, Intune plugin only if a customer requires it (research/08 §4).
 
 ## Conventions
+
+- Design rules live in DESIGN.md: one master theme in `lib/theme/`, light and dark both first class, colors only through `Theme.of(context)` and `context.boardhopColors`, spacing and radii from tokens, every screen checked at compact and expanded width.
 
 - Never commit client IDs, tokens or raw spike results. `.gitignore` already excludes `research/spikes/results/*.md` except the README, plus `.env` and `android/secret.properties`.
 - After changing drift tables run `dart run build_runner build`; the generated `app_database.g.dart` is committed.

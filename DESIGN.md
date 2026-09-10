@@ -1,0 +1,65 @@
+# Boardhop design ground rules
+
+Locked 2026-09-10, before the feature screens. Everything visual flows from one place, `lib/theme/`, which `main.dart` loads before the first frame and hands to `MaterialApp`. Screens inherit; they do not restyle.
+
+## 1. One master theme
+
+- `BoardhopTheme.light()` and `BoardhopTheme.dark()` in [lib/theme/boardhop_theme.dart](lib/theme/boardhop_theme.dart) are the only `ThemeData` in the app. Both are built once in `BoardhopApp` and never rebuilt.
+- The brand hue is a single constant, `BoardhopTheme.seed`. Material 3 derives the full color scheme for both modes from it. Change the seed, and every screen follows. It is not a Microsoft blue: Boardhop is an independent product and its trademark review (research/07) says to stay visually distinct.
+- Component looks (app bar, cards, list tiles, buttons, inputs, chips, sheets, dialogs, snackbars, navigation bar and rail) are set in the theme's component blocks. If a widget needs a different look on one screen, the fix goes into the theme, not the screen.
+- `ThemeData` is Material 3 with the platform defaults for transitions, so iOS gets Cupertino navigation feel. Use the `.adaptive` constructors where Flutter offers them: `Switch.adaptive`, `Slider.adaptive`, `CircularProgressIndicator.adaptive`, `AlertDialog.adaptive`.
+
+## 2. Light and dark
+
+- Both modes are first class. Nothing is designed light-first and patched for dark.
+- Mode follows the system setting by default. `ThemeController` (persisted with `shared_preferences`) exposes system / light / dark; Settings > Appearance lets the user pin one. The controller is loaded in `main` before `runApp` so there is no flash of the wrong mode.
+- Screens never branch on brightness. If something must differ between modes, it becomes a token in `BoardhopColors` with a light and a dark value.
+
+## 3. Colors: only through the theme
+
+- Never write `Colors.*` or a hex literal in a screen or widget. Use `Theme.of(context).colorScheme.*` for UI chrome and `context.boardhopColors.*` for Azure DevOps semantics.
+- `BoardhopColors` ([lib/theme/boardhop_colors.dart](lib/theme/boardhop_colors.dart)) is a `ThemeExtension` carrying the domain palette: work item types (bug, task, story, feature, epic, issue, test case), state categories (proposed, in progress, resolved, completed, removed), pull request status and reviewer votes, pipeline run outcomes, diff added/removed, and code background. Each has a light and a dark value tuned for contrast on our surfaces. Use `workItemType(name)` and `stateCategory(category)` rather than matching strings in widgets.
+- Azure DevOps lets teams recolor work item types and board columns. When the API supplies a color (work item type `color`, board column settings), render that; fall back to `BoardhopColors` only when the API has none. Tint API colors for dark mode with `Color.lerp` toward the surface instead of using them raw.
+- Status is never carried by color alone. Pair every colored indicator with an icon or a label (state chips have text, vote icons have tooltips, run outcomes have icons).
+
+## 4. Type
+
+- System font on each platform (Roboto on Android, SF on iOS). No bundled display face for v1.
+- Use the `TextTheme` roles: `titleLarge` for app bar titles, `titleMedium` for card and section titles, `bodyLarge` for primary list text, `bodyMedium` for secondary, `labelMedium` for chips and metadata, `bodySmall` for timestamps. No ad hoc font sizes.
+- Code, diffs, IDs and diagnostics use `BoardhopTheme.codeStyle(context)`.
+- Respect the user's text scale. Layouts must survive 130% text without clipping; use `Flexible`, wrapping, and `maxLines` with ellipsis rather than fixed heights.
+
+## 5. Spacing, shape, motion
+
+- Spacing comes from `Spacing` in [lib/theme/tokens.dart](lib/theme/tokens.dart): 4, 8, 12, 16, 24, 32. Page gutter is 16. No other paddings.
+- Corner radii from `Radii`: 8 for chips, 12 for cards, buttons and inputs, 16 for sheets and dialogs.
+- Touch targets are at least 48 dp on both platforms (`kMinTapTarget`); the theme sets this on buttons.
+- Motion uses `Durations.fast` / `normal` / `slow` (120 / 220 / 360 ms). Prefer implicit animations (`AnimatedSwitcher`, `AnimatedContainer`) and platform page transitions over custom ones.
+
+## 6. Layout: phones first, tablets not an afterthought
+
+- `Breakpoint` in [lib/theme/layout.dart](lib/theme/layout.dart) follows Material window size classes: compact (< 600), medium (< 840), expanded. Read it with `context.breakpoint`.
+- Every screen works at compact width. On medium and expanded, wrap scrolling content in `ContentColumn` so rows do not stretch past 840 dp, and use the extra width for a second pane where it helps (list + detail for work items and PRs, `NavigationRail` instead of `NavigationBar`). That is the "responsive tablet layout" decision from research/00; multi-pane is a later milestone, but nothing built now may assume a phone.
+- Keep the primary action reachable with one thumb: bottom-anchored buttons and sheets on phones, not top-right only.
+
+## 7. Components and patterns
+
+- Lists: `ListTile` inside `ListView` for navigation lists; `Card` only when an item has several lines of mixed content (work item cards on a board, PR summaries).
+- Primary action: `FilledButton`. Secondary: `OutlinedButton` or `TextButton`. Never two filled buttons side by side.
+- Loading: `LinearProgressIndicator` under the app bar for refreshes that keep stale content visible; `CircularProgressIndicator.adaptive` only for a truly empty screen.
+- Errors: inline, near the content they concern, in `colorScheme.error`, with the Azure DevOps message shown verbatim where it helps the user or their admin (AADSTS codes, TF codes). Snackbars only for transient confirmations.
+- Offline and queued writes (a settled decision) show a persistent, unobtrusive banner, not a dialog.
+- Empty states have one sentence and, where possible, one action.
+
+## 8. Accessibility
+
+- Contrast: text and icons meet WCAG AA on their surface in both modes. `ColorScheme.fromSeed` guarantees this for scheme colors; `BoardhopColors` values were picked for it.
+- Every icon-only button has a `tooltip`. Every image or status glyph has semantics.
+- Dynamic type and screen readers are tested on the diagnostics screen before each milestone.
+
+## 9. How to add a screen
+
+1. Start from the nearest existing screen in `lib/features/`.
+2. Read colors, text styles and spacing from the theme and tokens; no literals.
+3. Check the screen at compact and expanded widths, in light and dark, at 130% text.
+4. If the theme needs a change to make the screen right, change the theme, then the screen.

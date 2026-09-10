@@ -56,6 +56,11 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
             onPressed: () => context.push('/diagnostics'),
           ),
           IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push('/settings'),
+          ),
+          IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () =>

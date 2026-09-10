@@ -9,6 +9,7 @@ import '../../core/config/app_config.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/http/ado_host.dart';
+import '../../theme/theme.dart';
 
 /// Spike F1 and F2 runner (NEXT-STEPS.md steps 2 and 3).
 ///
@@ -258,7 +259,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                 title: Text(c.name),
                 subtitle: Text(
                   '${c.detail}\n${c.elapsed?.inMilliseconds ?? '-'} ms',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  style: BoardhopTheme.codeStyle(context),
                 ),
                 isThreeLine: true,
               ),
