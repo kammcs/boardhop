@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -229,7 +230,22 @@ class AdoClient {
         ),
       );
     } on DioException catch (e) {
-      throw AdoNetworkException(e.message ?? e.type.name, url: uri, cause: e);
+      // Dio's connection messages quote library internals; the user needs
+      // to know it is the network, not the service.
+      final offline = switch (e.type) {
+        DioExceptionType.connectionError ||
+        DioExceptionType.connectionTimeout ||
+        DioExceptionType.sendTimeout ||
+        DioExceptionType.receiveTimeout => true,
+        _ => e.error is SocketException,
+      };
+      throw AdoNetworkException(
+        offline
+            ? 'No connection. Check your network and try again.'
+            : e.message ?? e.type.name,
+        url: uri,
+        cause: e,
+      );
     }
     rateLimits.record(
       RateLimitInfo.fromHeaders(

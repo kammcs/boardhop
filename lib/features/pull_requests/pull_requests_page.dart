@@ -27,8 +27,9 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
   PrListFilter _filter = PrListFilter.toReview;
   List<PullRequest> _items = const [];
 
-  /// When the list on screen came from the cache: its fetch time.
-  DateTime? _cachedAt;
+  /// When the list on screen was fetched (from the network or the cache),
+  /// shown next to an error so a stale list is recognisable.
+  DateTime? _shownAt;
   String? _error;
   bool _loading = false;
   bool _loadedOnce = false;
@@ -58,7 +59,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
       if (mounted && cached != null && filter == _filter) {
         setState(() {
           _items = cached.items;
-          _cachedAt = cached.fetchedAt;
+          _shownAt = cached.fetchedAt;
           _loadedOnce = true;
         });
       }
@@ -72,7 +73,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
       if (mounted && filter == _filter) {
         setState(() {
           _items = items;
-          _cachedAt = null;
+          _shownAt = DateTime.now();
         });
       }
     } on AdoAuthException catch (e) {
@@ -96,7 +97,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
     setState(() {
       _filter = f;
       _items = const [];
-      _cachedAt = null;
+      _shownAt = null;
       _loadedOnce = false;
     });
     _refresh();
@@ -175,10 +176,10 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
                 ListTile(
                   leading: Icon(Icons.error_outline, color: scheme.error),
                   title: Text(_error!),
-                  subtitle: _cachedAt == null
+                  subtitle: _shownAt == null || _items.isEmpty
                       ? null
                       : Text(
-                          'Showing the list from ${relativeTime(_cachedAt)}.',
+                          'Showing the list from ${relativeTime(_shownAt)}.',
                         ),
                 ),
               if (_items.isEmpty && _loadedOnce && !_loading)
