@@ -380,6 +380,69 @@ class PullRequestRepository {
     body: {'status': status},
   );
 
+  /// Commits one edited file to the PR's source branch through the Pushes
+  /// API (`vso.code_write`), guarded by the branch tip the app last saw so a
+  /// concurrent push fails instead of being overwritten. Returns the new
+  /// commit id; the service adds an iteration to the PR.
+  Future<String> pushEdit(
+    String org,
+    PullRequest pr, {
+    required String path,
+    required String content,
+    required String message,
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: pr.projectId,
+      path: '_apis/git/repositories/${pr.repositoryId}/pushes',
+      apiVersion: apiVersion,
+      body: {
+        'refUpdates': [
+          {'name': pr.sourceRefName, 'oldObjectId': pr.lastMergeSourceCommit},
+        ],
+        'commits': [
+          {
+            'comment': message,
+            'changes': [
+              {
+                'changeType': 'edit',
+                'item': {'path': path},
+                'newContent': {'content': content, 'contentType': 'rawtext'},
+              },
+            ],
+          },
+        ],
+      },
+    );
+    final commits = json['commits'];
+    if (commits is List && commits.isNotEmpty && commits.first is Map) {
+      return (commits.first as Map)['commitId'] as String? ?? '';
+    }
+    return '';
+  }
+
+  /// Replaces lines [start]..[end] (1-based, inclusive) of [text] with
+  /// [replacement], keeping the file's line ending style.
+  static String applySuggestion(
+    String text,
+    int start,
+    int end,
+    String replacement,
+  ) {
+    final crlf = text.contains('\r\n');
+    final eol = crlf ? '\r\n' : '\n';
+    final lines = text.split(eol);
+    final trailingNewline = lines.isNotEmpty && lines.last.isEmpty;
+    if (trailingNewline) lines.removeLast();
+    final from = (start - 1).clamp(0, lines.length);
+    final to = end.clamp(from, lines.length);
+    final body = replacement.replaceAll('\r\n', '\n');
+    final inserted = body.isEmpty ? const <String>[] : body.split('\n');
+    lines.replaceRange(from, to, inserted);
+    return lines.join(eol) + (trailingNewline ? eol : '');
+  }
+
   /// Conversation entries: non-system, non-file threads, oldest first.
   static List<PrThread> conversation(List<Map<String, dynamic>> raw) => [
     for (final t in raw)

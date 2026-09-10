@@ -17,6 +17,7 @@ class ThreadCard extends StatefulWidget {
     this.busy = false,
     this.onReply,
     this.onSetStatus,
+    this.onApplySuggestion,
     this.color,
   });
 
@@ -27,6 +28,11 @@ class ThreadCard extends StatefulWidget {
   final bool busy;
   final Future<void> Function(String text)? onReply;
   final Future<void> Function(String status)? onSetStatus;
+
+  /// Set when a ```` ```suggestion ```` in this thread can be committed to
+  /// the source branch (file thread, latest iteration, active PR).
+  final Future<void> Function(PrComment comment, String suggestion)?
+  onApplySuggestion;
   final Color? color;
 
   @override
@@ -161,6 +167,20 @@ class _ThreadCardState extends State<ThreadCard> {
                 ),
                 child: MarkdownBody(data: c.content, selectable: true),
               ),
+              if (c.suggestion != null &&
+                  widget.canAct &&
+                  widget.onApplySuggestion != null &&
+                  !t.isResolved)
+                Padding(
+                  padding: const EdgeInsets.only(left: 28, bottom: Spacing.xs),
+                  child: FilledButton.tonalIcon(
+                    onPressed: widget.busy
+                        ? null
+                        : () => widget.onApplySuggestion!(c, c.suggestion!),
+                    icon: const Icon(Icons.auto_fix_high, size: 18),
+                    label: const Text('Apply suggestion'),
+                  ),
+                ),
             ],
             if (widget.canAct && widget.onReply != null)
               if (_replying)

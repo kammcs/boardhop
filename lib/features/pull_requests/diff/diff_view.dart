@@ -27,6 +27,7 @@ class DiffView extends StatefulWidget {
     this.canAct = false,
     this.onReply,
     this.onSetThreadStatus,
+    this.onApplySuggestion,
   });
 
   final LineDiffResult diff;
@@ -46,6 +47,15 @@ class DiffView extends StatefulWidget {
   final Future<void> Function(PrThread thread, String text)? onReply;
   final Future<void> Function(PrThread thread, String status)?
   onSetThreadStatus;
+
+  /// Commits a suggestion; null when the file is not at the latest
+  /// iteration or the PR is closed.
+  final Future<void> Function(
+    PrThread thread,
+    PrComment comment,
+    String suggestion,
+  )?
+  onApplySuggestion;
 
   @override
   State<DiffView> createState() => _DiffViewState();
@@ -209,6 +219,10 @@ class _DiffViewState extends State<DiffView> {
       onSetStatus: widget.onSetThreadStatus == null
           ? null
           : (status) => widget.onSetThreadStatus!(row.thread, status),
+      onApplySuggestion: widget.onApplySuggestion == null
+          ? null
+          : (comment, suggestion) =>
+                widget.onApplySuggestion!(row.thread, comment, suggestion),
     ),
     _ComposerRow() => _ComposerView(
       line: row.line,
@@ -328,6 +342,7 @@ class _ThreadView extends StatelessWidget {
     required this.busy,
     required this.onReply,
     required this.onSetStatus,
+    required this.onApplySuggestion,
   });
 
   final PrThread thread;
@@ -336,6 +351,8 @@ class _ThreadView extends StatelessWidget {
   final bool busy;
   final Future<void> Function(String text)? onReply;
   final Future<void> Function(String status)? onSetStatus;
+  final Future<void> Function(PrComment comment, String suggestion)?
+  onApplySuggestion;
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +374,7 @@ class _ThreadView extends StatelessWidget {
             busy: busy,
             onReply: onReply,
             onSetStatus: onSetStatus,
+            onApplySuggestion: onApplySuggestion,
             color: scheme.surfaceContainerHigh,
           ),
         ),

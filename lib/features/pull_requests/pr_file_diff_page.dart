@@ -42,6 +42,9 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   int? _iteration;
   PrFileChange? _change;
   LineDiffResult? _diff;
+
+  /// New-side text of the file at the shown iteration (suggestion apply).
+  String _newText = '';
   List<List<CodeRun>> _oldRuns = const [];
   List<List<CodeRun>> _newRuns = const [];
   List<PrThread> _threads = const [];
@@ -112,6 +115,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         _iteration = it.id;
         _change = change;
         _composerLine = null;
+        _newText = newText;
         _diff = LineDiff.compute(oldText, newText);
         _oldRuns = CodeHighlighter.highlightLines(
           oldText,
@@ -211,6 +215,78 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     await _write(() => repo.setThreadStatus(widget.org, pr, thread.id, status));
   }
 
+  /// Whether the file on screen is the source branch tip, so anchored line
+  /// numbers can be edited in place.
+  bool get _atLatestIteration =>
+      _iterations.isNotEmpty && _iteration == _iterations.last.id;
+
+  /// Commits the suggestion to the source branch (one edit through the
+  /// Pushes API), resolves the thread, then reloads at the new iteration.
+  Future<void> _applySuggestion(
+    PrThread thread,
+    PrComment comment,
+    String suggestion,
+  ) async {
+    final pr = _pr;
+    final start = thread.rightLine;
+    if (pr == null || start == null || !_atLatestIteration) return;
+    final end = thread.rightLineEnd ?? start;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Apply suggestion?'),
+        content: Text(
+          'Commits the change to ${pr.sourceBranch} '
+          '(line${end > start ? 's $start–$end' : ' $start'} of ${widget.path}) '
+          'and resolves the thread.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Commit'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final repo = context.read<PullRequestRepository>();
+    final content = PullRequestRepository.applySuggestion(
+      _newText,
+      start,
+      end,
+      suggestion,
+    );
+    var pushed = false;
+    await _write(() async {
+      await repo.pushEdit(
+        widget.org,
+        pr,
+        path: widget.path,
+        content: content,
+        message: 'Apply suggestion from thread ${thread.id} (Boardhop)',
+      );
+      pushed = true;
+      await repo.setThreadStatus(
+        widget.org,
+        pr,
+        thread.id,
+        PrThreadStatus.fixed,
+      );
+    });
+    if (!pushed || !mounted) return;
+    // The push added an iteration: reload the PR and show the newest one.
+    setState(() {
+      _pr = null;
+      _iterations = const [];
+      _iteration = null;
+    });
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -289,6 +365,10 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                     onPost: _post,
                     onReply: _reply,
                     onSetThreadStatus: _setThreadStatus,
+                    onApplySuggestion:
+                        _pr?.isActive == true && _atLatestIteration
+                        ? _applySuggestion
+                        : null,
                   ),
           ),
         ],

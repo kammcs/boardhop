@@ -168,4 +168,38 @@ void main() {
       'pr-list:puremedia:CloudCover 2.0:all',
     );
   });
+
+  group('suggestions', () {
+    test('PrComment.suggestion reads the fence body', () {
+      const c = PrComment(
+        author: 'a',
+        content:
+            'Try this:\n```suggestion\nline 5: NEW\nline 6: NEW\n```\nthanks',
+      );
+      expect(c.suggestion, 'line 5: NEW\nline 6: NEW');
+      expect(const PrComment(author: 'a', content: 'plain').suggestion, isNull);
+      expect(
+        const PrComment(author: 'a', content: '```suggestion\n```').suggestion,
+        '',
+      );
+    });
+
+    test('applySuggestion replaces the anchored lines and keeps EOL style', () {
+      expect(
+        PullRequestRepository.applySuggestion('a\nb\nc\nd\n', 2, 3, 'B\nC2'),
+        'a\nB\nC2\nd\n',
+      );
+      expect(
+        PullRequestRepository.applySuggestion('a\r\nb\r\nc', 2, 2, 'x'),
+        'a\r\nx\r\nc',
+      );
+      // An empty suggestion deletes the lines.
+      expect(
+        PullRequestRepository.applySuggestion('a\nb\nc', 2, 2, ''),
+        'a\nc',
+      );
+      // Ranges past the end are clamped.
+      expect(PullRequestRepository.applySuggestion('a\nb', 2, 9, 'z'), 'a\nz');
+    });
+  });
 }

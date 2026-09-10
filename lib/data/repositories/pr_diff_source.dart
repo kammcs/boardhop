@@ -105,6 +105,14 @@ class PrComment {
   final IdentityRef? identity;
   final String content;
   final DateTime? publishedDate;
+
+  static final _suggestionFence = RegExp(
+    r'```suggestion[^\n]*\r?\n([\s\S]*?)\r?\n?```',
+  );
+
+  /// Body of a ```` ```suggestion ```` fence in the comment (spike w03),
+  /// without the trailing newline; null when the comment has none.
+  String? get suggestion => _suggestionFence.firstMatch(content)?.group(1);
 }
 
 /// Thread statuses the service accepts on `PATCH threads/{id}`.
@@ -142,6 +150,7 @@ class PrThread {
     required this.leftLine,
     required this.comments,
     required this.trackedFromLine,
+    this.rightLineEnd,
   });
 
   /// Parses one thread of the Threads API; null for deleted threads and
@@ -164,6 +173,7 @@ class PrThread {
       status: t['status'] as String? ?? 'unknown',
       filePath: ctx?['filePath'] as String?,
       rightLine: ((ctx?['rightFileStart'] as Map?)?['line'] as num?)?.toInt(),
+      rightLineEnd: ((ctx?['rightFileEnd'] as Map?)?['line'] as num?)?.toInt(),
       leftLine: ((ctx?['leftFileStart'] as Map?)?['line'] as num?)?.toInt(),
       comments: comments,
       trackedFromLine:
@@ -175,6 +185,9 @@ class PrThread {
   final String status;
   final String? filePath;
   final int? rightLine;
+
+  /// Last line of a multi-line anchor (`rightFileEnd`), else null.
+  final int? rightLineEnd;
   final int? leftLine;
   final List<PrComment> comments;
 
