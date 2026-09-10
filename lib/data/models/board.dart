@@ -144,6 +144,21 @@ class Board extends Equatable {
   final bool canEdit;
   final bool isValid;
 
+  /// One drop target per column, two for a split column (Doing, Done).
+  List<BoardSlot> get slots => [
+    for (var i = 0; i < columns.length; i++)
+      if (columns[i].isSplit) ...[
+        BoardSlot(columnIndex: i, column: columns[i], done: false),
+        BoardSlot(columnIndex: i, column: columns[i], done: true),
+      ] else
+        BoardSlot(columnIndex: i, column: columns[i]),
+  ];
+
+  /// Lane names in board order; the default lane is the empty string.
+  List<String> get laneNames => [for (final r in rows) r.name ?? ''];
+
+  bool get hasLanes => rows.length > 1;
+
   /// Work item types that live on this board.
   Set<String> get workItemTypes => {
     for (final byType in allowedMappings.values) ...byType.keys,
@@ -170,6 +185,33 @@ class Board extends Equatable {
 
   @override
   List<Object?> get props => [id, name, columns, rows, fields, canEdit];
+}
+
+/// A drop target on the board: a column, or one half of a split column.
+class BoardSlot extends Equatable {
+  const BoardSlot({
+    required this.columnIndex,
+    required this.column,
+    this.done,
+  });
+
+  final int columnIndex;
+  final BoardColumn column;
+
+  /// null for a plain column; false = Doing half, true = Done half.
+  final bool? done;
+
+  String get id =>
+      done == null ? column.id : '${column.id}/${done! ? 'done' : 'doing'}';
+  String get title => column.name;
+  String? get subtitle => switch (done) {
+    null => null,
+    false => 'Doing',
+    true => 'Done',
+  };
+
+  @override
+  List<Object?> get props => [column.id, done];
 }
 
 /// `GET .../work/teamsettings/teamfieldvalues`: the area paths the team's

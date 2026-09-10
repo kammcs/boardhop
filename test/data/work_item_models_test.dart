@@ -135,36 +135,106 @@ void main() {
       expect(board.workItemTypes, {'User Story', 'Bug'});
     });
 
-    test('distributes by WEF column, then by state, then first column', () {
+    test('slots split a column into Doing and Done', () {
+      expect(board.slots.map((s) => s.id), [
+        'c1',
+        'c2/doing',
+        'c2/done',
+        'c3',
+      ]);
+      expect(board.slots[2].subtitle, 'Done');
+      expect(board.hasLanes, isFalse);
+    });
+
+    test('distributes by WEF column and Done flag, then state, then first', () {
+      final done = WorkItem(
+        id: 5,
+        rev: 1,
+        fields: {
+          'System.WorkItemType': 'Bug',
+          'System.State': 'Active',
+          'WEF_X_Kanban.Column': 'Active',
+          'WEF_X_Kanban.Column.Done': true,
+        },
+      );
       final cards = BoardRepository.distribute(board, [
         item(1, 'Bug', 'Active', column: 'Active'),
         item(2, 'Bug', 'Closed'),
         item(3, 'User Story', 'Weird'),
         item(4, 'Bug', 'New', column: 'Gone'),
+        done,
       ]);
       expect(cards[0].map((c) => c.id), [3, 4]);
       expect(cards[1].map((c) => c.id), [1]);
-      expect(cards[2].map((c) => c.id), [2]);
+      expect(cards[2].map((c) => c.id), [5]);
+      expect(cards[3].map((c) => c.id), [2]);
     });
 
     test('move ops write column, mapped state and Done only when split', () {
       final ops = BoardRepository.moveOps(
         board,
         item(1, 'Bug', 'New', column: 'New'),
-        board.columns[1],
+        board.slots[2],
       );
       expect(ops, [
         {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column', 'value': 'Active'},
         {'op': 'add', 'path': '/fields/System.State', 'value': 'Active'},
-        {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column.Done', 'value': false},
+        {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column.Done', 'value': true},
       ]);
       final toClosed = BoardRepository.moveOps(
         board,
         item(1, 'Bug', 'Active'),
-        board.columns[2],
+        board.slots[3],
       );
       expect(toClosed.length, 2);
       expect(toClosed.any((o) => o['path'].toString().endsWith('.Done')), isFalse);
+      // Same column, other half: only the Done flag changes.
+      final toDone = BoardRepository.moveOps(
+        board,
+        item(1, 'Bug', 'Active', column: 'Active'),
+        board.slots[2],
+      );
+      expect(toDone, [
+        {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column.Done', 'value': true},
+      ]);
+    });
+
+    test('reorder block bundles unranked neighbours', () {
+      WorkItem w(int id, [double? rank]) => WorkItem(
+        id: id,
+        rev: 1,
+        fields: {'Microsoft.VSTS.Common.StackRank': ?rank},
+      );
+      const rank = 'Microsoft.VSTS.Common.StackRank';
+      // Ranked above and below: only the card itself.
+      var b = BoardRepository.reorderBlock([w(1, 1), w(2), w(3, 3)], 1, rank);
+      expect(b.ids, [2]);
+      expect((b.previousId, b.nextId), (1, 3));
+      // Unranked neighbours join the block, bounded by ranked cards.
+      b = BoardRepository.reorderBlock(
+        [w(1, 1), w(2), w(3), w(4), w(5, 5)],
+        2,
+        rank,
+      );
+      expect(b.ids, [2, 3, 4]);
+      expect((b.previousId, b.nextId), (1, 5));
+      // No ranked cards at all: the whole slot, start to end.
+      b = BoardRepository.reorderBlock([w(1), w(2)], 1, rank);
+      expect(b.ids, [1, 2]);
+      expect((b.previousId, b.nextId), (0, 0));
+      // No rank field known: neighbours count as unranked too.
+      b = BoardRepository.reorderBlock([w(1, 1), w(2, 2)], 0, null);
+      expect(b.ids, [1, 2]);
+    });
+
+    test('lane of a card comes from the row field', () {
+      expect(BoardRepository.laneOf(board, item(1, 'Bug', 'New')), '');
+      final laned = WorkItem(
+        id: 9,
+        rev: 1,
+        fields: {'WEF_X_Kanban.Lane': 'Expedite'},
+      );
+      expect(BoardRepository.laneOf(board, laned), 'Expedite');
     });
 
     test('cards WIQL uses the team areas and escapes quotes', () {

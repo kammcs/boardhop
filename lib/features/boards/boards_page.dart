@@ -9,12 +9,16 @@ import '../../data/models/board.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/board_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import 'widgets/kanban_board.dart';
 
-/// The team's Kanban board with drag-and-drop column moves written through
-/// the WEF column field plus the mapped state (spike w02), guarded by
-/// `test /rev`. Moves are optimistic and reverted on failure.
+/// The team's Kanban board. Columns become drop slots (a split column is two
+/// slots, Doing and Done); swimlanes are a filter chip row, with every lane
+/// shown at once by default. A cross-slot drop writes the WEF column, the
+/// mapped state and the Done flag with `test /rev`, then the rank; an
+/// in-slot drop writes only the rank. Moves are optimistic and reverted
+/// with the message on failure.
 class BoardsPage extends StatefulWidget {
   const BoardsPage({super.key, required this.org, required this.project});
 
@@ -30,6 +34,8 @@ class _BoardsPageState extends State<BoardsPage> {
   String? _boardId;
   Board? _board;
   List<List<WorkItem>> _cards = const [];
+  String? _rankField;
+  String? _lane; // null = all lanes
   WorkItemVisuals _visuals = const WorkItemVisuals({});
   String? _error;
   bool _loading = false;
@@ -54,7 +60,8 @@ class _BoardsPageState extends State<BoardsPage> {
       if (_boards.isEmpty) {
         _boards = await boards.boards(widget.org, widget.project);
       }
-      final id = boardId ?? _boardId ?? (_boards.isEmpty ? null : _boards.first.id);
+      final id =
+          boardId ?? _boardId ?? (_boards.isEmpty ? null : _boards.first.id);
       if (id == null) {
         setState(() => _error = 'This project has no boards.');
         return;
@@ -64,7 +71,11 @@ class _BoardsPageState extends State<BoardsPage> {
       setState(() {
         _boardId = id;
         _board = snapshot.board;
-        _cards = snapshot.cardsByColumn;
+        _cards = snapshot.cardsBySlot;
+        _rankField = snapshot.rankField;
+        if (_lane != null && !snapshot.board.laneNames.contains(_lane)) {
+          _lane = null;
+        }
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
@@ -77,40 +88,84 @@ class _BoardsPageState extends State<BoardsPage> {
     }
   }
 
+  List<WorkItem> _visible(int slot) {
+    final board = _board;
+    if (board == null || slot >= _cards.length) return const [];
+    final lane = _lane;
+    if (lane == null) return _cards[slot];
+    return [
+      for (final c in _cards[slot])
+        if (BoardRepository.laneOf(board, c) == lane) c,
+    ];
+  }
+
+  /// Real index in the slot for a drop at [visibleIndex] of the filtered
+  /// view (computed after the card has been removed from its source).
+  int _realIndex(int slot, int visibleIndex) {
+    if (_lane == null) return visibleIndex.clamp(0, _cards[slot].length);
+    final visible = _visible(slot);
+    if (visible.isEmpty) return _cards[slot].length;
+    if (visibleIndex >= visible.length) {
+      return _cards[slot].indexOf(visible.last) + 1;
+    }
+    return _cards[slot].indexOf(visible[visibleIndex]);
+  }
+
   Future<void> _move(
     WorkItem card,
-    int fromColumn,
-    int fromIndex,
-    int toColumn,
-    int toIndex,
+    int fromSlot,
+    int fromVisibleIndex,
+    int toSlot,
+    int toVisibleIndex,
   ) async {
     final board = _board;
     if (board == null) return;
-    // Optimistic: move locally, then write; revert if the write fails.
+    final source = _cards[fromSlot];
+    final realFrom = source.indexWhere((c) => c.id == card.id);
+    if (realFrom < 0) return;
+    late final int realTo;
     setState(() {
-      _cards[fromColumn].removeAt(fromIndex);
-      _cards[toColumn].insert(toIndex, card);
+      source.removeAt(realFrom);
+      realTo = _realIndex(toSlot, toVisibleIndex);
+      _cards[toSlot].insert(realTo, card);
       _movesInFlight++;
       _error = null;
     });
-    if (fromColumn == toColumn) {
-      // Reordering inside a column is local only; rank writes come later.
-      setState(() => _movesInFlight--);
-      return;
-    }
-    final target = board.columns[toColumn];
+    final repo = context.read<BoardRepository>();
     try {
-      final updated = await context.read<BoardRepository>().move(
+      if (fromSlot != toSlot) {
+        final updated = await repo.move(
+          widget.org,
+          widget.project,
+          board,
+          card,
+          board.slots[toSlot],
+        );
+        if (!mounted) return;
+        setState(() {
+          final i = _cards[toSlot].indexWhere((c) => c.id == card.id);
+          if (i >= 0) _cards[toSlot][i] = updated;
+        });
+      }
+      final target = _cards[toSlot];
+      final at = target.indexWhere((c) => c.id == card.id);
+      final block = BoardRepository.reorderBlock(target, at, _rankField);
+      final ranks = await repo.reorder(
         widget.org,
         widget.project,
-        board,
-        card,
-        target,
+        block.ids,
+        previousId: block.previousId,
+        nextId: block.nextId,
       );
-      if (!mounted) return;
+      final rankField = _rankField;
+      if (!mounted || rankField == null) return;
       setState(() {
-        final i = _cards[toColumn].indexWhere((c) => c.id == card.id);
-        if (i >= 0) _cards[toColumn][i] = updated;
+        for (var i = 0; i < target.length; i++) {
+          final rank = ranks[target[i].id];
+          if (rank != null) {
+            target[i] = target[i].copyWithFields({rankField: rank});
+          }
+        }
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
@@ -119,9 +174,9 @@ class _BoardsPageState extends State<BoardsPage> {
     } on AdoException catch (e) {
       if (!mounted) return;
       setState(() {
-        _cards[toColumn].removeWhere((c) => c.id == card.id);
-        _cards[fromColumn].insert(
-          fromIndex.clamp(0, _cards[fromColumn].length),
+        _cards[toSlot].removeWhere((c) => c.id == card.id);
+        _cards[fromSlot].insert(
+          realFrom.clamp(0, _cards[fromSlot].length),
           card,
         );
         _error = e is AdoStaleRevisionException
@@ -137,6 +192,15 @@ class _BoardsPageState extends State<BoardsPage> {
     '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
     '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
   );
+
+  int _columnCount(int columnIndex) {
+    var n = 0;
+    final slots = _board?.slots ?? const <BoardSlot>[];
+    for (var i = 0; i < slots.length && i < _cards.length; i++) {
+      if (slots[i].columnIndex == columnIndex) n += _cards[i].length;
+    }
+    return n;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +257,10 @@ class _BoardsPageState extends State<BoardsPage> {
             Material(
               color: scheme.errorContainer,
               child: ListTile(
-                leading: Icon(Icons.error_outline, color: scheme.onErrorContainer),
+                leading: Icon(
+                  Icons.error_outline,
+                  color: scheme.onErrorContainer,
+                ),
                 title: Text(
                   _error!,
                   style: TextStyle(color: scheme.onErrorContainer),
@@ -205,25 +272,56 @@ class _BoardsPageState extends State<BoardsPage> {
                 ),
               ),
             ),
+          if (board != null && board.hasLanes)
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Spacing.lg,
+                  vertical: Spacing.xs,
+                ),
+                children: [
+                  ChoiceChip(
+                    label: const Text('All lanes'),
+                    selected: _lane == null,
+                    onSelected: (_) => setState(() => _lane = null),
+                  ),
+                  for (final lane in board.laneNames) ...[
+                    const SizedBox(width: Spacing.sm),
+                    ChoiceChip(
+                      label: Text(lane.isEmpty ? 'Default' : lane),
+                      selected: _lane == lane,
+                      onSelected: (_) => setState(() => _lane = lane),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           Expanded(
             child: board == null
                 ? (_loading
-                      ? const Center(child: CircularProgressIndicator.adaptive())
+                      ? const Center(
+                          child: CircularProgressIndicator.adaptive(),
+                        )
                       : const SizedBox.shrink())
                 : KanbanBoard<WorkItem>(
                     columns: [
-                      for (var c = 0; c < board.columns.length; c++)
+                      for (var i = 0; i < board.slots.length; i++)
                         KanbanColumnData<WorkItem>(
-                          id: board.columns[c].id,
-                          title: board.columns[c].name,
-                          subtitle: board.columns[c].isSplit
-                              ? 'Doing · Done'
+                          id: board.slots[i].id,
+                          title: board.slots[i].title,
+                          subtitle: board.slots[i].subtitle,
+                          wipLimit: board.slots[i].column.itemLimit,
+                          count: board.slots[i].column.isSplit
+                              ? _columnCount(board.slots[i].columnIndex)
                               : null,
-                          wipLimit: board.columns[c].itemLimit,
                           accent: parseHexColor(
-                            board.rows.isNotEmpty ? board.rows.first.color : null,
+                            board.rows.isNotEmpty
+                                ? board.rows.first.color
+                                : null,
                           ),
-                          cards: c < _cards.length ? _cards[c] : const [],
+                          cards: _visible(i),
                         ),
                     ],
                     keyOf: (item) => item.id,
@@ -235,6 +333,11 @@ class _BoardsPageState extends State<BoardsPage> {
                       item: item,
                       visuals: _visuals,
                       dragging: dragging,
+                      badge: board.hasLanes && _lane == null
+                          ? (BoardRepository.laneOf(board, item).isEmpty
+                                ? null
+                                : BoardRepository.laneOf(board, item))
+                          : null,
                     ),
                     onCardTap: _open,
                     onMove: _move,

@@ -14,6 +14,7 @@ class KanbanColumnData<T extends Object> {
     this.accent,
     this.wipLimit,
     this.subtitle,
+    this.count,
   });
 
   final String id;
@@ -25,6 +26,10 @@ class KanbanColumnData<T extends Object> {
   final Color? accent;
   final int? wipLimit;
   final String? subtitle;
+
+  /// Count to show in the header when it differs from [cards] (a split
+  /// column shows the whole column's count against its limit).
+  final int? count;
 }
 
 typedef KanbanCardBuilder<T> =
@@ -331,7 +336,7 @@ class KanbanColumnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final count = column.cards.length;
+    final count = column.count ?? column.cards.length;
     final limit = column.wipLimit ?? 0;
     final over = limit > 0 && count > limit;
     return Padding(

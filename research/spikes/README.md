@@ -47,6 +47,8 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `w01_markdown_roundtrip.py` | Markdown write path, reversibility, comments API with Markdown. | Done |
 | `w02_kanban_column_patch.py` | Does writing the WEF column field auto-derive `System.State`, and vice versa? | Done |
 | `w03_pr_line_comment.py` | Seed a repo and PR through REST, post an anchored thread and a suggestion comment, push a second iteration, read tracking back. | Done (PR 8319 left active for visual check) |
+| `w05_board_config.py` | Give the scratch Stories board a split column and a swimlane for the app's board tests. | Blocked: the PAT user is not a team administrator (TF401504 / VS402634); idempotent, rerun once that is fixed |
+| `s14_rank_check.py` | Read-only: StackRank / BacklogPriority of the scratch stories and the WIQL order the app uses. | Used while verifying the app's reorder write |
 | `w04_service_hook_payloads.py` | Capture "Minimal" webhook payload shapes for the five event types in document 06. | Not written: needs an HTTPS receiver and project-admin rights |
 
 ## App spikes (Flutter, on device or emulator)

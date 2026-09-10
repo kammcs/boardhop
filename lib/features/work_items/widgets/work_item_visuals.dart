@@ -98,11 +98,15 @@ class WorkItemCard extends StatelessWidget {
     required this.item,
     required this.visuals,
     this.dragging = false,
+    this.badge,
   });
 
   final WorkItem item;
   final WorkItemVisuals visuals;
   final bool dragging;
+
+  /// Small trailing label, e.g. the swimlane when all lanes are shown.
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +172,25 @@ class WorkItemCard extends StatelessWidget {
                     Text('Done', style: theme.textTheme.labelSmall),
                   ],
                   const Spacer(),
+                  if (badge != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Spacing.xs,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.tertiaryContainer,
+                        borderRadius: Radii.chip,
+                      ),
+                      child: Text(
+                        badge!,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Spacing.xs),
+                  ],
                   if (item.tags.isNotEmpty)
                     Flexible(
                       child: Text(
