@@ -14,8 +14,10 @@ import 'features/diagnostics/editor_probe_page.dart';
 import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipelines_page.dart';
 import 'features/projects/project_list_page.dart';
+import 'features/projects/project_shell.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
+import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_items_page.dart';
 
 GoRouter buildRouter(AuthBloc auth) {
@@ -63,26 +65,57 @@ GoRouter buildRouter(AuthBloc auth) {
             builder: (_, state) =>
                 ProjectListPage(org: state.pathParameters['org']!),
             routes: [
-              GoRoute(
-                path: ':project/work-items',
-                builder: (_, state) => WorkItemsPage(
+              StatefulShellRoute.indexedStack(
+                builder: (context, state, shell) => ProjectShell(
+                  shell: shell,
                   org: state.pathParameters['org']!,
                   project: state.pathParameters['project']!,
                 ),
-              ),
-              GoRoute(
-                path: ':project/boards',
-                builder: (_, state) => BoardsPage(
-                  org: state.pathParameters['org']!,
-                  project: state.pathParameters['project']!,
-                ),
-              ),
-              GoRoute(
-                path: ':project/pipelines',
-                builder: (_, state) => PipelinesPage(
-                  org: state.pathParameters['org']!,
-                  project: state.pathParameters['project']!,
-                ),
+                branches: [
+                  StatefulShellBranch(
+                    routes: [
+                      GoRoute(
+                        path: ':project/work-items',
+                        builder: (_, state) => WorkItemsPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: ':id',
+                            builder: (_, state) => WorkItemDetailPage(
+                              org: state.pathParameters['org']!,
+                              project: state.pathParameters['project']!,
+                              id: int.parse(state.pathParameters['id']!),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  StatefulShellBranch(
+                    routes: [
+                      GoRoute(
+                        path: ':project/boards',
+                        builder: (_, state) => BoardsPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  StatefulShellBranch(
+                    routes: [
+                      GoRoute(
+                        path: ':project/pipelines',
+                        builder: (_, state) => PipelinesPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),

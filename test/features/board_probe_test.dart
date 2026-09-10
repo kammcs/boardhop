@@ -1,6 +1,6 @@
 import 'package:boardhop/features/diagnostics/board_probe/board_probe_data.dart';
 import 'package:boardhop/features/diagnostics/frame_stats.dart';
-import 'package:boardhop/features/diagnostics/board_probe/hand_rolled_board.dart';
+import 'package:boardhop/features/boards/widgets/kanban_board.dart';
 import 'package:boardhop/features/diagnostics/board_probe/probe_widgets.dart';
 import 'package:boardhop/theme/theme.dart';
 import 'package:flutter/material.dart';
@@ -76,7 +76,7 @@ void main() {
     });
   });
 
-  group('HandRolledBoard', () {
+  group('KanbanBoard', () {
     testWidgets('long-press drag moves a card into the next column', (
       tester,
     ) async {
@@ -84,18 +84,45 @@ void main() {
       final moves = <CardMove>[];
       var starts = 0;
       var ends = 0;
-      final hooks = BoardProbeHooks(
-        onDragStart: () => starts++,
-        onDragEnd: () => ends++,
-        onMove: moves.add,
-      );
       tester.view.physicalSize = const Size(1200, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         MaterialApp(
           theme: BoardhopTheme.light(),
-          home: Scaffold(body: HandRolledBoard(data: data, hooks: hooks)),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => KanbanBoard<ProbeCard>(
+                columns: [
+                  for (final c in data.columns)
+                    KanbanColumnData<ProbeCard>(
+                      id: c.name,
+                      title: c.name,
+                      cards: c.cards,
+                    ),
+                ],
+                keyOf: (card) => card.id,
+                cardBuilder: (context, card, dragging) => ProbeCardView(
+                  card: card,
+                  column: data.columns[data.locate(card)?.$1 ?? 0],
+                  dragging: dragging,
+                ),
+                onDragStart: () => starts++,
+                onDragEnd: () => ends++,
+                onMove: (card, fromColumn, fromIndex, toColumn, toIndex) =>
+                    setState(() {
+                      moves.add(
+                        data.move(
+                          fromColumn: fromColumn,
+                          fromIndex: fromIndex,
+                          toColumn: toColumn,
+                          toIndex: toIndex,
+                        ),
+                      );
+                    }),
+              ),
+            ),
+          ),
         ),
       );
       final first = data.columns[0].cards.first;

@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/theme.dart';
 import 'board_probe_data.dart';
 
-/// Callbacks every board implementation reports through so the page can
-/// measure drags and count moves the same way for each candidate.
+/// Callbacks the probe page uses to measure drags and count moves.
 class BoardProbeHooks {
   const BoardProbeHooks({
     required this.onDragStart,
@@ -15,21 +14,6 @@ class BoardProbeHooks {
   final VoidCallback onDragStart;
   final VoidCallback onDragEnd;
   final ValueChanged<CardMove> onMove;
-}
-
-/// Column width: most of a phone screen so the next column peeks in, capped
-/// so tablets show several columns.
-double probeColumnWidth(double viewportWidth) =>
-    (viewportWidth * 0.82).clamp(240.0, 320.0);
-
-/// DESIGN.md §3: API colors are rendered as given in light mode and pulled
-/// toward the surface in dark mode instead of being used raw.
-Color tintApiColor(BuildContext context, Color api) {
-  final scheme = Theme.of(context).colorScheme;
-  return switch (Theme.of(context).brightness) {
-    Brightness.light => api,
-    Brightness.dark => Color.lerp(api, scheme.surface, 0.3)!,
-  };
 }
 
 class ProbeCardView extends StatelessWidget {
@@ -123,87 +107,4 @@ class ProbeCardView extends StatelessWidget {
     'Epic' => Icons.workspace_premium_outlined,
     _ => Icons.circle_outlined,
   };
-}
-
-class ProbeColumnHeader extends StatelessWidget {
-  const ProbeColumnHeader({super.key, required this.column});
-
-  final ProbeColumn column;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Spacing.md,
-        Spacing.md,
-        Spacing.md,
-        Spacing.sm,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: tintApiColor(context, column.apiColor),
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: Spacing.sm),
-          Expanded(
-            child: Text(
-              column.name,
-              style: theme.textTheme.titleSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Spacing.sm,
-              vertical: 2,
-            ),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: Radii.chip,
-            ),
-            child: Text(
-              '${column.cards.length}',
-              style: theme.textTheme.labelMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The column surface shared by implementations that let us own the chrome.
-class ProbeColumnFrame extends StatelessWidget {
-  const ProbeColumnFrame({
-    super.key,
-    required this.column,
-    required this.child,
-  });
-
-  final ProbeColumn column;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: Radii.card,
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ProbeColumnHeader(column: column),
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
 }

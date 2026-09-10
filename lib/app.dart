@@ -6,7 +6,9 @@ import 'auth/auth_service.dart';
 import 'core/http/ado_client.dart';
 import 'data/db/app_database.dart';
 import 'data/repositories/org_repository.dart';
+import 'data/repositories/board_repository.dart';
 import 'data/repositories/project_repository.dart';
+import 'data/repositories/work_item_repository.dart';
 import 'router.dart';
 import 'theme/theme.dart';
 
@@ -14,13 +16,18 @@ import 'theme/theme.dart';
 class AppDependencies {
   AppDependencies({required this.auth, required this.client, required this.db})
     : orgs = OrgRepository(client, db),
-      projects = ProjectRepository(client, db);
+      projects = ProjectRepository(client, db),
+      workItems = WorkItemRepository(client, db) {
+    boards = BoardRepository(client, workItems);
+  }
 
   final AuthService auth;
   final AdoClient client;
   final AppDatabase db;
   final OrgRepository orgs;
   final ProjectRepository projects;
+  final WorkItemRepository workItems;
+  late final BoardRepository boards;
 }
 
 class BoardhopApp extends StatefulWidget {
@@ -59,6 +66,8 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.db),
         RepositoryProvider.value(value: deps.orgs),
         RepositoryProvider.value(value: deps.projects),
+        RepositoryProvider.value(value: deps.workItems),
+        RepositoryProvider.value(value: deps.boards),
       ],
       child: BlocProvider.value(
         value: _authBloc,

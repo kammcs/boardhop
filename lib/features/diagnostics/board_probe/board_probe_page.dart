@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../theme/theme.dart';
+import '../../boards/widgets/kanban_board.dart';
 import '../frame_stats.dart';
 import 'board_probe_data.dart';
-import 'hand_rolled_board.dart';
 import 'probe_widgets.dart';
 
 /// Spike F4: the Kanban drag-and-drop probe on generated data, with frame
@@ -22,7 +22,7 @@ class BoardProbePage extends StatefulWidget {
 }
 
 class _BoardProbePageState extends State<BoardProbePage> {
-  static const _description = 'Flutter LongPressDraggable + DragTarget';
+  static const _description = 'KanbanBoard (LongPressDraggable + DragTarget)';
 
   final _stats = FrameStats();
   int _cardCount = 200;
@@ -169,7 +169,37 @@ class _BoardProbePageState extends State<BoardProbePage> {
           Expanded(
             child: KeyedSubtree(
               key: ValueKey((_cardCount, _generation)),
-              child: HandRolledBoard(data: _data, hooks: _hooks),
+              child: KanbanBoard<ProbeCard>(
+                columns: [
+                  for (final c in _data.columns)
+                    KanbanColumnData<ProbeCard>(
+                      id: c.name,
+                      title: c.name,
+                      accent: c.apiColor,
+                      cards: c.cards,
+                    ),
+                ],
+                keyOf: (card) => card.id,
+                cardBuilder: (context, card, dragging) => ProbeCardView(
+                  card: card,
+                  column: _data.columns[_data.locate(card)?.$1 ?? 0],
+                  dragging: dragging,
+                ),
+                onDragStart: _hooks.onDragStart,
+                onDragEnd: _hooks.onDragEnd,
+                onMove: (card, fromColumn, fromIndex, toColumn, toIndex) {
+                  setState(() {
+                    _hooks.onMove(
+                      _data.move(
+                        fromColumn: fromColumn,
+                        fromIndex: fromIndex,
+                        toColumn: toColumn,
+                        toIndex: toIndex,
+                      ),
+                    );
+                  });
+                },
+              ),
             ),
           ),
         ],

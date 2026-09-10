@@ -897,6 +897,845 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
   }
 }
 
+class $WorkItemsTable extends WorkItems
+    with TableInfo<$WorkItemsTable, WorkItemRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _orgNameMeta = const VerificationMeta(
+    'orgName',
+  );
+  @override
+  late final GeneratedColumn<String> orgName = GeneratedColumn<String>(
+    'org_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectMeta = const VerificationMeta(
+    'project',
+  );
+  @override
+  late final GeneratedColumn<String> project = GeneratedColumn<String>(
+    'project',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _revMeta = const VerificationMeta('rev');
+  @override
+  late final GeneratedColumn<int> rev = GeneratedColumn<int>(
+    'rev',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _changedDateMeta = const VerificationMeta(
+    'changedDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> changedDate = GeneratedColumn<DateTime>(
+    'changed_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
+    'fetchedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> fetchedAt = GeneratedColumn<DateTime>(
+    'fetched_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    orgName,
+    id,
+    project,
+    rev,
+    json,
+    changedDate,
+    fetchedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'work_items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkItemRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('org_name')) {
+      context.handle(
+        _orgNameMeta,
+        orgName.isAcceptableOrUnknown(data['org_name']!, _orgNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orgNameMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('project')) {
+      context.handle(
+        _projectMeta,
+        project.isAcceptableOrUnknown(data['project']!, _projectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectMeta);
+    }
+    if (data.containsKey('rev')) {
+      context.handle(
+        _revMeta,
+        rev.isAcceptableOrUnknown(data['rev']!, _revMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revMeta);
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_jsonMeta);
+    }
+    if (data.containsKey('changed_date')) {
+      context.handle(
+        _changedDateMeta,
+        changedDate.isAcceptableOrUnknown(
+          data['changed_date']!,
+          _changedDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fetched_at')) {
+      context.handle(
+        _fetchedAtMeta,
+        fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fetchedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {orgName, id};
+  @override
+  WorkItemRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkItemRow(
+      orgName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}org_name'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      project: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project'],
+      )!,
+      rev: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}rev'],
+      )!,
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      changedDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}changed_date'],
+      ),
+      fetchedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}fetched_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkItemsTable createAlias(String alias) {
+    return $WorkItemsTable(attachedDatabase, alias);
+  }
+}
+
+class WorkItemRow extends DataClass implements Insertable<WorkItemRow> {
+  final String orgName;
+  final int id;
+  final String project;
+  final int rev;
+  final String json;
+  final DateTime? changedDate;
+  final DateTime fetchedAt;
+  const WorkItemRow({
+    required this.orgName,
+    required this.id,
+    required this.project,
+    required this.rev,
+    required this.json,
+    this.changedDate,
+    required this.fetchedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['org_name'] = Variable<String>(orgName);
+    map['id'] = Variable<int>(id);
+    map['project'] = Variable<String>(project);
+    map['rev'] = Variable<int>(rev);
+    map['json'] = Variable<String>(json);
+    if (!nullToAbsent || changedDate != null) {
+      map['changed_date'] = Variable<DateTime>(changedDate);
+    }
+    map['fetched_at'] = Variable<DateTime>(fetchedAt);
+    return map;
+  }
+
+  WorkItemsCompanion toCompanion(bool nullToAbsent) {
+    return WorkItemsCompanion(
+      orgName: Value(orgName),
+      id: Value(id),
+      project: Value(project),
+      rev: Value(rev),
+      json: Value(json),
+      changedDate: changedDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(changedDate),
+      fetchedAt: Value(fetchedAt),
+    );
+  }
+
+  factory WorkItemRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkItemRow(
+      orgName: serializer.fromJson<String>(json['orgName']),
+      id: serializer.fromJson<int>(json['id']),
+      project: serializer.fromJson<String>(json['project']),
+      rev: serializer.fromJson<int>(json['rev']),
+      json: serializer.fromJson<String>(json['json']),
+      changedDate: serializer.fromJson<DateTime?>(json['changedDate']),
+      fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'orgName': serializer.toJson<String>(orgName),
+      'id': serializer.toJson<int>(id),
+      'project': serializer.toJson<String>(project),
+      'rev': serializer.toJson<int>(rev),
+      'json': serializer.toJson<String>(json),
+      'changedDate': serializer.toJson<DateTime?>(changedDate),
+      'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
+    };
+  }
+
+  WorkItemRow copyWith({
+    String? orgName,
+    int? id,
+    String? project,
+    int? rev,
+    String? json,
+    Value<DateTime?> changedDate = const Value.absent(),
+    DateTime? fetchedAt,
+  }) => WorkItemRow(
+    orgName: orgName ?? this.orgName,
+    id: id ?? this.id,
+    project: project ?? this.project,
+    rev: rev ?? this.rev,
+    json: json ?? this.json,
+    changedDate: changedDate.present ? changedDate.value : this.changedDate,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+  );
+  WorkItemRow copyWithCompanion(WorkItemsCompanion data) {
+    return WorkItemRow(
+      orgName: data.orgName.present ? data.orgName.value : this.orgName,
+      id: data.id.present ? data.id.value : this.id,
+      project: data.project.present ? data.project.value : this.project,
+      rev: data.rev.present ? data.rev.value : this.rev,
+      json: data.json.present ? data.json.value : this.json,
+      changedDate: data.changedDate.present
+          ? data.changedDate.value
+          : this.changedDate,
+      fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkItemRow(')
+          ..write('orgName: $orgName, ')
+          ..write('id: $id, ')
+          ..write('project: $project, ')
+          ..write('rev: $rev, ')
+          ..write('json: $json, ')
+          ..write('changedDate: $changedDate, ')
+          ..write('fetchedAt: $fetchedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(orgName, id, project, rev, json, changedDate, fetchedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkItemRow &&
+          other.orgName == this.orgName &&
+          other.id == this.id &&
+          other.project == this.project &&
+          other.rev == this.rev &&
+          other.json == this.json &&
+          other.changedDate == this.changedDate &&
+          other.fetchedAt == this.fetchedAt);
+}
+
+class WorkItemsCompanion extends UpdateCompanion<WorkItemRow> {
+  final Value<String> orgName;
+  final Value<int> id;
+  final Value<String> project;
+  final Value<int> rev;
+  final Value<String> json;
+  final Value<DateTime?> changedDate;
+  final Value<DateTime> fetchedAt;
+  final Value<int> rowid;
+  const WorkItemsCompanion({
+    this.orgName = const Value.absent(),
+    this.id = const Value.absent(),
+    this.project = const Value.absent(),
+    this.rev = const Value.absent(),
+    this.json = const Value.absent(),
+    this.changedDate = const Value.absent(),
+    this.fetchedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkItemsCompanion.insert({
+    required String orgName,
+    required int id,
+    required String project,
+    required int rev,
+    required String json,
+    this.changedDate = const Value.absent(),
+    required DateTime fetchedAt,
+    this.rowid = const Value.absent(),
+  }) : orgName = Value(orgName),
+       id = Value(id),
+       project = Value(project),
+       rev = Value(rev),
+       json = Value(json),
+       fetchedAt = Value(fetchedAt);
+  static Insertable<WorkItemRow> custom({
+    Expression<String>? orgName,
+    Expression<int>? id,
+    Expression<String>? project,
+    Expression<int>? rev,
+    Expression<String>? json,
+    Expression<DateTime>? changedDate,
+    Expression<DateTime>? fetchedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (orgName != null) 'org_name': orgName,
+      if (id != null) 'id': id,
+      if (project != null) 'project': project,
+      if (rev != null) 'rev': rev,
+      if (json != null) 'json': json,
+      if (changedDate != null) 'changed_date': changedDate,
+      if (fetchedAt != null) 'fetched_at': fetchedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkItemsCompanion copyWith({
+    Value<String>? orgName,
+    Value<int>? id,
+    Value<String>? project,
+    Value<int>? rev,
+    Value<String>? json,
+    Value<DateTime?>? changedDate,
+    Value<DateTime>? fetchedAt,
+    Value<int>? rowid,
+  }) {
+    return WorkItemsCompanion(
+      orgName: orgName ?? this.orgName,
+      id: id ?? this.id,
+      project: project ?? this.project,
+      rev: rev ?? this.rev,
+      json: json ?? this.json,
+      changedDate: changedDate ?? this.changedDate,
+      fetchedAt: fetchedAt ?? this.fetchedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (orgName.present) {
+      map['org_name'] = Variable<String>(orgName.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (project.present) {
+      map['project'] = Variable<String>(project.value);
+    }
+    if (rev.present) {
+      map['rev'] = Variable<int>(rev.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (changedDate.present) {
+      map['changed_date'] = Variable<DateTime>(changedDate.value);
+    }
+    if (fetchedAt.present) {
+      map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkItemsCompanion(')
+          ..write('orgName: $orgName, ')
+          ..write('id: $id, ')
+          ..write('project: $project, ')
+          ..write('rev: $rev, ')
+          ..write('json: $json, ')
+          ..write('changedDate: $changedDate, ')
+          ..write('fetchedAt: $fetchedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WorkItemListEntriesTable extends WorkItemListEntries
+    with TableInfo<$WorkItemListEntriesTable, WorkItemListEntryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkItemListEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _orgNameMeta = const VerificationMeta(
+    'orgName',
+  );
+  @override
+  late final GeneratedColumn<String> orgName = GeneratedColumn<String>(
+    'org_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _projectMeta = const VerificationMeta(
+    'project',
+  );
+  @override
+  late final GeneratedColumn<String> project = GeneratedColumn<String>(
+    'project',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _listKeyMeta = const VerificationMeta(
+    'listKey',
+  );
+  @override
+  late final GeneratedColumn<String> listKey = GeneratedColumn<String>(
+    'list_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workItemIdMeta = const VerificationMeta(
+    'workItemId',
+  );
+  @override
+  late final GeneratedColumn<int> workItemId = GeneratedColumn<int>(
+    'work_item_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    orgName,
+    project,
+    listKey,
+    workItemId,
+    position,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'work_item_list_entries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkItemListEntryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('org_name')) {
+      context.handle(
+        _orgNameMeta,
+        orgName.isAcceptableOrUnknown(data['org_name']!, _orgNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orgNameMeta);
+    }
+    if (data.containsKey('project')) {
+      context.handle(
+        _projectMeta,
+        project.isAcceptableOrUnknown(data['project']!, _projectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectMeta);
+    }
+    if (data.containsKey('list_key')) {
+      context.handle(
+        _listKeyMeta,
+        listKey.isAcceptableOrUnknown(data['list_key']!, _listKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_listKeyMeta);
+    }
+    if (data.containsKey('work_item_id')) {
+      context.handle(
+        _workItemIdMeta,
+        workItemId.isAcceptableOrUnknown(
+          data['work_item_id']!,
+          _workItemIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workItemIdMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {
+    orgName,
+    project,
+    listKey,
+    workItemId,
+  };
+  @override
+  WorkItemListEntryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkItemListEntryRow(
+      orgName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}org_name'],
+      )!,
+      project: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project'],
+      )!,
+      listKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}list_key'],
+      )!,
+      workItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}work_item_id'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkItemListEntriesTable createAlias(String alias) {
+    return $WorkItemListEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class WorkItemListEntryRow extends DataClass
+    implements Insertable<WorkItemListEntryRow> {
+  final String orgName;
+  final String project;
+  final String listKey;
+  final int workItemId;
+  final int position;
+  const WorkItemListEntryRow({
+    required this.orgName,
+    required this.project,
+    required this.listKey,
+    required this.workItemId,
+    required this.position,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['org_name'] = Variable<String>(orgName);
+    map['project'] = Variable<String>(project);
+    map['list_key'] = Variable<String>(listKey);
+    map['work_item_id'] = Variable<int>(workItemId);
+    map['position'] = Variable<int>(position);
+    return map;
+  }
+
+  WorkItemListEntriesCompanion toCompanion(bool nullToAbsent) {
+    return WorkItemListEntriesCompanion(
+      orgName: Value(orgName),
+      project: Value(project),
+      listKey: Value(listKey),
+      workItemId: Value(workItemId),
+      position: Value(position),
+    );
+  }
+
+  factory WorkItemListEntryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkItemListEntryRow(
+      orgName: serializer.fromJson<String>(json['orgName']),
+      project: serializer.fromJson<String>(json['project']),
+      listKey: serializer.fromJson<String>(json['listKey']),
+      workItemId: serializer.fromJson<int>(json['workItemId']),
+      position: serializer.fromJson<int>(json['position']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'orgName': serializer.toJson<String>(orgName),
+      'project': serializer.toJson<String>(project),
+      'listKey': serializer.toJson<String>(listKey),
+      'workItemId': serializer.toJson<int>(workItemId),
+      'position': serializer.toJson<int>(position),
+    };
+  }
+
+  WorkItemListEntryRow copyWith({
+    String? orgName,
+    String? project,
+    String? listKey,
+    int? workItemId,
+    int? position,
+  }) => WorkItemListEntryRow(
+    orgName: orgName ?? this.orgName,
+    project: project ?? this.project,
+    listKey: listKey ?? this.listKey,
+    workItemId: workItemId ?? this.workItemId,
+    position: position ?? this.position,
+  );
+  WorkItemListEntryRow copyWithCompanion(WorkItemListEntriesCompanion data) {
+    return WorkItemListEntryRow(
+      orgName: data.orgName.present ? data.orgName.value : this.orgName,
+      project: data.project.present ? data.project.value : this.project,
+      listKey: data.listKey.present ? data.listKey.value : this.listKey,
+      workItemId: data.workItemId.present
+          ? data.workItemId.value
+          : this.workItemId,
+      position: data.position.present ? data.position.value : this.position,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkItemListEntryRow(')
+          ..write('orgName: $orgName, ')
+          ..write('project: $project, ')
+          ..write('listKey: $listKey, ')
+          ..write('workItemId: $workItemId, ')
+          ..write('position: $position')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(orgName, project, listKey, workItemId, position);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkItemListEntryRow &&
+          other.orgName == this.orgName &&
+          other.project == this.project &&
+          other.listKey == this.listKey &&
+          other.workItemId == this.workItemId &&
+          other.position == this.position);
+}
+
+class WorkItemListEntriesCompanion
+    extends UpdateCompanion<WorkItemListEntryRow> {
+  final Value<String> orgName;
+  final Value<String> project;
+  final Value<String> listKey;
+  final Value<int> workItemId;
+  final Value<int> position;
+  final Value<int> rowid;
+  const WorkItemListEntriesCompanion({
+    this.orgName = const Value.absent(),
+    this.project = const Value.absent(),
+    this.listKey = const Value.absent(),
+    this.workItemId = const Value.absent(),
+    this.position = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkItemListEntriesCompanion.insert({
+    required String orgName,
+    required String project,
+    required String listKey,
+    required int workItemId,
+    required int position,
+    this.rowid = const Value.absent(),
+  }) : orgName = Value(orgName),
+       project = Value(project),
+       listKey = Value(listKey),
+       workItemId = Value(workItemId),
+       position = Value(position);
+  static Insertable<WorkItemListEntryRow> custom({
+    Expression<String>? orgName,
+    Expression<String>? project,
+    Expression<String>? listKey,
+    Expression<int>? workItemId,
+    Expression<int>? position,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (orgName != null) 'org_name': orgName,
+      if (project != null) 'project': project,
+      if (listKey != null) 'list_key': listKey,
+      if (workItemId != null) 'work_item_id': workItemId,
+      if (position != null) 'position': position,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkItemListEntriesCompanion copyWith({
+    Value<String>? orgName,
+    Value<String>? project,
+    Value<String>? listKey,
+    Value<int>? workItemId,
+    Value<int>? position,
+    Value<int>? rowid,
+  }) {
+    return WorkItemListEntriesCompanion(
+      orgName: orgName ?? this.orgName,
+      project: project ?? this.project,
+      listKey: listKey ?? this.listKey,
+      workItemId: workItemId ?? this.workItemId,
+      position: position ?? this.position,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (orgName.present) {
+      map['org_name'] = Variable<String>(orgName.value);
+    }
+    if (project.present) {
+      map['project'] = Variable<String>(project.value);
+    }
+    if (listKey.present) {
+      map['list_key'] = Variable<String>(listKey.value);
+    }
+    if (workItemId.present) {
+      map['work_item_id'] = Variable<int>(workItemId.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkItemListEntriesCompanion(')
+          ..write('orgName: $orgName, ')
+          ..write('project: $project, ')
+          ..write('listKey: $listKey, ')
+          ..write('workItemId: $workItemId, ')
+          ..write('position: $position, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PendingWritesTable extends PendingWrites
     with TableInfo<$PendingWritesTable, PendingWriteRow> {
   @override
@@ -1401,6 +2240,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $OrganizationsTable organizations = $OrganizationsTable(this);
   late final $ProjectsTable projects = $ProjectsTable(this);
+  late final $WorkItemsTable workItems = $WorkItemsTable(this);
+  late final $WorkItemListEntriesTable workItemListEntries =
+      $WorkItemListEntriesTable(this);
   late final $PendingWritesTable pendingWrites = $PendingWritesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -1409,6 +2251,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     organizations,
     projects,
+    workItems,
+    workItemListEntries,
     pendingWrites,
   ];
 }
@@ -1883,6 +2727,482 @@ typedef $$ProjectsTableProcessedTableManager =
       ProjectRow,
       PrefetchHooks Function()
     >;
+typedef $$WorkItemsTableCreateCompanionBuilder = WorkItemsCompanion Function({
+  required String orgName,
+  required int id,
+  required String project,
+  required int rev,
+  required String json,
+  Value<DateTime?> changedDate,
+  required DateTime fetchedAt,
+  Value<int> rowid,
+});
+typedef $$WorkItemsTableUpdateCompanionBuilder = WorkItemsCompanion Function({
+  Value<String> orgName,
+  Value<int> id,
+  Value<String> project,
+  Value<int> rev,
+  Value<String> json,
+  Value<DateTime?> changedDate,
+  Value<DateTime> fetchedAt,
+  Value<int> rowid,
+});
+
+class $$WorkItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkItemsTable> {
+  $$WorkItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get orgName => $composableBuilder(
+    column: $table.orgName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get project => $composableBuilder(
+    column: $table.project,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rev => $composableBuilder(
+    column: $table.rev,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get changedDate => $composableBuilder(
+    column: $table.changedDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WorkItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkItemsTable> {
+  $$WorkItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get orgName => $composableBuilder(
+    column: $table.orgName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get project => $composableBuilder(
+    column: $table.project,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rev => $composableBuilder(
+    column: $table.rev,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get changedDate => $composableBuilder(
+    column: $table.changedDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
+    column: $table.fetchedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WorkItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkItemsTable> {
+  $$WorkItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get orgName =>
+      $composableBuilder(column: $table.orgName, builder: (column) => column);
+
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get project =>
+      $composableBuilder(column: $table.project, builder: (column) => column);
+
+  GeneratedColumn<int> get rev =>
+      $composableBuilder(column: $table.rev, builder: (column) => column);
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get changedDate => $composableBuilder(
+    column: $table.changedDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get fetchedAt =>
+      $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
+}
+
+class $$WorkItemsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkItemsTable,
+          WorkItemRow,
+          $$WorkItemsTableFilterComposer,
+          $$WorkItemsTableOrderingComposer,
+          $$WorkItemsTableAnnotationComposer,
+          $$WorkItemsTableCreateCompanionBuilder,
+          $$WorkItemsTableUpdateCompanionBuilder,
+          (
+            WorkItemRow,
+            BaseReferences<_$AppDatabase, $WorkItemsTable, WorkItemRow>,
+          ),
+          WorkItemRow,
+          PrefetchHooks Function()
+        > {
+  $$WorkItemsTableTableManager(_$AppDatabase db, $WorkItemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> orgName = const Value.absent(),
+                Value<int> id = const Value.absent(),
+                Value<String> project = const Value.absent(),
+                Value<int> rev = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<DateTime?> changedDate = const Value.absent(),
+                Value<DateTime> fetchedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkItemsCompanion(
+                orgName: orgName,
+                id: id,
+                project: project,
+                rev: rev,
+                json: json,
+                changedDate: changedDate,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String orgName,
+                required int id,
+                required String project,
+                required int rev,
+                required String json,
+                Value<DateTime?> changedDate = const Value.absent(),
+                required DateTime fetchedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkItemsCompanion.insert(
+                orgName: orgName,
+                id: id,
+                project: project,
+                rev: rev,
+                json: json,
+                changedDate: changedDate,
+                fetchedAt: fetchedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkItemsTable, WorkItemRow>(table),
+                  BaseReferences<_$AppDatabase, $WorkItemsTable, WorkItemRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WorkItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkItemsTable,
+      WorkItemRow,
+      $$WorkItemsTableFilterComposer,
+      $$WorkItemsTableOrderingComposer,
+      $$WorkItemsTableAnnotationComposer,
+      $$WorkItemsTableCreateCompanionBuilder,
+      $$WorkItemsTableUpdateCompanionBuilder,
+      (
+        WorkItemRow,
+        BaseReferences<_$AppDatabase, $WorkItemsTable, WorkItemRow>,
+      ),
+      WorkItemRow,
+      PrefetchHooks Function()
+    >;
+typedef $$WorkItemListEntriesTableCreateCompanionBuilder =
+    WorkItemListEntriesCompanion Function({
+      required String orgName,
+      required String project,
+      required String listKey,
+      required int workItemId,
+      required int position,
+      Value<int> rowid,
+    });
+typedef $$WorkItemListEntriesTableUpdateCompanionBuilder =
+    WorkItemListEntriesCompanion Function({
+      Value<String> orgName,
+      Value<String> project,
+      Value<String> listKey,
+      Value<int> workItemId,
+      Value<int> position,
+      Value<int> rowid,
+    });
+
+class $$WorkItemListEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkItemListEntriesTable> {
+  $$WorkItemListEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get orgName => $composableBuilder(
+    column: $table.orgName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get project => $composableBuilder(
+    column: $table.project,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get listKey => $composableBuilder(
+    column: $table.listKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workItemId => $composableBuilder(
+    column: $table.workItemId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WorkItemListEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkItemListEntriesTable> {
+  $$WorkItemListEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get orgName => $composableBuilder(
+    column: $table.orgName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get project => $composableBuilder(
+    column: $table.project,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get listKey => $composableBuilder(
+    column: $table.listKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workItemId => $composableBuilder(
+    column: $table.workItemId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WorkItemListEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkItemListEntriesTable> {
+  $$WorkItemListEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get orgName =>
+      $composableBuilder(column: $table.orgName, builder: (column) => column);
+
+  GeneratedColumn<String> get project =>
+      $composableBuilder(column: $table.project, builder: (column) => column);
+
+  GeneratedColumn<String> get listKey =>
+      $composableBuilder(column: $table.listKey, builder: (column) => column);
+
+  GeneratedColumn<int> get workItemId => $composableBuilder(
+    column: $table.workItemId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+}
+
+class $$WorkItemListEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkItemListEntriesTable,
+          WorkItemListEntryRow,
+          $$WorkItemListEntriesTableFilterComposer,
+          $$WorkItemListEntriesTableOrderingComposer,
+          $$WorkItemListEntriesTableAnnotationComposer,
+          $$WorkItemListEntriesTableCreateCompanionBuilder,
+          $$WorkItemListEntriesTableUpdateCompanionBuilder,
+          (
+            WorkItemListEntryRow,
+            BaseReferences<
+              _$AppDatabase,
+              $WorkItemListEntriesTable,
+              WorkItemListEntryRow
+            >,
+          ),
+          WorkItemListEntryRow,
+          PrefetchHooks Function()
+        > {
+  $$WorkItemListEntriesTableTableManager(
+    _$AppDatabase db,
+    $WorkItemListEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkItemListEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkItemListEntriesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$WorkItemListEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> orgName = const Value.absent(),
+                Value<String> project = const Value.absent(),
+                Value<String> listKey = const Value.absent(),
+                Value<int> workItemId = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkItemListEntriesCompanion(
+                orgName: orgName,
+                project: project,
+                listKey: listKey,
+                workItemId: workItemId,
+                position: position,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String orgName,
+                required String project,
+                required String listKey,
+                required int workItemId,
+                required int position,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkItemListEntriesCompanion.insert(
+                orgName: orgName,
+                project: project,
+                listKey: listKey,
+                workItemId: workItemId,
+                position: position,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkItemListEntriesTable, WorkItemListEntryRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WorkItemListEntriesTable,
+                    WorkItemListEntryRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WorkItemListEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkItemListEntriesTable,
+      WorkItemListEntryRow,
+      $$WorkItemListEntriesTableFilterComposer,
+      $$WorkItemListEntriesTableOrderingComposer,
+      $$WorkItemListEntriesTableAnnotationComposer,
+      $$WorkItemListEntriesTableCreateCompanionBuilder,
+      $$WorkItemListEntriesTableUpdateCompanionBuilder,
+      (
+        WorkItemListEntryRow,
+        BaseReferences<
+          _$AppDatabase,
+          $WorkItemListEntriesTable,
+          WorkItemListEntryRow
+        >,
+      ),
+      WorkItemListEntryRow,
+      PrefetchHooks Function()
+    >;
 typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> id,
@@ -2151,6 +3471,10 @@ class $AppDatabaseManager {
       $$OrganizationsTableTableManager(_db, _db.organizations);
   $$ProjectsTableTableManager get projects =>
       $$ProjectsTableTableManager(_db, _db.projects);
+  $$WorkItemsTableTableManager get workItems =>
+      $$WorkItemsTableTableManager(_db, _db.workItems);
+  $$WorkItemListEntriesTableTableManager get workItemListEntries =>
+      $$WorkItemListEntriesTableTableManager(_db, _db.workItemListEntries);
   $$PendingWritesTableTableManager get pendingWrites =>
       $$PendingWritesTableTableManager(_db, _db.pendingWrites);
 }

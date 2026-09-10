@@ -31,6 +31,34 @@ class Projects extends Table {
   Set<Column<Object>> get primaryKey => {orgName, id};
 }
 
+/// Cached work items, one JSON blob each (the field set differs per read).
+@DataClassName('WorkItemRow')
+class WorkItems extends Table {
+  TextColumn get orgName => text()();
+  IntColumn get id => integer()();
+  TextColumn get project => text()();
+  IntColumn get rev => integer()();
+  TextColumn get json => text()();
+  DateTimeColumn get changedDate => dateTime().nullable()();
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {orgName, id};
+}
+
+/// Membership and order of a named list ("assigned-to-me", a board id).
+@DataClassName('WorkItemListEntryRow')
+class WorkItemListEntries extends Table {
+  TextColumn get orgName => text()();
+  TextColumn get project => text()();
+  TextColumn get listKey => text()();
+  IntColumn get workItemId => integer()();
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {orgName, project, listKey, workItemId};
+}
+
 /// Queued writes for offline-first behaviour (decision: queued writes,
 /// replayed with `test /rev` and surfaced as conflicts on 412).
 @DataClassName('PendingWriteRow')
@@ -45,11 +73,24 @@ class PendingWrites extends Table {
   TextColumn get lastError => text().nullable()();
 }
 
-@DriftDatabase(tables: [Organizations, Projects, PendingWrites])
+@DriftDatabase(
+  tables: [Organizations, Projects, WorkItems, WorkItemListEntries, PendingWrites],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'boardhop'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(workItems);
+        await m.createTable(workItemListEntries);
+      }
+    },
+  );
 }
