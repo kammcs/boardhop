@@ -12,6 +12,8 @@ import 'features/diagnostics/diff_probe/diff_probe_page.dart';
 import 'features/diagnostics/board_probe/board_probe_page.dart';
 import 'features/diagnostics/editor_probe_page.dart';
 import 'features/orgs/org_picker_page.dart';
+import 'features/pipelines/pipeline_log_page.dart';
+import 'features/pipelines/pipeline_run_page.dart';
 import 'features/pipelines/pipelines_page.dart';
 import 'features/projects/project_list_page.dart';
 import 'features/projects/project_shell.dart';
@@ -136,6 +138,32 @@ GoRouter buildRouter(AuthBloc auth) {
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                         ),
+                        routes: [
+                          GoRoute(
+                            path: 'runs/:id',
+                            builder: (_, state) => PipelineRunPage(
+                              org: state.pathParameters['org']!,
+                              project: state.pathParameters['project']!,
+                              id: int.parse(state.pathParameters['id']!),
+                            ),
+                            routes: [
+                              GoRoute(
+                                path: 'logs/:logId',
+                                builder: (_, state) => PipelineLogPage(
+                                  org: state.pathParameters['org']!,
+                                  project: state.pathParameters['project']!,
+                                  buildId: int.parse(
+                                    state.pathParameters['id']!,
+                                  ),
+                                  logId: int.parse(
+                                    state.pathParameters['logId']!,
+                                  ),
+                                  title: state.uri.queryParameters['name'],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),

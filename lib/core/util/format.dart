@@ -28,6 +28,18 @@ String relativeTime(DateTime? time, {DateTime? now}) {
   return local.year == ref.year ? md : '$md, ${local.year}';
 }
 
+/// "42s", "3m 05s", "1h 12m", "2d 3h".
+String formatDuration(Duration? d) {
+  if (d == null) return '';
+  final s = d.inSeconds < 0 ? 0 : d.inSeconds;
+  if (s < 60) return '${s}s';
+  if (s < 3600) {
+    return '${s ~/ 60}m ${(s % 60).toString().padLeft(2, '0')}s';
+  }
+  if (s < 86400) return '${s ~/ 3600}h ${(s % 3600 ~/ 60)}m';
+  return '${s ~/ 86400}d ${(s % 86400 ~/ 3600)}h';
+}
+
 /// "Kelly Kamm" → "KK", "kelly" → "K", "" → "?".
 String initials(String name) {
   final parts = name

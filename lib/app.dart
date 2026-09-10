@@ -7,6 +7,7 @@ import 'core/http/ado_client.dart';
 import 'data/db/app_database.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/board_repository.dart';
+import 'data/repositories/pipeline_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/pull_request_repository.dart';
 import 'data/repositories/work_item_repository.dart';
@@ -20,7 +21,8 @@ class AppDependencies {
     : orgs = OrgRepository(client, db),
       projects = ProjectRepository(client, db),
       workItems = WorkItemRepository(client, db),
-      pullRequests = PullRequestRepository(client, db) {
+      pullRequests = PullRequestRepository(client, db),
+      pipelines = PipelineRepository(client, db) {
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems);
   }
@@ -32,6 +34,7 @@ class AppDependencies {
   final ProjectRepository projects;
   final WorkItemRepository workItems;
   final PullRequestRepository pullRequests;
+  final PipelineRepository pipelines;
   late final BoardRepository boards;
   late final WriteQueue queue;
 }
@@ -76,6 +79,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.boards),
         RepositoryProvider.value(value: deps.queue),
         RepositoryProvider.value(value: deps.pullRequests),
+        RepositoryProvider.value(value: deps.pipelines),
       ],
       child: BlocProvider.value(
         value: _authBloc,
