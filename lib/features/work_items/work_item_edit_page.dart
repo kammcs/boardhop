@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:html_editor_enhanced/html_editor.dart';
@@ -128,18 +129,33 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     if (!mounted || _contentPushed) return;
-    final dynamic web = _html.editorController;
     final html = _item?.description ?? '';
-    if (web == null) {
-      _html.setText(html);
-    } else {
-      await web.evaluateJavascript(
-        source:
-            "(function(){ try { \$('#summernote-2').summernote('code', ${jsonEncode(html)}); "
-            "return 'ok'; } catch (e) { return 'js error: ' + e; } })()",
-      );
+    if (html.isEmpty) {
+      _contentPushed = true;
+      return;
     }
-    _contentPushed = true;
+    // The WebView channel can lag onInit by a few frames; retry briefly.
+    for (var attempt = 0; attempt < 10 && mounted; attempt++) {
+      final dynamic web = _html.editorController;
+      try {
+        if (web == null) {
+          _html.setText(html);
+        } else {
+          await web.evaluateJavascript(
+            source:
+                "(function(){ try { \$('#summernote-2').summernote('code', ${jsonEncode(html)}); "
+                "return 'ok'; } catch (e) { return 'js error: ' + e; } })()",
+          );
+        }
+        _contentPushed = true;
+        return;
+      } on MissingPluginException {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    }
+    if (mounted) {
+      setState(() => _error = 'The editor did not load; try again.');
+    }
   }
 
   Future<void> _save() async {
@@ -152,9 +168,15 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
     final repo = context.read<WorkItemRepository>();
     try {
       final title = _title.text.trim();
-      final description = _format == 'markdown'
-          ? _markdown.text
-          : await _html.getText();
+      final String description;
+      try {
+        description = _format == 'markdown'
+            ? _markdown.text
+            : await _html.getText();
+      } on MissingPluginException {
+        setState(() => _error = 'The editor is not ready; try again.');
+        return;
+      }
       final values = <String, Object?>{
         if (title.isNotEmpty && title != item.title) 'System.Title': title,
         if (description != (item.description ?? ''))
@@ -212,16 +234,28 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
         ],
       ),
       body: ContentColumn(
+        // Every child is keyed and the progress/error rows keep their slots
+        // (spike F3): an index shift would dispose the editor's WebView.
         child: ListView(
           padding: const EdgeInsets.only(bottom: Spacing.xxl),
           children: [
-            if (_loading || _saving) const LinearProgressIndicator(),
+            SizedBox(
+              key: const ValueKey('progress'),
+              height: 4,
+              child: _loading || _saving
+                  ? const LinearProgressIndicator()
+                  : null,
+            ),
             if (_error != null)
               ListTile(
+                key: const ValueKey('error'),
                 leading: Icon(Icons.error_outline, color: scheme.error),
                 title: Text(_error!),
-              ),
+              )
+            else
+              const SizedBox.shrink(key: ValueKey('error')),
             Padding(
+              key: const ValueKey('title'),
               padding: Spacing.page,
               child: TextField(
                 controller: _title,
@@ -233,6 +267,7 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
               ),
             ),
             Padding(
+              key: const ValueKey('label'),
               padding: const EdgeInsets.fromLTRB(
                 Spacing.lg,
                 0,
@@ -248,6 +283,7 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
             ),
             if (_format == 'markdown')
               Padding(
+                key: const ValueKey('markdown'),
                 padding: Spacing.pageHorizontal,
                 child: TextField(
                   controller: _markdown,
@@ -265,11 +301,9 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
               // Stable slot for the WebView (spike F3): never insert widgets
               // above it after the first build.
               Padding(
+                key: const ValueKey('description-editor'),
                 padding: Spacing.pageHorizontal,
-                child: KeyedSubtree(
-                  key: const ValueKey('description-editor'),
-                  child: _editor,
-                ),
+                child: _editor,
               ),
           ],
         ),
