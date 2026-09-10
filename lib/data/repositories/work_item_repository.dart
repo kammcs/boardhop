@@ -18,6 +18,8 @@ class WorkItemRepository {
   static const apiVersion = '7.1';
   static const commentsApiVersion = '7.1-preview.4';
   static const assignedToMeKey = 'assigned-to-me';
+  static const recentlyUpdatedKey = 'recently-updated';
+  static String queryKey(String queryId) => 'query:$queryId';
 
   /// Fields every list and card needs. Kept to System.* plus Priority so the
   /// batch never names a field a process does not have (that is a 400).
@@ -102,12 +104,83 @@ class WorkItemRepository {
       "AND [System.State] <> 'Done' "
       'ORDER BY [System.ChangedDate] DESC';
 
-  Future<List<WorkItem>> refreshAssignedToMe(String org, String project) async {
-    final ids = await queryIds(org, project, assignedToMeWiql());
-    final items = ids.isEmpty
-        ? <WorkItem>[]
-        : await batch(org, project, ids);
-    await storeList(org, project, assignedToMeKey, items);
+  Future<List<WorkItem>> refreshAssignedToMe(String org, String project) =>
+      _refreshWiql(org, project, assignedToMeKey, assignedToMeWiql());
+
+  static String recentlyUpdatedWiql({int days = 7}) =>
+      'SELECT [System.Id] FROM WorkItems '
+      'WHERE [System.TeamProject] = @project '
+      'AND [System.ChangedDate] >= @Today - $days '
+      "AND [System.State] <> 'Removed' "
+      'ORDER BY [System.ChangedDate] DESC';
+
+  Future<List<WorkItem>> refreshRecentlyUpdated(String org, String project) =>
+      _refreshWiql(org, project, recentlyUpdatedKey, recentlyUpdatedWiql());
+
+  Future<List<WorkItem>> _refreshWiql(
+    String org,
+    String project,
+    String listKey,
+    String wiql,
+  ) async {
+    final ids = await queryIds(org, project, wiql);
+    final items = ids.isEmpty ? <WorkItem>[] : await batch(org, project, ids);
+    await storeList(org, project, listKey, items);
+    return items;
+  }
+
+  /// The query tree two levels deep: My Queries and Shared Queries with
+  /// their folders and queries.
+  Future<List<SavedQuery>> queries(String org, String project) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/wit/queries',
+      apiVersion: apiVersion,
+      query: {r'$depth': '2', r'$expand': 'none'},
+    );
+    return ((json['value'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => SavedQuery.fromJson(m.cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Ids from a `wiql/{id}` result: flat queries list `workItems`, tree and
+  /// one-hop queries list `workItemRelations` whose targets are the items.
+  static List<int> idsFromQueryResult(Map<String, dynamic> json) {
+    final seen = <int>{};
+    final out = <int>[];
+    void add(Object? id) {
+      if (id is int && seen.add(id)) out.add(id);
+    }
+
+    for (final w in ((json['workItems'] as List?) ?? const []).whereType<Map>()) {
+      add(w['id']);
+    }
+    for (final r in ((json['workItemRelations'] as List?) ?? const [])
+        .whereType<Map>()) {
+      add((r['target'] as Map?)?['id']);
+    }
+    return out;
+  }
+
+  /// Runs a saved query by id and caches the result under `query:{id}`.
+  Future<List<WorkItem>> refreshQuery(
+    String org,
+    String project,
+    String queryId, {
+    int top = 200,
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/wit/wiql/$queryId',
+      apiVersion: apiVersion,
+      query: {r'$top': '$top'},
+    );
+    final ids = idsFromQueryResult(json);
+    final items = ids.isEmpty ? <WorkItem>[] : await batch(org, project, ids);
+    await storeList(org, project, queryKey(queryId), items);
     return items;
   }
 

@@ -8,10 +8,12 @@ import '../../core/util/format.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
+import 'widgets/query_picker.dart';
 import 'widgets/work_item_visuals.dart';
 
-/// "Assigned to me" in one project: rendered from the drift cache, refreshed
-/// on open and on pull.
+/// Work item lists in one project: "assigned to me", "recently updated" or
+/// a saved query, rendered from the drift cache and refreshed on open, on
+/// pull and when the list changes.
 class WorkItemsPage extends StatefulWidget {
   const WorkItemsPage({super.key, required this.org, required this.project});
 
@@ -27,6 +29,10 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
   bool _refreshing = false;
   bool _loadedOnce = false;
   WorkItemVisuals _visuals = const WorkItemVisuals({});
+  String _listKey = WorkItemRepository.assignedToMeKey;
+  String _listLabel = 'Assigned to me';
+  List<SavedQuery>? _queries;
+  SavedQuery? _query;
 
   @override
   void initState() {
@@ -47,7 +53,13 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           () => _visuals = WorkItemVisuals({for (final t in types) t.name: t}),
         );
       }
-      await repo.refreshAssignedToMe(widget.org, widget.project);
+      if (_listKey == WorkItemRepository.assignedToMeKey) {
+        await repo.refreshAssignedToMe(widget.org, widget.project);
+      } else if (_listKey == WorkItemRepository.recentlyUpdatedKey) {
+        await repo.refreshRecentlyUpdated(widget.org, widget.project);
+      } else if (_query != null) {
+        await repo.refreshQuery(widget.org, widget.project, _query!.id);
+      }
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
@@ -62,6 +74,42 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
         });
       }
     }
+  }
+
+  void _select(String key, String label, {SavedQuery? query}) {
+    if (key == _listKey) return;
+    setState(() {
+      _listKey = key;
+      _listLabel = label;
+      _query = query;
+      _loadedOnce = false;
+    });
+    _refresh();
+  }
+
+  Future<void> _pickQuery() async {
+    final repo = context.read<WorkItemRepository>();
+    var tree = _queries;
+    if (tree == null) {
+      setState(() => _refreshing = true);
+      try {
+        tree = await repo.queries(widget.org, widget.project);
+        _queries = tree;
+      } on AdoException catch (e) {
+        if (mounted) setState(() => _error = e.message);
+        return;
+      } finally {
+        if (mounted) setState(() => _refreshing = false);
+      }
+    }
+    if (!mounted) return;
+    final picked = await pickSavedQuery(
+      context,
+      tree: tree,
+      selectedId: _query?.id,
+    );
+    if (picked == null || !mounted) return;
+    _select(WorkItemRepository.queryKey(picked.id), picked.name, query: picked);
   }
 
   void _open(WorkItem item) => context.push(
@@ -80,10 +128,11 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           children: [
             Text(widget.project, overflow: TextOverflow.ellipsis),
             Text(
-              'Assigned to me',
+              _listLabel,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -107,7 +156,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           stream: context.read<WorkItemRepository>().watchList(
             widget.org,
             widget.project,
-            WorkItemRepository.assignedToMeKey,
+            _listKey,
           ),
           builder: (context, snapshot) {
             final items = snapshot.data ?? const <WorkItem>[];
@@ -116,6 +165,47 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   if (_refreshing) const LinearProgressIndicator(),
+                  SizedBox(
+                    height: 48,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Spacing.lg,
+                        vertical: Spacing.xs,
+                      ),
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Assigned to me'),
+                          selected:
+                              _listKey == WorkItemRepository.assignedToMeKey,
+                          onSelected: (_) => _select(
+                            WorkItemRepository.assignedToMeKey,
+                            'Assigned to me',
+                          ),
+                        ),
+                        const SizedBox(width: Spacing.sm),
+                        ChoiceChip(
+                          label: const Text('Recently updated'),
+                          selected:
+                              _listKey == WorkItemRepository.recentlyUpdatedKey,
+                          onSelected: (_) => _select(
+                            WorkItemRepository.recentlyUpdatedKey,
+                            'Recently updated',
+                          ),
+                        ),
+                        const SizedBox(width: Spacing.sm),
+                        ChoiceChip(
+                          avatar: const Icon(
+                            Icons.manage_search_outlined,
+                            size: 18,
+                          ),
+                          label: Text(_query?.name ?? 'Saved query'),
+                          selected: _query != null,
+                          onSelected: (_) => _pickQuery(),
+                        ),
+                      ],
+                    ),
+                  ),
                   if (_error != null)
                     ListTile(
                       leading: Icon(Icons.error_outline, color: scheme.error),
@@ -133,7 +223,9 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
                           ),
                           const SizedBox(height: Spacing.sm),
                           Text(
-                            'Nothing is assigned to you in ${widget.project}.',
+                            _listKey == WorkItemRepository.assignedToMeKey
+                                ? 'Nothing is assigned to you in ${widget.project}.'
+                                : 'No work items in "$_listLabel".',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium,
                           ),

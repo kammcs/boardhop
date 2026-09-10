@@ -228,6 +228,54 @@ class WorkItemType extends Equatable {
   List<Object?> get props => [referenceName, name, color, iconId];
 }
 
+/// A saved query or folder from `GET _apis/wit/queries?$depth=2`.
+class SavedQuery extends Equatable {
+  const SavedQuery({
+    required this.id,
+    required this.name,
+    required this.path,
+    required this.isFolder,
+    this.children = const [],
+  });
+
+  factory SavedQuery.fromJson(Map<String, dynamic> json) => SavedQuery(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    path: json['path'] as String? ?? '',
+    isFolder: json['isFolder'] as bool? ?? false,
+    children: ((json['children'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => SavedQuery.fromJson(m.cast<String, dynamic>()))
+        .toList(),
+  );
+
+  final String id;
+  final String name;
+  final String path;
+  final bool isFolder;
+  final List<SavedQuery> children;
+
+  /// Folder part of [path], e.g. `Shared Queries/Bugs`.
+  String get folder {
+    final i = path.lastIndexOf('/');
+    return i < 0 ? '' : path.substring(0, i);
+  }
+
+  /// Every query (not folder) under this node, depth first.
+  Iterable<SavedQuery> get leaves sync* {
+    if (!isFolder) {
+      yield this;
+      return;
+    }
+    for (final c in children) {
+      yield* c.leaves;
+    }
+  }
+
+  @override
+  List<Object?> get props => [id];
+}
+
 /// From the preview Comments API with `$expand=renderedText`.
 class WorkItemComment extends Equatable {
   const WorkItemComment({

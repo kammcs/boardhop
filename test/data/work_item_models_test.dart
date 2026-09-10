@@ -2,6 +2,7 @@ import 'package:boardhop/core/util/format.dart';
 import 'package:boardhop/data/models/board.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/repositories/board_repository.dart';
+import 'package:boardhop/data/repositories/work_item_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -254,6 +255,76 @@ void main() {
       expect(wiql, contains(r"[System.AreaPath] UNDER 'P\Team'"));
       expect(wiql, contains(r"[System.AreaPath] = 'P\O''Brien'"));
       expect(wiql, endsWith('ORDER BY [System.ChangedDate] DESC'));
+    });
+  });
+
+  group('saved queries', () {
+    test('tree leaves and folders', () {
+      final tree = [
+        SavedQuery.fromJson({
+          'id': 'root',
+          'name': 'Shared Queries',
+          'path': 'Shared Queries',
+          'isFolder': true,
+          'children': [
+            {
+              'id': 'q1',
+              'name': 'Open bugs',
+              'path': 'Shared Queries/Open bugs',
+              'isFolder': false,
+            },
+            {
+              'id': 'f1',
+              'name': 'Triage',
+              'path': 'Shared Queries/Triage',
+              'isFolder': true,
+              'children': [
+                {
+                  'id': 'q2',
+                  'name': 'Untriaged',
+                  'path': 'Shared Queries/Triage/Untriaged',
+                  'isFolder': false,
+                },
+              ],
+            },
+          ],
+        }),
+      ];
+      final leaves = [for (final r in tree) ...r.leaves];
+      expect(leaves.map((q) => q.id), ['q1', 'q2']);
+      expect(leaves[1].folder, 'Shared Queries/Triage');
+    });
+
+    test('ids from flat and tree query results', () {
+      expect(
+        WorkItemRepository.idsFromQueryResult({
+          'queryType': 'flat',
+          'workItems': [
+            {'id': 3},
+            {'id': 1},
+          ],
+        }),
+        [3, 1],
+      );
+      expect(
+        WorkItemRepository.idsFromQueryResult({
+          'queryType': 'tree',
+          'workItemRelations': [
+            {
+              'target': {'id': 10},
+            },
+            {
+              'source': {'id': 10},
+              'target': {'id': 11},
+            },
+            {
+              'source': {'id': 10},
+              'target': {'id': 11},
+            },
+          ],
+        }),
+        [10, 11],
+      );
     });
   });
 
