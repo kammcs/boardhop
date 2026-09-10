@@ -1,12 +1,12 @@
 # Boardhop
 
-A mobile client for Azure DevOps Services (iOS and Android, phones and tablets) built with React Native and Expo. It blends the Jira mobile experience for boards and work items with the GitHub mobile experience for repositories and pull request review.
+A mobile client for Azure DevOps Services (iOS and Android, phones and tablets) built with Flutter. It blends the Jira mobile experience for boards and work items with the GitHub mobile experience for repositories and pull request review.
 
 Boardhop is an independent product by kammcs. It works with Azure DevOps but is not affiliated with or endorsed by Microsoft.
 
 ## Status
 
-Discovery is complete. The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The app scaffold has not been started yet.
+Discovery is complete and the stack is decided: Flutter (see [research/08-stack-comparison.md](research/08-stack-comparison.md)). The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The app scaffold has not been started yet.
 
 ## Repository layout
 
