@@ -198,8 +198,10 @@ All permissions are **delegated**: the app can only do what the signed-in user c
 Open this URL in a browser while signed in as a puremedia Global Administrator, Privileged Role Administrator, or Cloud Application Administrator, replacing the client ID:
 
 ```
-https://login.microsoftonline.com/{puremedia-tenant-id-or-domain}/adminconsent?client_id={client-id}
+https://login.microsoftonline.com/342d4cd1-7ea8-4452-8ceb-542b71d159f6/adminconsent?client_id={client-id}
 ```
+
+(`342d4cd1-7ea8-4452-8ceb-542b71d159f6` is the Entra tenant that backs the puremedia Azure DevOps organization; its verified domain is `cloudcover.it`. Confirmed 2026-09-10 from the org's Graph users and from the OpenID discovery document for that domain.)
 
 Review the permission list and accept. This creates the **Boardhop** entry under **Identity → Applications → Enterprise applications** and pre-approves the permissions for every user in the tenant, so individual users are not prompted.
 
@@ -240,7 +242,7 @@ Nothing to change. The Azure DevOps policy "Third-party application access via O
 
 Please provide or confirm:
 
-1. Puremedia tenant ID (from Entra admin center → Overview).
+1. Confirm the tenant ID `342d4cd1-7ea8-4452-8ceb-542b71d159f6` (Entra admin center → Overview) is the tenant you administer.
 2. Two test user accounts as described in B4, with Basic access in Azure DevOps and access to the "DevOps Mobile App" project.
 3. Microsoft Authenticator installed and signed in on at least one iOS and one Android test device, registered with the puremedia tenant (Settings → Device registration, or via Company Portal if Intune-enrolled).
 4. Optionally, a guest (B2B) account from another tenant that has access to the puremedia Azure DevOps organization, for testing cross-tenant sign-in.

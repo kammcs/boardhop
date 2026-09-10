@@ -34,6 +34,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `s09_activity_poll_cost.py` | TSTU cost of one Activity poll cycle. |
 | `s10_board_schema_and_wef.py` | Board config, raw card settings and rule settings schema, WEF field names and values. |
 | `s11_workitem_type_fields.py` | Type, state and field metadata for dynamic forms; `validateOnly` dry runs. |
+| `s12_tenant_id.py` | Entra tenant ID behind the org, from Graph users' `domain`. |
 
 ## Write spikes (scratch project "DevOps Mobile App" only)
 
