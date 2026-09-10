@@ -32,6 +32,7 @@ class BuildRun extends Equatable {
     this.reason,
     this.triggerMessage,
     this.webUrl,
+    this.projectName,
   });
 
   factory BuildRun.fromJson(Map<String, dynamic> json) {
@@ -57,6 +58,7 @@ class BuildRun extends Equatable {
       triggerMessage:
           trigger['ci.message'] as String? ?? trigger['pr.title'] as String?,
       webUrl: (links?['web'] as Map?)?['href'] as String?,
+      projectName: (json['project'] as Map?)?['name'] as String?,
     );
   }
 
@@ -64,6 +66,7 @@ class BuildRun extends Equatable {
   final String buildNumber;
   final int definitionId;
   final String definitionName;
+  final String? projectName;
 
   /// `none | inProgress | completed | cancelling | postponed | notStarted`.
   final String status;

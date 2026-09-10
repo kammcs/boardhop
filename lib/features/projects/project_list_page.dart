@@ -55,6 +55,13 @@ class _ProjectListPageState extends State<ProjectListPage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Activity',
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => context.push(
+              '/orgs/${Uri.encodeComponent(widget.org)}/activity',
+            ),
+          ),
+          IconButton(
             tooltip: 'Pull requests to review',
             icon: const Icon(Icons.call_merge),
             onPressed: () => context.push(

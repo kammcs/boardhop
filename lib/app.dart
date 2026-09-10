@@ -5,6 +5,7 @@ import 'auth/auth_bloc.dart';
 import 'auth/auth_service.dart';
 import 'core/http/ado_client.dart';
 import 'data/db/app_database.dart';
+import 'data/repositories/activity_repository.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/board_repository.dart';
 import 'data/repositories/pipeline_repository.dart';
@@ -25,6 +26,7 @@ class AppDependencies {
       pipelines = PipelineRepository(client, db) {
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems);
+    activity = ActivityRepository(client, db, pullRequests, pipelines);
   }
 
   final AuthService auth;
@@ -37,6 +39,7 @@ class AppDependencies {
   final PipelineRepository pipelines;
   late final BoardRepository boards;
   late final WriteQueue queue;
+  late final ActivityRepository activity;
 }
 
 class BoardhopApp extends StatefulWidget {
@@ -80,6 +83,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.queue),
         RepositoryProvider.value(value: deps.pullRequests),
         RepositoryProvider.value(value: deps.pipelines),
+        RepositoryProvider.value(value: deps.activity),
       ],
       child: BlocProvider.value(
         value: _authBloc,
