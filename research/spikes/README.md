@@ -48,6 +48,14 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `w03_pr_line_comment.py` | Seed a repo and PR through REST, post an anchored thread and a suggestion comment, push a second iteration, read tracking back. | Done (PR 8319 left active for visual check) |
 | `w04_service_hook_payloads.py` | Capture "Minimal" webhook payload shapes for the five event types in document 06. | Not written: needs an HTTPS receiver and project-admin rights |
 
+## App spikes (Flutter, on device or emulator)
+
+| Spike | Question | Status |
+|---|---|---|
+| F1 | `msal_auth` sign-in, silent restore, org discovery, token size | Done 2026-09-10 on a Pixel 10 Pro / Android 17 emulator (browser fallback; Authenticator broker not yet exercised). Runner: the Diagnostics page in the app. |
+| F2 | Claims challenge (CAE) through `msal_auth` | Package has no `claims` parameter; needs a platform channel or fork. Not yet run. |
+| F3–F5 | HTML round-trip, Kanban drag-and-drop, diff viewer | Not started |
+
 ## Not runnable here
 
-Token sizes and the cross-tenant 401 hint need the Entra app registration and a guest account. Publisher verification lead time is administrative.
+The cross-tenant 401 hint needs a guest account. Publisher verification lead time is administrative.

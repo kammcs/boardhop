@@ -23,7 +23,7 @@ Discovery is complete and the stack is decided: Flutter (see [research/08-stack-
 
 ## Running the app
 
-Requirements: Flutter 3.47 or later, a real iOS or Android device with Microsoft Authenticator (sign-in uses the broker; emulators fall back to the browser), and the Entra client ID.
+Requirements: Flutter 3.47 or later, the Entra client ID, and either a real device with Microsoft Authenticator (broker sign-in) or an Android emulator (browser fallback). `tool/start-emulator.ps1` starts the Pixel 10 Pro AVD with DNS settings that work on Windows hosts with VPN adapters.
 
 1. Copy `.env.example` to `.env` and set `BOARDHOP_CLIENT_ID`. The file is gitignored.
 2. Android only: copy `android/secret.properties.example` to `android/secret.properties` and set your debug signature hash. The hash must also be registered on the app registration as an Android redirect URI (see [research/09-entra-app-registration.md](research/09-entra-app-registration.md)).

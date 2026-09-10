@@ -53,3 +53,7 @@ Work items #15503–#15507 were created and left in place for inspection.
 |---|---|
 | Service hook "Minimal" payload capture | Project-admin rights on the scratch project and an HTTPS receiver |
 | Token sizes, cross-tenant 401 hint | Entra app registration and a guest account |
+
+## F1: msal_auth sign-in on Android (2026-09-10)
+
+Pixel 10 Pro emulator, Android 17, no Authenticator (browser fallback). Interactive sign-in through a Chrome custom tab succeeded; after `am force-stop` the app restored the session silently. Access token 2,051 bytes, 75-minute lifetime, issued for the puremedia tenant with ten `vso.*` scopes from `.default`. `app.vssps` `profiles/me` and `accounts?memberId` worked with the Entra token (one org), `dev.azure.com/puremedia/_apis/projects` returned four projects, and the org-scoped `vssps` profile matched. `X-RateLimit-Cost` 0.0036 on the projects call. Emulator needed `-dns-server 8.8.8.8,1.1.1.1` on this host. Raw report: `f1-device-run.md` (gitignored).
