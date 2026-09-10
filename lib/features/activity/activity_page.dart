@@ -8,6 +8,8 @@ import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/util/format.dart';
 import '../../data/models/activity.dart';
+import '../../core/notifications/notification_service.dart';
+import '../../data/activity_sync.dart';
 import '../../data/models/pull_request.dart';
 import '../../data/repositories/activity_repository.dart';
 import '../../theme/theme.dart';
@@ -43,11 +45,14 @@ class _ActivityPageState extends State<ActivityPage>
   Timer? _poll;
 
   ActivityRepository get _repo => context.read<ActivityRepository>();
+  ActivitySync? _sync;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // The feed marks items seen itself; no notifications while it is open.
+    _sync = context.read<ActivitySync>()..suppressed = true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
     _poll = Timer.periodic(_pollEvery, (_) {
       if (mounted && !_loading) _load(quiet: true);
@@ -57,6 +62,7 @@ class _ActivityPageState extends State<ActivityPage>
   @override
   void dispose() {
     _poll?.cancel();
+    _sync?.suppressed = false;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -127,6 +133,7 @@ class _ActivityPageState extends State<ActivityPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final notifications = context.read<NotificationService>();
     final visible = _items.where(_matches).toList();
     final newCount = _items.where((i) => i.isNewSince(_seen)).length;
     return Scaffold(
@@ -198,6 +205,25 @@ class _ActivityPageState extends State<ActivityPage>
                           'Showing activity from ${relativeTime(_shownAt)}.',
                         ),
                 ),
+              ListenableBuilder(
+                listenable: notifications.enabledNotifier,
+                builder: (context, _) => notifications.enabled
+                    ? const SizedBox.shrink()
+                    : ListTile(
+                        leading: Icon(
+                          Icons.notifications_active_outlined,
+                          color: scheme.primary,
+                        ),
+                        title: const Text('Get notified about new activity'),
+                        subtitle: const Text(
+                          'Checked every few minutes while Boardhop is open.',
+                        ),
+                        trailing: FilledButton.tonal(
+                          onPressed: () => notifications.setEnabled(true),
+                          child: const Text('Turn on'),
+                        ),
+                      ),
+              ),
               if (visible.isEmpty && _loadedOnce && !_loading)
                 Padding(
                   padding: const EdgeInsets.all(Spacing.xl),

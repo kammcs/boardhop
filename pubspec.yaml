@@ -53,6 +53,7 @@ dependencies:
   diff_match_patch: ^0.4.1
   re_highlight: ^0.0.3
   super_sliver_list: ^0.4.1
+  flutter_local_notifications: ^22.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

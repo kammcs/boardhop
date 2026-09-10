@@ -20,6 +20,7 @@ class ActivityItem extends Equatable {
     this.status,
     this.result,
     this.actor,
+    this.actorId,
   });
 
   factory ActivityItem.fromPullRequest(
@@ -39,6 +40,7 @@ class ActivityItem extends Equatable {
     status: pr.isDraft ? 'draft' : pr.status,
     result: pr.overallVote.name,
     actor: pr.createdBy.displayName,
+    actorId: pr.createdBy.id,
   );
 
   factory ActivityItem.fromWorkItem(String org, WorkItem item) => ActivityItem(
@@ -56,6 +58,7 @@ class ActivityItem extends Equatable {
     status: item.state,
     result: item.type,
     actor: item.changedBy?.displayName,
+    actorId: item.changedBy?.id,
   );
 
   factory ActivityItem.fromBuild(String org, BuildRun run) => ActivityItem(
@@ -73,6 +76,7 @@ class ActivityItem extends Equatable {
     status: run.status,
     result: run.result,
     actor: run.requestedFor?.displayName,
+    actorId: run.requestedFor?.id,
   );
 
   factory ActivityItem.fromJson(Map<String, dynamic> json) => ActivityItem(
@@ -89,6 +93,7 @@ class ActivityItem extends Equatable {
     status: json['status'] as String?,
     result: json['result'] as String?,
     actor: json['actor'] as String?,
+    actorId: json['actorId'] as String?,
   );
 
   final ActivityKind kind;
@@ -108,6 +113,9 @@ class ActivityItem extends Equatable {
   final String? result;
   final String? actor;
 
+  /// Identity id behind [actor], to skip the user's own changes.
+  final String? actorId;
+
   bool isNewSince(DateTime? seen) =>
       seen != null && time != null && time!.isAfter(seen);
 
@@ -122,6 +130,7 @@ class ActivityItem extends Equatable {
     'status': ?status,
     'result': ?result,
     'actor': ?actor,
+    'actorId': ?actorId,
   };
 
   @override

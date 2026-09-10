@@ -1,3 +1,4 @@
+import 'package:boardhop/data/activity_sync.dart';
 import 'package:boardhop/data/models/activity.dart';
 import 'package:boardhop/data/models/pipeline.dart';
 import 'package:boardhop/data/models/pull_request.dart';
@@ -106,5 +107,54 @@ void main() {
     expect(ActivityRepository.workItemsWiql(), contains('@Today - 14'));
     expect(ActivityRepository.feedKey('puremedia'), 'activity:puremedia');
     expect(ActivityRepository.seenKey('puremedia'), 'activity:seen:puremedia');
+  });
+
+  test('ActivitySync picks new, unannounced items not caused by me', () {
+    final review = ActivityItem.fromPullRequest(
+      'o',
+      pr,
+      mine: false,
+    ); // 10:00, me
+    final wi = ActivityItem.fromWorkItem('o', workItem); // 12:00, me
+    final b = ActivityItem.fromBuild('o', build); // 11:30, nobody
+    final items = [wi, b, review];
+    // No baseline yet: nothing.
+    expect(
+      ActivitySync.toNotify(items, lastSeen: null, notified: {}, meId: 'me'),
+      isEmpty,
+    );
+    final seen = DateTime.utc(2026, 9, 10, 9);
+    // My own work item edit is skipped; a review request from me still shows
+    // (someone added me); the build has no actor.
+    expect(
+      ActivitySync.toNotify(
+        items,
+        lastSeen: seen,
+        notified: {},
+        meId: 'me',
+      ).map((i) => i.key),
+      ['build:4242', 'pr:8319'],
+    );
+    expect(
+      ActivitySync.toNotify(
+        items,
+        lastSeen: seen,
+        notified: {'build:4242'},
+        meId: 'other',
+      ).map((i) => i.key),
+      ['wi:15503', 'pr:8319'],
+    );
+    expect(
+      ActivitySync.toNotify(
+        items,
+        lastSeen: DateTime.utc(2026, 9, 10, 13),
+        notified: {},
+        meId: 'x',
+      ),
+      isEmpty,
+    );
+    expect(ActivitySync.message(b).$1, 'Build failed');
+    expect(ActivitySync.message(review).$1, 'Review requested');
+    expect(ActivitySync.notifiedKey('o'), 'activity:notified:o');
   });
 }

@@ -1,6 +1,8 @@
+import 'package:boardhop/core/notifications/notification_service.dart';
 import 'package:boardhop/features/settings/settings_page.dart';
 import 'package:boardhop/theme/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -83,14 +85,17 @@ void main() {
     ) async {
       final controller = ThemeController.inMemory();
       await tester.pumpWidget(
-        ThemeScope(
-          controller: controller,
-          child: Builder(
-            builder: (context) => MaterialApp(
-              theme: BoardhopTheme.light(),
-              darkTheme: BoardhopTheme.dark(),
-              themeMode: ThemeScope.of(context).mode,
-              home: const SettingsPage(),
+        RepositoryProvider<NotificationService>.value(
+          value: NotificationService.fake(),
+          child: ThemeScope(
+            controller: controller,
+            child: Builder(
+              builder: (context) => MaterialApp(
+                theme: BoardhopTheme.light(),
+                darkTheme: BoardhopTheme.dark(),
+                themeMode: ThemeScope.of(context).mode,
+                home: const SettingsPage(),
+              ),
             ),
           ),
         ),

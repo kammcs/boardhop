@@ -95,6 +95,17 @@ class OrgRepository {
                 .toList(),
           );
 
+  /// Name of the organization opened most recently, if any.
+  Future<String?> lastOpened() async {
+    final row =
+        await (_db.select(_db.organizations)
+              ..where((t) => t.lastOpenedAt.isNotNull())
+              ..orderBy([(t) => OrderingTerm.desc(t.lastOpenedAt)])
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.name;
+  }
+
   Future<void> markOpened(String name) =>
       (_db.update(_db.organizations)..where((t) => t.name.equals(name))).write(
         OrganizationsCompanion(lastOpenedAt: Value(DateTime.now())),

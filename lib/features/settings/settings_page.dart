@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../theme/theme.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -9,6 +11,7 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = ThemeScope.of(context);
+    final notifications = context.read<NotificationService>();
     final textTheme = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
@@ -55,6 +58,32 @@ class SettingsPage extends StatelessWidget {
                     secondary: Icon(Icons.dark_mode_outlined),
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Spacing.lg,
+                Spacing.xl,
+                Spacing.lg,
+                Spacing.sm,
+              ),
+              child: Text(
+                'Notifications',
+                style: textTheme.titleSmall?.copyWith(color: scheme.primary),
+              ),
+            ),
+            ListenableBuilder(
+              listenable: notifications.enabledNotifier,
+              builder: (context, _) => SwitchListTile(
+                value: notifications.enabled,
+                onChanged: (v) => notifications.setEnabled(v),
+                title: const Text('New activity'),
+                subtitle: Text(
+                  notifications.permissionDenied && !notifications.enabled
+                      ? 'Allow notifications for Boardhop in system settings, then try again.'
+                      : 'Pull requests waiting for you, changes to your work items and build results, checked every few minutes while Boardhop is open.',
+                ),
+                secondary: const Icon(Icons.notifications_outlined),
               ),
             ),
           ],
