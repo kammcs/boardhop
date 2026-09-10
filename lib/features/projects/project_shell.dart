@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
+import '../shared/pending_writes_banner.dart';
 
 /// Bottom navigation (phones) or a rail (wider) across a project's areas.
-/// Each branch keeps its own navigator and scroll state.
-class ProjectShell extends StatelessWidget {
+/// Each branch keeps its own navigator and scroll state. Also the place
+/// where queued writes are retried: on open and whenever the app resumes.
+class ProjectShell extends StatefulWidget {
   const ProjectShell({
     super.key,
     required this.shell,
@@ -16,6 +20,39 @@ class ProjectShell extends StatelessWidget {
   final StatefulNavigationShell shell;
   final String org;
   final String project;
+
+  @override
+  State<ProjectShell> createState() => _ProjectShellState();
+}
+
+class _ProjectShellState extends State<ProjectShell>
+    with WidgetsBindingObserver {
+  StatefulNavigationShell get shell => widget.shell;
+  String get org => widget.org;
+  String get project => widget.project;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _drain();
+  }
+
+  Future<void> _drain() async {
+    if (!mounted) return;
+    await context.read<WriteQueue>().drain();
+  }
 
   static const _destinations = <({String label, IconData icon, IconData selected, String path})>[
     (
@@ -53,9 +90,16 @@ class ProjectShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PendingWritesBanner(),
+        Expanded(child: shell),
+      ],
+    );
     if (context.breakpoint.isCompact) {
       return Scaffold(
-        body: shell,
+        body: body,
         bottomNavigationBar: NavigationBar(
           selectedIndex: shell.currentIndex,
           onDestinationSelected: (i) => _select(context, i),
@@ -87,7 +131,7 @@ class ProjectShell extends StatelessWidget {
             ],
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: shell),
+          Expanded(child: body),
         ],
       ),
     );

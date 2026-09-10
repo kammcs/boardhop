@@ -9,6 +9,7 @@ import '../../data/models/board.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/board_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import 'widgets/kanban_board.dart';
@@ -171,6 +172,34 @@ class _BoardsPageState extends State<BoardsPage> {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
       }
+    } on AdoNetworkException {
+      // Offline: keep the move on screen, queue the column write (the rank
+      // is not queued; it is recomputed on the next refresh).
+      if (!mounted || fromSlot == toSlot) return;
+      final ops = BoardRepository.moveOps(board, card, board.slots[toSlot]);
+      final queue = context.read<WriteQueue>();
+      final workItems = context.read<WorkItemRepository>();
+      await queue.enqueuePatch(
+        org: widget.org,
+        project: widget.project,
+        item: card,
+        ops: ops,
+        description: 'Move ${card.id} to ${board.slots[toSlot].title}',
+      );
+      final local = await workItems.applyLocally(
+        widget.org,
+        widget.project,
+        card,
+        WriteQueue.fieldsFromOps(ops),
+      );
+      if (!mounted) return;
+      setState(() {
+        final i = _cards[toSlot].indexWhere((c) => c.id == card.id);
+        if (i >= 0) _cards[toSlot][i] = local;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Offline: the move will sync later.')),
+      );
     } on AdoException catch (e) {
       if (!mounted) return;
       setState(() {

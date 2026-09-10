@@ -8,6 +8,7 @@ import '../../core/http/ado_exceptions.dart';
 import '../../core/util/format.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import 'widgets/rich_text_view.dart';
 import 'widgets/work_item_actions.dart';
@@ -98,11 +99,31 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       _error = null;
     });
     final repo = context.read<WorkItemRepository>();
+    final queue = context.read<WriteQueue>();
     try {
       await repo.updateFields(widget.org, widget.project, item, values);
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+      }
+    } on AdoNetworkException {
+      await queue.enqueuePatch(
+        org: widget.org,
+        project: widget.project,
+        item: item,
+        ops: [
+          for (final e in values.entries)
+            {'op': 'add', 'path': '/fields/${e.key}', 'value': e.value},
+        ],
+        description:
+            'Update ${values.keys.map((k) => k.split('.').last).join(', ')} '
+            'on ${item.id}',
+      );
+      await repo.applyLocally(widget.org, widget.project, item, values);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Offline: the change will sync later.')),
+        );
       }
     } on AdoStaleRevisionException {
       if (mounted) {
@@ -139,6 +160,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       _error = null;
     });
     final repo = context.read<WorkItemRepository>();
+    final queue = context.read<WriteQueue>();
     try {
       await repo.addComment(widget.org, widget.project, widget.id, text);
       final comments = await repo.comments(
@@ -153,6 +175,20 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
       }
       return false;
+    } on AdoNetworkException {
+      await queue.enqueueComment(
+        org: widget.org,
+        project: widget.project,
+        id: widget.id,
+        text: text,
+        description: 'Comment on ${widget.id}',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Offline: the comment will post later.')),
+        );
+      }
+      return true;
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = _describe(e));
       return false;

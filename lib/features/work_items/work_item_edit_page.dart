@@ -10,6 +10,7 @@ import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 
 /// Edit the title and the description of a work item. HTML descriptions go
@@ -166,6 +167,8 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
       _error = null;
     });
     final repo = context.read<WorkItemRepository>();
+    final queue = context.read<WriteQueue>();
+    late final Map<String, Object?> values;
     try {
       final title = _title.text.trim();
       final String description;
@@ -177,7 +180,7 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
         setState(() => _error = 'The editor is not ready; try again.');
         return;
       }
-      final values = <String, Object?>{
+      values = <String, Object?>{
         if (title.isNotEmpty && title != item.title) 'System.Title': title,
         if (description != (item.description ?? ''))
           _descriptionField: description,
@@ -191,6 +194,24 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+      }
+    } on AdoNetworkException {
+      await queue.enqueuePatch(
+        org: widget.org,
+        project: widget.project,
+        item: item,
+        ops: [
+          for (final e in values.entries)
+            {'op': 'add', 'path': '/fields/${e.key}', 'value': e.value},
+        ],
+        description: 'Edit ${item.id}',
+      );
+      await repo.applyLocally(widget.org, widget.project, item, values);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Offline: the edit will sync later.')),
+        );
+        context.pop();
       }
     } on AdoStaleRevisionException {
       if (mounted) {

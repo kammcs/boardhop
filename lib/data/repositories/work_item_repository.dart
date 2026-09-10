@@ -391,6 +391,19 @@ class WorkItemRepository {
     return types;
   }
 
+  /// Writes field values into the cached copy only (same rev), for changes
+  /// that are queued while offline.
+  Future<WorkItem> applyLocally(
+    String org,
+    String project,
+    WorkItem item,
+    Map<String, dynamic> values,
+  ) async {
+    final updated = item.copyWithFields(values);
+    await _upsert(org, project, updated, DateTime.now());
+    return updated;
+  }
+
   /// JSON Patch guarded by `test /rev`; a stale revision is an
   /// [AdoStaleRevisionException] (HTTP 412) from the client.
   Future<WorkItem> patch(

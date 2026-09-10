@@ -9,6 +9,7 @@ import 'data/repositories/org_repository.dart';
 import 'data/repositories/board_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/work_item_repository.dart';
+import 'data/write_queue.dart';
 import 'router.dart';
 import 'theme/theme.dart';
 
@@ -19,6 +20,7 @@ class AppDependencies {
       projects = ProjectRepository(client, db),
       workItems = WorkItemRepository(client, db) {
     boards = BoardRepository(client, workItems);
+    queue = WriteQueue(db, workItems);
   }
 
   final AuthService auth;
@@ -28,6 +30,7 @@ class AppDependencies {
   final ProjectRepository projects;
   final WorkItemRepository workItems;
   late final BoardRepository boards;
+  late final WriteQueue queue;
 }
 
 class BoardhopApp extends StatefulWidget {
@@ -68,6 +71,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.projects),
         RepositoryProvider.value(value: deps.workItems),
         RepositoryProvider.value(value: deps.boards),
+        RepositoryProvider.value(value: deps.queue),
       ],
       child: BlocProvider.value(
         value: _authBloc,
