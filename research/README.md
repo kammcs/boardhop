@@ -14,6 +14,10 @@ Start with **[00-feasibility-summary.md](00-feasibility-summary.md)**. It holds 
 | [05-pitfalls-and-risks.md](05-pitfalls-and-risks.md) | Risk register, policies, hard problems, deprecations |
 | [06-notification-relay-and-extension.md](06-notification-relay-and-extension.md) | Push notifications via a Marketplace extension and a tenant-hosted relay |
 | [07-naming-candidates.md](07-naming-candidates.md) | Brand name shortlist with conflict checks |
+| [08-stack-comparison.md](08-stack-comparison.md) | Cross-platform stack comparison and recommendation (Flutter) |
+| [08a-dotnet-maui-evaluation.md](08a-dotnet-maui-evaluation.md) | .NET MAUI evaluation: MSAL.NET broker, Intune SDK, UI vendors, effort |
+| [08b-flutter-evaluation.md](08b-flutter-evaluation.md) | Flutter evaluation: `msal_auth`, packages, the Az DevOps competitor, ecosystem |
+| [08c-react-native-and-other-stacks.md](08c-react-native-and-other-stacks.md) | React Native MSAL re-check; Kotlin Multiplatform, Capacitor, Uno, Avalonia, native, Tauri |
 | [verification/](verification/) | Reproducible anonymous API probes and captured results |
 
 Re-run the probes with:

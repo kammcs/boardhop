@@ -30,6 +30,10 @@ Kelly reviewed the findings and settled three scope questions. These override th
 | **Source code on GitHub.** Testing and validation against Azure DevOps. | Dogfooding needs a real Azure DevOps org; see next row. |
 | **Test org: `https://dev.azure.com/puremedia/`**, an Entra-backed org belonging to a company Kelly works with. | All spikes must be non-destructive: use a dedicated scratch project inside the org (or a separate scratch org) for work item creation, Markdown conversion, PR line comments and webhook tests. Still need a guest account from a second tenant for the cross-tenant spike. |
 
+### Stack re-evaluation (2026-09-10, pending Kelly's decision)
+
+Before scaffolding, Kelly asked whether Expo is the easiest path or whether Microsoft's own stack or Flutter is better suited. Three evaluations ([08a MAUI](08a-dotnet-maui-evaluation.md), [08b Flutter](08b-flutter-evaluation.md), [08c React Native and others](08c-react-native-and-other-stacks.md)) are compared in [08-stack-comparison.md](08-stack-comparison.md). **Recommendation: Flutter.** A maintained broker-capable MSAL wrapper (`msal_auth`) exists, kammcs has shipped two Flutter apps with most of Boardhop's building blocks, and the v1 native MSAL module for React Native disappears. Costs: no first-party over-the-air updates, iOS text-input fidelity, HTML editing through Delta conversion or a WebView. .NET MAUI only wins if a named prospect requires Intune App Protection Policies. Every decision above except the Expo-specific implementation notes survives the switch; the "native Expo Module over MSAL" row becomes "adopt `msal_auth`, add a claims-challenge hook".
+
 ### Pre-launch checklist (administrative items with lead time)
 
 1. Enroll kammcs in Microsoft Partner Center and obtain a verified MPN ID.
