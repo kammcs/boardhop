@@ -1,0 +1,33 @@
+# Raw spike outputs contain client org data (PR titles, repo names, emails).
+# The consolidated findings in research/spikes/results/README.md are committed; raw files are not.
+research/spikes/results/*.md
+!research/spikes/results/README.md
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.p8
+*.p12
+*.jks
+
+# Node / Expo (for when the app scaffold lands)
+node_modules/
+.expo/
+dist/
+web-build/
+ios/build/
+android/build/
+android/app/build/
+*.orig.*
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python spike scratch
+__pycache__/
+*.pyc

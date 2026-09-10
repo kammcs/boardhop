@@ -1,0 +1,128 @@
+
+##### 1. Unauthenticated call to profile API -> 302 to sign-in, advertises Bearer (Entra) + Basic (PAT)
+HTTP/1.1 302 Found
+Location: https://spsprodeus27.vssps.visualstudio.com/_signin?realm=app.vssps.visualstudio.com&reply_to=https%3A%2F%2Fapp.vssps.visualstudio.com%2F_apis%2Fprofi
+WWW-Authenticate: Basic realm="https://spsprodeus27.vssps.visualstudio.com/"
+WWW-Authenticate: Bearer
+
+##### 2. Repos in public project
+{
+ "id": "2459d599-fdb2-4d28-9810-daeec061cf90",
+ "name": "dotnet-public-wiki",
+ "defaultBranch": "refs/heads/main",
+ "size": 12337,
+ "webUrl": "https://dev.azure.com/dnceng-public/public/_git/dotnet-public-wiki"
+}
+
+##### 3. Work item types + states (custom inherited process; note non-standard states)
+types: 24
+  Bug | ['New', 'Active', 'Resolved', 'Closed']
+  Code Review Request | ['Requested', 'Closed']
+  Code Review Response | ['Requested', 'Accepted', 'Closed']
+  Epic | ['New', 'Backlog', 'Active', 'Resolved', 'In Progress', 'Done', 'Removed']
+  Feature | ['New', 'Active', 'Resolved', 'Closed', 'Removed']
+  Feedback Request | ['Active', 'Closed', 'Removed']
+  Feedback Response | ['Active', 'Closed']
+  Shared Steps | ['Active', 'Closed']
+
+##### 4. Pull request list (status=all)
+  5 completed Inventory bootstrapping | refs/heads/invBootstrap -> refs/heads/main | reviewers 3
+  1 completed Landing Page for Customers | refs/heads/ilyas-docs -> refs/heads/main | reviewers 1
+
+##### 5. PR detail: merge commits, completionOptions, reviewer votes, avatar links
+{
+ "status": "completed",
+ "mergeStatus": "succeeded",
+ "isDraft": false,
+ "completionOptions": {
+  "deleteSourceBranch": true,
+  "squashMerge": true,
+  "mergeStrategy": "squash",
+  "triggeredByAutoComplete": true
+ },
+ "supportsIterations": true
+}
+ lastMergeSourceCommit 3aae318f  lastMergeTargetCommit 2adc745e
+ reviewer Mark Wilkie vote 0 avatar https://dev.azure.com/dnceng-public/_apis/GraphProfile/MemberAvatars/a
+ reviewer Matt Mitchell (.NET) vote 0 avatar https://dev.azure.com/dnceng-public/_apis/GraphProfile/MemberAvatars/a
+ reviewer Michael Stuckey vote 0 avatar https://dev.azure.com/dnceng-public/_apis/GraphProfile/MemberAvatars/a
+
+##### 6. PR iterations list -> requires auth even on a public project (302). Iteration CHANGES is anonymous.
+iterations: HTTP 302
+ change 1 add /es-metadata.yml obj 2E53DB55
+
+##### 7. Server-side diff LISTING between two commits (diffs/commits) - gives change list + counts, NOT line content
+{"allChangesIncluded": true, "changeCounts": {"Add": 1}, "aheadCount": 1, "behindCount": 0}
+  add blob /es-metadata.yml
+
+##### 8. File content at a specific commit via Items API (fetch base + target, diff client-side)
+ objectId 2e53db551b5289fde97df23188a309d10347d869  bytes 291
+
+##### 9. PR threads: system events + text comments; threadContext is null for non-file comments; comment content is HTML/markdown mix
+ threads 7
+  8 None | ctx null | [('system', 'MerlinBot added 3 reviewers')]
+  9 None | ctx null | [('system', 'MerlinBot set auto-complete')]
+  10 None | ctx null | [('system', 'MerlinBot updated the pull request statu')]
+  11 closed | ctx null | [('text', '')]
+  12 closed | ctx null | [('text', '<img src="https://img.shields.io/static/')]
+  13 closed | ctx null | [('text', '')]
+  14 closed | ctx null | [('text', '<img src="https://img.shields.io/static/')]
+
+##### 10. Builds, timeline (stages/jobs/tasks tree) and raw log lines - all anonymous on public projects
+ build 1590682 fsharp-ci completed failed refs/pull/20509/merge
+ build 1590816 runtime-report-green completed succeeded refs/pull/131597/merge
+ timeline records 870 types ['Checkpoint', 'Job', 'Phase', 'Stage', 'Task']
+ logs 870
+   trigger:
+     branches:
+       include:
+
+##### 11. Response headers: X-RateLimit-Cost (TSTU) is returned per call; X-RateLimit-Remaining/Delay + Retry-After appear only when throttled
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8; api-version=7.1
+X-VSS-E2EID: 3722e47f-986d-4a0f-92cb-3e1a272b8ec0
+X-RateLimit-Cost: 0.00262
+X-Content-Type-Options: nosniff
+
+##### 12. connectionData (semi-official): identity GUID + deploymentType in one call; anonymous returns 'Anonymous'
+{"authenticatedUser": "Anonymous", "deploymentType": "hosted"}
+
+##### 13. ResourceAreas: per-service host routing (requires 7.1-preview.1; bare 7.1 is rejected with VssInvalidPreviewVersionException)
+  https://advsec.dev.azure.com/dnceng-public/ -> AdvancedSecurity, Alert, Alerts, Location Service, Management, ManagementInternal, Reporting
+  https://almsearch.dev.azure.com/dnceng-public/ -> Location Service, search
+  https://analytics.dev.azure.com/dnceng-public/ -> Analytics, AnalyticsViews, Location Service
+  https://artifacts.dev.azure.com/dnceng-public/ -> Location Service, Symbol, Symbol, artifact, buildcache, drop, drop, nuget, pipelineArtifact, pipelinecache
+  https://auditservice.dev.azure.com/dnceng-public/ -> Location Service, audit
+  https://azchatops.dev.azure.com/dnceng-public/ -> Location Service, Slack, Slack, Slack, Teams
+  https://codelens.dev.azure.com/dnceng-public/ -> Location Service, codelens
+  https://commvtwo.dev.azure.com/dnceng-public/ -> AzComm, AzCommCsm, AzCommMigration, Location Service
+  https://dataimport.dev.azure.com/dnceng-public/ -> Location Service, anonymousimportregion, collectionimport, import, importcode, importproperty, importregion, onymousimpo
+  https://dev.azure.com/dnceng-public/ -> AdminEngagement, ArmProjectProvider, Build, Chat, CodeReview, CsmTfs, DRITools, Dashboard, Deployment, Favorite, GraphPr
+  https://dpdbot.dev.azure.com/dnceng-public/ -> Dependabot, Location Service, ondemand, pull_request_remediation, update_jobs
+  https://entreq.dev.azure.com/dnceng-public/ -> Location Service, compliance
+  https://extmgmt.dev.azure.com/dnceng-public/ -> ExtensionManagement, Location Service
+  https://feeds.dev.azure.com/dnceng-public/ -> FeedToken, Location Service, Packaging
+  https://gdprdel.dev.azure.com/dnceng-public/ -> Location Service, Notes
+  https://governance.dev.azure.com/dnceng-public/ -> ComponentGovernance, Governance, GovernanceNew, Location Service, NugetConfigAnalysisTask, SampleExtension, SampleExtens
+  https://pkgs.dev.azure.com/dnceng-public/ -> AllProtocolsInternal, AnyProtocolPackagingInternal, Location Service, PackagingApi, PackagingDiagnostics, Provenance, SB
+  https://vsaex.dev.azure.com/dnceng-public/ -> AbuseDetection, CodeMapper, EnterpriseCatalog, HostAcquisition, Interaction, Location Service, MEMInternal, MemberEntitl
+  https://vsblob.dev.azure.com/dnceng-public/ -> AzureFrontDoor, Location Service, blob, blob, clienttools, dedup, domains, pipelineartifactstelemetry, usage
+  https://vscommerce.dev.azure.com/dnceng-public/ -> CsmResourceProvider, Location Service, Meters, OfferMeter, OfferSubscription, Package, PurchaseRequest, ReportingEvents,
+  https://vsdscops.dev.azure.com/dnceng-public/ -> CodeScanner, Location Service, SecretsValidation
+  https://vslicense.dev.azure.com/dnceng-public/ -> AccountLicensing, GitHubCopilotLicensing, LicensingMigrator, LicensingRule, Location Service
+  https://vsrm.dev.azure.com/dnceng-public/ -> DeploymentTracking, Location Service, Release
+  https://vssh.dev.azure.com/dnceng-public/ -> Location Service, hookssvc
+  https://vssps.dev.azure.com/dnceng-public/ -> AadConditionalAccessPolicy, BasicAuthBatch, Cache, CentralizedFeature, Collection, Commerce, Compliance, Csm, CspValidat
+  https://vstmr.dev.azure.com/dnceng-public/ -> C2112469-ADF5-45F2-8AB5-4764540113B6, Location Service, TestExecution, TestImpact, coverage, tcm, testresults
+  https://vstoken.dev.azure.com/dnceng-public/ -> LeakedSecrets, Location Service, OrganizationTokenOidc, TokenAdministration, TokenAuth, TokenIssue, TokenMigration, Toke
+  https://vstskalypso.dev.azure.com/dnceng-public/ -> Cmdb, Health, Location Service, Notes
+
+##### 14. Which api-version values are routable for wit/workitems (JSON TF401232 = routed; HTML 'Page not found' = version does not exist)
+  7.1            HTTP 404 {"$id":"1","innerException":null,"messag
+  7.2-preview.1  HTTP 404 ﻿<HTML Page not found>
+  7.2-preview.2  HTTP 404 {"$id":"1","innerException":null,"messag
+  7.2-preview.3  HTTP 404 {"$id":"1","innerException":null,"messag
+  7.2-preview.4  HTTP 404 ﻿<HTML Page not found>
+
+##### 15. Org-level PR list ({org}/_apis/git/pullrequests) - undocumented; anonymous gets 302 so this needs an authenticated test
+  HTTP 302
