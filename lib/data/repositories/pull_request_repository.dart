@@ -22,10 +22,11 @@ class PullRequestRepository {
   Future<String> meId(String org) async {
     final cached = _me[org];
     if (cached != null) return cached;
+    // connectionData only answers with the preview flag on the version.
     final json = await _client.getJson(
       org: org,
       path: '_apis/connectionData',
-      apiVersion: apiVersion,
+      apiVersion: '7.1-preview',
     );
     final id =
         (json['authorizedUser'] as Map?)?['id'] as String? ??
