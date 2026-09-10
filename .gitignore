@@ -1,6 +1,6 @@
 # Raw spike outputs contain client org data (PR titles, repo names, emails).
 # The consolidated findings in research/spikes/results/README.md are committed; raw files are not.
-research/spikes/results/*.md
+research/spikes/results/*
 !research/spikes/results/README.md
 
 # Local environment and secrets
