@@ -17,6 +17,8 @@ analyzer:
     # The vendored plugin is its own package; without a package_config of
     # its own (CI) the root context would analyze its sources and fail.
     - packages/**
+    # Spike harnesses carry their own pubspec (research/spikes/f3_harness).
+    - research/**
 
 linter:
   # The lint rules applied to this project can be customized in the
