@@ -1,6 +1,6 @@
 # Boardhop — state and next steps
 
-**As of:** 2026-09-10, Flutter scaffold committed; spikes F1 and F2 passed on an Android emulator.
+**As of:** 2026-09-10, Flutter scaffold committed; spikes F1, F2 and F3 done on an Android emulator; design system locked.
 **Read first:** [research/00-feasibility-summary.md](research/00-feasibility-summary.md) section 0 (decisions) and 6a (spike results), then [research/08-stack-comparison.md](research/08-stack-comparison.md).
 
 ## Where things stand
@@ -8,7 +8,7 @@
 | Area | State |
 |---|---|
 | Product | Boardhop: Flutter mobile client for Azure DevOps Services, iOS + Android, phones + tablets. Jira-style boards and work items, GitHub-style PR review. |
-| Stack | **Flutter**, locked 2026-09-10. `msal_auth` for Entra sign-in with the Authenticator broker; `drift` for offline cache and write queue; `flutter_quill` or `html_editor_enhanced` for rich text (to be chosen by spike); `flutter_widget_from_html` and `flutter_markdown_plus` for rendering; `diff_match_patch` + `re_highlight` + custom diff viewer. |
+| Stack | **Flutter**, locked 2026-09-10. `msal_auth` for Entra sign-in with the Authenticator broker; `drift` for offline cache and write queue; `html_editor_enhanced` for rich text (chosen by spike F3); `flutter_widget_from_html` and `flutter_markdown_plus` for rendering; `diff_match_patch` + `re_highlight` + custom diff viewer. |
 | Scope | Entra OAuth only at launch (no PAT). Cloud only. Read plus lightweight writes in v1. Responsive tablet layout, multi-pane later. Free app; revenue via a Marketplace extension plus a relay in the customer's Azure tenancy. Build order: work items and boards, then PR review, then pipelines. |
 | Research | Documents 01–09 in `research/`, all committed. Spike scripts and consolidated results in `research/spikes/` (raw result files are gitignored: client data). |
 | Spikes done | Org-level PR list exists; `multilineFieldsFormat` returned at 7.1 without a `fields` filter; WEF column write derives State; `validateOnly` gives field-level errors; stale rev → 412; line comments track across pushes when read with `$iteration`/`$baseIteration`; ```` ```suggestion ```` fence renders as an applyable suggestion; poll cycle ≈ 0.013 TSTU; profile/accounts APIs on `app.vssps` are Entra-only. |
@@ -32,7 +32,7 @@
 1. ~~**Scaffold the Flutter app**~~ Done (see the App scaffold row above). CI still to add.
 2. ~~**Spike F1**~~ Passed 2026-09-10 on a Pixel 10 Pro / Android 17 emulator (`tool/start-emulator.ps1`, then `flutter run -d emulator-5554 --dart-define-from-file=.env`): browser-fallback sign-in, silent restore after force-stop, org discovery, 2 KB token with ten `vso.*` scopes, all diagnostics green. See `research/spikes/results/README.md`. Still open: the Authenticator broker path and iOS, which need a physical device.
 3. ~~**Spike F2**~~ Done 2026-09-10. `msal_auth` is vendored at `packages/msal_auth` (3.5.3+boardhop.1) with `claims`, `forceRefresh` and `clientCapabilities` added; CP1 is declared; `AdoClient` retries a 401 once via `AuthService.resolveChallenge`. Emulator run: forceRefresh and claims requests both reach native MSAL. Token lifetime stays ~75 min with CP1 (no long-lived CAE tokens from Azure DevOps). Left open: trigger a real revocation to see an `insufficient_claims` 401 end to end; compile the Swift side on a Mac; offer the patch upstream.
-4. **Spike F3: HTML round-trip.** Pull five real descriptions from CloudCover 2.0 (tables, nested lists, inline images, mentions), run through `flutter_quill` Delta conversion and `html_editor_enhanced`, diff the output, pick the editor.
+4. ~~**Spike F3**~~ Done 2026-09-10: `html_editor_enhanced` (WebView) is the editor; Delta-based editors destroy tables and mentions on real content. See research/spikes/results/README.md. Production notes: set content via `evaluateJavascript` with a JSON-encoded string, keep the editor's slot in its parent stable, load attachment images with an auth header, and watch the `flutter_inappwebview` beta override until 6.2 ships stable.
 5. **Spike F4: Kanban drag-and-drop** with `drag_and_drop_lists` (and the team's `super_drag_and_drop` experience): 200 cards, cross-column drop, haptics, auto-scroll, 60 fps on a phone.
 6. **Spike F5: diff viewer prototype.** `diff_match_patch` + `re_highlight` + `super_sliver_list` on a 3,000-line file with a tap-to-comment gutter; threads read with `$iteration`/`$baseIteration`.
 7. **Then the first milestone:** sign-in → org picker → project list → "assigned to me" work items → work item detail (render HTML/Markdown, comments) → board with column moves. Dogfood against puremedia.

@@ -8,6 +8,7 @@ import 'features/activity/activity_page.dart';
 import 'features/auth/sign_in_page.dart';
 import 'features/boards/boards_page.dart';
 import 'features/diagnostics/diagnostics_page.dart';
+import 'features/diagnostics/editor_probe_page.dart';
 import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipelines_page.dart';
 import 'features/projects/project_list_page.dart';
@@ -39,6 +40,10 @@ GoRouter buildRouter(AuthBloc auth) {
       GoRoute(path: '/sign-in', builder: (_, _) => const SignInPage()),
       GoRoute(path: '/diagnostics', builder: (_, _) => const DiagnosticsPage()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+      GoRoute(
+        path: '/diagnostics/editor',
+        builder: (_, _) => const EditorProbePage(),
+      ),
       GoRoute(
         path: '/orgs',
         builder: (_, _) => const OrgPickerPage(),

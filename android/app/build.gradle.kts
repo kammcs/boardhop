@@ -42,6 +42,13 @@ android {
         versionName = flutter.versionName
     }
 
+    packaging {
+        resources {
+            // MSAL and the WebView plugin both ship these; keep the build merging.
+            excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/LICENSE.txt", "META-INF/NOTICE", "META-INF/NOTICE.txt")
+        }
+    }
+
     buildTypes {
         debug {
             manifestPlaceholders["msalSignatureHash"] = msalDebugSignatureHash

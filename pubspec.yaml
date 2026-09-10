@@ -43,13 +43,13 @@ dependencies:
   drift: ^2.35.0
   path_provider: ^2.1.6
   path: ^1.9.1
-  flutter_secure_storage: ^11.1.0
   flutter_markdown_plus: ^1.0.12
   intl: ^0.20.3
   flutter_widget_from_html_core: ^0.17.4
   cached_network_image: ^4.0.0
   drift_flutter: ^0.3.1
   shared_preferences: ^2.5.5
+  html_editor_enhanced: 2.7.1
 
 dev_dependencies:
   flutter_test:
@@ -65,11 +65,6 @@ dev_dependencies:
   build_runner: ^2.16.1
   bloc_test: ^10.0.0
   mocktail: ^1.0.5
-
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
 
   # The following line ensures that the Material Icons font is
@@ -109,3 +104,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Spike F3 only: html_editor_enhanced pins flutter_inappwebview 6.1.x whose
+# Android build script is rejected by AGP 9. The 6.2 betas fix it.
+dependency_overrides:
+  flutter_inappwebview: 6.2.0-beta.3
+  flutter_inappwebview_android: 1.2.0-beta.3
+  flutter_keyboard_visibility: ^7.0.1

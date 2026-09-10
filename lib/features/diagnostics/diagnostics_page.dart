@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_service.dart';
 import '../../core/config/app_config.dart';
@@ -215,6 +216,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       appBar: AppBar(
         title: const Text('Diagnostics (spikes F1, F2)'),
         actions: [
+          IconButton(
+            tooltip: 'Editor probe (F3)',
+            icon: const Icon(Icons.edit_note),
+            onPressed: () => context.push('/diagnostics/editor'),
+          ),
           IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),

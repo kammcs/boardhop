@@ -1,0 +1,16 @@
+name: f3_harness
+description: Spike F3 harness. Round-trips Azure DevOps HTML through Delta-based editor converters and reports construct survival.
+publish_to: none
+environment:
+  sdk: ^3.13.0
+  flutter: ">=3.47.0"
+dependencies:
+  flutter:
+    sdk: flutter
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_quill_delta_from_html: ^1.5.3
+  vsc_quill_delta_to_html: ^1.0.5
+  parchment: ^1.27.0
+  html: ^0.15.6
