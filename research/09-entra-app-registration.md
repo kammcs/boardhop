@@ -105,14 +105,15 @@ Do not create a client secret or certificate. None is needed for a public client
    | `vso.work` | Reading work items, queries, boards, sprints |
    | `vso.work_write` | Editing work items, comments, moving cards |
    | `vso.code` | Reading repositories, pull requests, diffs |
-   | `vso.threads_full` | Posting and replying to pull request comments |
-   | `vso.code_write` | Voting on and completing pull requests |
+   | `vso.code_write` | Pull request comments, votes and completion |
    | `vso.build` | Reading pipelines, runs and logs |
    | `vso.build_execute` | Queueing and cancelling runs |
    | `vso.wiki` | Reading wiki pages |
    | `vso.graph` | Looking up people and avatars for pickers |
 
    The app requests only the read scopes at first sign-in and asks for the write scopes when the user first performs a write, so the initial consent screen stays small. Listing them all here lets a tenant admin consent once for everything.
+
+   **Not every legacy Azure DevOps OAuth scope is exposed on the Entra side.** `vso.threads_full` (PR comment threads without code write) is absent from the Entra permission list as of 2026-09-10, despite the docs saying both platforms share the same catalogue. The threads API also accepts `vso.code_write`, which is already required for votes and completion, so nothing is lost. If any other scope in the table above is missing, skip it and note it; do not substitute `user_impersonation`.
 
 4. **Add a permission → Microsoft Graph → Delegated** and tick `openid`, `profile`, `offline_access`. `offline_access` is what allows silent refresh without re-prompting. Do **not** add `User.Read` or any other Graph permission.
 5. Do not click "Grant admin consent" in the kammcs tenant unless kammcs itself will use the app. Customer tenants grant their own consent (Part B).
@@ -188,7 +189,7 @@ Boardhop is registered by kammcs as a multi-tenant application. Nothing is creat
 - Application (client) ID: `________________________________`
 - Display name: `Boardhop`
 - Publisher: kammcs (`kammcs.com`)
-- Delegated permissions requested: Azure DevOps `vso.profile`, `vso.project`, `vso.work`, `vso.work_write`, `vso.code`, `vso.threads_full`, `vso.code_write`, `vso.build`, `vso.build_execute`, `vso.wiki`, `vso.graph`; Microsoft Graph `openid`, `profile`, `offline_access`.
+- Delegated permissions requested: Azure DevOps `vso.profile`, `vso.project`, `vso.work`, `vso.work_write`, `vso.code`, `vso.code_write`, `vso.build`, `vso.build_execute`, `vso.wiki`, `vso.graph`; Microsoft Graph `openid`, `profile`, `offline_access`.
 
 All permissions are **delegated**: the app can only do what the signed-in user can already do in Azure DevOps. It has no application (app-only) permissions and no access when no user is signed in.
 

@@ -177,7 +177,7 @@ Sign-in ──► Entra OAuth (expo-auth-session, PKCE, /organizations authority
         Responsive layout: breakpoint-driven master-detail, not device checks
 ```
 
-**Scopes for v1 (read-mostly):** `vso.profile`, `vso.project`, `vso.work`, `vso.code`, `vso.build`, `offline_access`. Add `vso.threads_full` and `vso.work_write` for commenting and editing, `vso.code_write` for votes and completion, `vso.build_execute` for queue and cancel, each by incremental consent when the feature ships.
+**Scopes for v1 (read-mostly):** `vso.profile`, `vso.project`, `vso.work`, `vso.code`, `vso.build`, `offline_access`. Add `vso.work_write` for editing and `vso.code_write` for PR comments, votes and completion, and `vso.build_execute` for queue and cancel, each by incremental consent when the feature ships. (`vso.threads_full` is not exposed as an Entra permission; `vso.code_write` covers PR threads.)
 
 ---
 
