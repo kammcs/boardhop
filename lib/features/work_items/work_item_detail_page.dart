@@ -178,6 +178,20 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Edit title and description',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: _refreshing || _writing
+                ? null
+                : () async {
+                    await context.push(
+                      '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+                      '${Uri.encodeComponent(widget.project)}/work-items/'
+                      '${widget.id}/edit',
+                    );
+                    if (mounted) _refresh();
+                  },
+          ),
+          IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: _refreshing ? null : _refresh,

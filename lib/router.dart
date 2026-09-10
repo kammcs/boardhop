@@ -18,6 +18,7 @@ import 'features/projects/project_shell.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
+import 'features/work_items/work_item_edit_page.dart';
 import 'features/work_items/work_items_page.dart';
 
 GoRouter buildRouter(AuthBloc auth) {
@@ -88,6 +89,16 @@ GoRouter buildRouter(AuthBloc auth) {
                               project: state.pathParameters['project']!,
                               id: int.parse(state.pathParameters['id']!),
                             ),
+                            routes: [
+                              GoRoute(
+                                path: 'edit',
+                                builder: (_, state) => WorkItemEditPage(
+                                  org: state.pathParameters['org']!,
+                                  project: state.pathParameters['project']!,
+                                  id: int.parse(state.pathParameters['id']!),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
