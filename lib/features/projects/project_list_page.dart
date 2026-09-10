@@ -53,6 +53,15 @@ class _ProjectListPageState extends State<ProjectListPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/orgs'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Pull requests to review',
+            icon: const Icon(Icons.call_merge),
+            onPressed: () => context.push(
+              '/orgs/${Uri.encodeComponent(widget.org)}/pull-requests',
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,

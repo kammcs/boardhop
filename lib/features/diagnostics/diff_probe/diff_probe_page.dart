@@ -11,9 +11,9 @@ import '../../../core/http/ado_client.dart';
 import '../../../core/http/ado_exceptions.dart';
 import '../../../theme/theme.dart';
 import '../frame_stats.dart';
-import 'diff_model.dart';
-import 'highlighter.dart';
-import 'pr_diff_source.dart';
+import '../../../data/repositories/pr_diff_source.dart';
+import '../../pull_requests/diff/diff_model.dart';
+import '../../pull_requests/diff/highlighter.dart';
 
 enum _Source { synthetic, live }
 

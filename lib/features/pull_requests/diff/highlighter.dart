@@ -133,7 +133,9 @@ abstract final class CodeHighlighter {
         final e = re.clamp(start, end);
         if (e <= s) continue;
         if (s > cursor) {
-          out.add(CodeRun(run.text.substring(cursor - start, s - start), run.style));
+          out.add(
+            CodeRun(run.text.substring(cursor - start, s - start), run.style),
+          );
         }
         out.add(
           CodeRun(

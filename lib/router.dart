@@ -15,6 +15,8 @@ import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipelines_page.dart';
 import 'features/projects/project_list_page.dart';
 import 'features/projects/project_shell.dart';
+import 'features/pull_requests/pr_file_diff_page.dart';
+import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
@@ -118,6 +120,17 @@ GoRouter buildRouter(AuthBloc auth) {
                   StatefulShellBranch(
                     routes: [
                       GoRoute(
+                        path: ':project/pull-requests',
+                        builder: (_, state) => PullRequestsPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  StatefulShellBranch(
+                    routes: [
+                      GoRoute(
                         path: ':project/pipelines',
                         builder: (_, state) => PipelinesPage(
                           org: state.pathParameters['org']!,
@@ -134,6 +147,28 @@ GoRouter buildRouter(AuthBloc auth) {
             path: ':org/pull-requests',
             builder: (_, state) =>
                 PullRequestsPage(org: state.pathParameters['org']!),
+            routes: [
+              GoRoute(
+                path: ':id',
+                builder: (_, state) => PullRequestDetailPage(
+                  org: state.pathParameters['org']!,
+                  id: int.parse(state.pathParameters['id']!),
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'diff',
+                    builder: (_, state) => PrFileDiffPage(
+                      org: state.pathParameters['org']!,
+                      id: int.parse(state.pathParameters['id']!),
+                      path: state.uri.queryParameters['path'] ?? '',
+                      iteration: int.tryParse(
+                        state.uri.queryParameters['iteration'] ?? '',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           GoRoute(
             path: ':org/activity',

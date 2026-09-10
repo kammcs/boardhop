@@ -8,6 +8,7 @@ import 'data/db/app_database.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/board_repository.dart';
 import 'data/repositories/project_repository.dart';
+import 'data/repositories/pull_request_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/write_queue.dart';
 import 'router.dart';
@@ -18,7 +19,8 @@ class AppDependencies {
   AppDependencies({required this.auth, required this.client, required this.db})
     : orgs = OrgRepository(client, db),
       projects = ProjectRepository(client, db),
-      workItems = WorkItemRepository(client, db) {
+      workItems = WorkItemRepository(client, db),
+      pullRequests = PullRequestRepository(client) {
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems);
   }
@@ -29,6 +31,7 @@ class AppDependencies {
   final OrgRepository orgs;
   final ProjectRepository projects;
   final WorkItemRepository workItems;
+  final PullRequestRepository pullRequests;
   late final BoardRepository boards;
   late final WriteQueue queue;
 }
@@ -72,6 +75,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.workItems),
         RepositoryProvider.value(value: deps.boards),
         RepositoryProvider.value(value: deps.queue),
+        RepositoryProvider.value(value: deps.pullRequests),
       ],
       child: BlocProvider.value(
         value: _authBloc,

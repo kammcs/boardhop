@@ -1,5 +1,5 @@
-import 'package:boardhop/features/diagnostics/diff_probe/diff_model.dart';
-import 'package:boardhop/features/diagnostics/diff_probe/highlighter.dart';
+import 'package:boardhop/features/pull_requests/diff/diff_model.dart';
+import 'package:boardhop/features/pull_requests/diff/highlighter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

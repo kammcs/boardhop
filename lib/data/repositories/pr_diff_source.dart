@@ -1,4 +1,4 @@
-import '../../../core/http/ado_client.dart';
+import '../../core/http/ado_client.dart';
 
 /// Read-only access to what the diff viewer needs from a pull request:
 /// iterations, changed files, file content at a commit, and threads read for

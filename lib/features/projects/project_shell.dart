@@ -68,6 +68,12 @@ class _ProjectShellState extends State<ProjectShell>
       path: 'boards',
     ),
     (
+      label: 'Pull requests',
+      icon: Icons.call_merge_outlined,
+      selected: Icons.call_merge,
+      path: 'pull-requests',
+    ),
+    (
       label: 'Pipelines',
       icon: Icons.play_circle_outline,
       selected: Icons.play_circle,

@@ -90,7 +90,12 @@ abstract final class LineDiff {
     final out = <DiffLine>[];
     for (var i = 0; i < prefix; i++) {
       out.add(
-        DiffLine(kind: DiffKind.context, text: a[i], oldNo: i + 1, newNo: i + 1),
+        DiffLine(
+          kind: DiffKind.context,
+          text: a[i],
+          oldNo: i + 1,
+          newNo: i + 1,
+        ),
       );
     }
     final (ops, distance, truncated) = _myers(midA, midB);
@@ -340,7 +345,9 @@ abstract final class SampleDiff {
     b.writeln('/// Generated fixture for spike F5.');
     b.writeln('///');
     b.writeln('/// Every [Service] below is a copy with different names, so');
-    b.writeln('/// the highlighter sees classes, strings, comments and numbers.');
+    b.writeln(
+      '/// the highlighter sees classes, strings, comments and numbers.',
+    );
     b.writeln("import 'dart:async';");
     b.writeln('');
     var block = 0;
@@ -369,22 +376,30 @@ abstract final class SampleDiff {
       b.writeln('');
       b.writeln('  Future<List<String>> list$block(String org) async {');
       if (editHere && editKind == 4) {
-        b.writeln("    final uri = Uri.https('dev.azure.com', '/\$org/_apis/$name', {'api-version': '7.1', 'top': '200'});");
+        b.writeln(
+          "    final uri = Uri.https('dev.azure.com', '/\$org/_apis/$name', {'api-version': '7.1', 'top': '200'});",
+        );
       } else {
-        b.writeln("    final uri = Uri.https('dev.azure.com', '/\$org/_apis/$name', {'api-version': '7.1'});");
+        b.writeln(
+          "    final uri = Uri.https('dev.azure.com', '/\$org/_apis/$name', {'api-version': '7.1'});",
+        );
       }
       b.writeln('    for (var attempt = 0; attempt < retries; attempt++) {');
       b.writeln('      try {');
       if (!(editHere && editKind == 7)) {
         b.writeln('        // $budget ms budget per attempt');
-        b.writeln('        await Future<void>.delayed(const Duration(milliseconds: $delay));');
+        b.writeln(
+          '        await Future<void>.delayed(const Duration(milliseconds: $delay));',
+        );
       }
       b.writeln("        return <String>['\$uri', '$name-\$attempt'];");
       b.writeln('      } on TimeoutException {');
       b.writeln('        continue;');
       b.writeln('      }');
       b.writeln('    }');
-      b.writeln("    throw StateError('$cls gave up after \$retries attempts');");
+      b.writeln(
+        "    throw StateError('$cls gave up after \$retries attempts');",
+      );
       b.writeln('  }');
       b.writeln('}');
       b.writeln('');
