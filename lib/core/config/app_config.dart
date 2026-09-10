@@ -24,6 +24,11 @@ abstract final class AppConfig {
   static const adoResourceId = '499b84ac-1321-427f-aa17-267ca6975798';
   static const adoScopes = <String>['$adoResourceId/.default'];
 
+  /// `CP1` declares Continuous Access Evaluation support: longer-lived
+  /// tokens, and 401 claims challenges that `AuthService.resolveChallenge`
+  /// answers. Android reads the same flag from `assets/msal_config.json`.
+  static const clientCapabilities = <String>['CP1'];
+
   static bool get isConfigured => clientId.isNotEmpty;
 
   static String authorityFor(String? tenantId) => tenantId == null

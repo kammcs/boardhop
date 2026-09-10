@@ -16,7 +16,8 @@ Discovery is complete and the stack is decided: Flutter (see [research/08-stack-
 | `lib/auth/` | `msal_auth` wrapper (broker sign-in, per-tenant silent tokens) and the auth bloc |
 | `lib/data/` | drift database, models, repositories |
 | `lib/features/` | One folder per screen area: auth, orgs, projects, work_items, boards, pull_requests, pipelines, activity, diagnostics |
-| `assets/msal_config.json` | Android MSAL configuration (authority, broker, account mode) |
+| `assets/msal_config.json` | Android MSAL configuration (authority, broker, account mode, CP1 capability) |
+| `packages/msal_auth/` | Vendored msal_auth plugin with claims-challenge support (see its README) |
 | `research/` | Discovery documents, settled decisions, competitive research, naming |
 | `research/verification/` | Anonymous probes of public Azure DevOps projects that prove API shapes |
 | `research/spikes/` | Authenticated spike scripts and consolidated results against a test org |

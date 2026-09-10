@@ -10,7 +10,10 @@ Future<void> main() async {
 
   final auth = await AuthService.create();
   final db = AppDatabase();
-  final client = AdoClient(tokenProvider: auth.accessToken);
+  final client = AdoClient(
+    tokenProvider: auth.accessToken,
+    onUnauthorized: auth.resolveChallenge,
+  );
 
   runApp(
     BoardhopApp(

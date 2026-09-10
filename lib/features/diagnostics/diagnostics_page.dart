@@ -10,10 +10,11 @@ import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/http/ado_host.dart';
 
-/// Spike F1 runner (NEXT-STEPS.md step 2).
+/// Spike F1 and F2 runner (NEXT-STEPS.md steps 2 and 3).
 ///
 /// Runs the checklist against the signed-in account and shows a report that
-/// can be copied. Tokens are never displayed or copied; only their byte size.
+/// can be copied. Tokens are never displayed or copied; only their byte size
+/// and a short fingerprint so two tokens can be told apart.
 class DiagnosticsPage extends StatefulWidget {
   const DiagnosticsPage({super.key});
 
@@ -34,10 +35,26 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   bool _running = false;
   final _orgController = TextEditingController(text: 'puremedia');
 
+  /// Harmless claims request: re-states the CP1 capability MSAL already
+  /// sends, so the token endpoint accepts it. Proves the `claims` plumbing
+  /// reaches native MSAL and forces a network round trip.
+  static const _probeClaims = '{"access_token":{"xms_cc":{"values":["CP1"]}}}';
+
   @override
   void dispose() {
     _orgController.dispose();
     super.dispose();
+  }
+
+  static String _fingerprint(String token) =>
+      base64Url.encode(utf8.encode(token)).hashCode.toRadixString(16);
+
+  static String _describe(dynamic r) {
+    final ttl = r.expiresOn.difference(DateTime.now());
+    return 'accessToken=${utf8.encode(r.accessToken).length} bytes '
+        'fp=${_fingerprint(r.accessToken)} '
+        'expires in ${ttl.inHours}h${ttl.inMinutes % 60}m '
+        'tenant=${r.tenantId}';
   }
 
   Future<void> _run() async {
@@ -52,6 +69,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           _Check('Configuration'),
           _Check('Cached account'),
           _Check('Silent token (home tenant)'),
+          _Check('F2: silent token with forceRefresh'),
+          _Check('F2: silent token with claims request'),
           _Check('Profile: app.vssps profiles/me'),
           _Check('Accounts: app.vssps accounts?memberId'),
           _Check('Projects: dev.azure.com/$org'),
@@ -84,7 +103,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     await step(0, () async {
       return 'platform=${AuthService.platformLabel} '
           'clientId=${AppConfig.isConfigured ? 'set (${AppConfig.clientId.length} chars)' : 'MISSING'} '
-          'authority=${AppConfig.authority} scopes=${AppConfig.adoScopes}';
+          'authority=${AppConfig.authority} scopes=${AppConfig.adoScopes} '
+          'capabilities=${AppConfig.clientCapabilities}';
     });
 
     String? profileId;
@@ -94,16 +114,29 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'id=${account.id} username=${account.username} name=${account.name}';
     });
 
+    String? baselineFp;
     await step(2, () async {
       final r = await auth.acquireSilent();
-      final bytes = utf8.encode(r.accessToken).length;
-      final ttl = r.expiresOn.difference(DateTime.now());
-      return 'accessToken=$bytes bytes, expires in ${ttl.inMinutes} min, '
-          'tenant=${r.tenantId}, scheme=${r.authenticationScheme}, '
-          'scopes=${r.scopes.join(' ')}, idToken=${r.idToken == null ? 'none' : '${utf8.encode(r.idToken!).length} bytes'}';
+      baselineFp = _fingerprint(r.accessToken);
+      return '${_describe(r)}, scheme=${r.authenticationScheme}, '
+          'scopes=${r.scopes.map((s) => s.split('/').last).join(' ')}, '
+          'idToken=${r.idToken == null ? 'none' : '${utf8.encode(r.idToken!).length} bytes'}';
     });
 
     await step(3, () async {
+      final r = await auth.acquireSilent(forceRefresh: true);
+      final fp = _fingerprint(r.accessToken);
+      final changed = fp != baselineFp;
+      return '${_describe(r)} '
+          '${changed ? 'NEW token (cache bypassed)' : 'SAME token as cached: forceRefresh did not reach MSAL'}';
+    });
+
+    await step(4, () async {
+      final r = await auth.acquireSilent(claims: _probeClaims);
+      return '${_describe(r)} claims request accepted by token endpoint';
+    });
+
+    await step(5, () async {
       final json = await client.getJson(
         host: AdoHost.appVssps,
         path: '_apis/profile/profiles/me',
@@ -113,7 +146,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'id=$profileId displayName=${json['displayName']} email=${json['emailAddress']}';
     });
 
-    await step(4, () async {
+    await step(6, () async {
       if (profileId == null) throw const AdoAuthException('no profile id');
       final json = await client.getJson(
         host: AdoHost.appVssps,
@@ -128,7 +161,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'count=${json['count']} orgs=[$names]';
     });
 
-    await step(5, () async {
+    await step(7, () async {
       final json = await client.getJson(
         org: org,
         path: '_apis/projects',
@@ -142,7 +175,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'count=${json['count']} projects=[$names]';
     });
 
-    await step(6, () async {
+    await step(8, () async {
       final json = await client.getJson(
         host: AdoHost.vssps,
         org: org,
@@ -152,7 +185,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'id=${json['id']} displayName=${json['displayName']}';
     });
 
-    await step(7, () async {
+    await step(9, () async {
       final log = client.rateLimits.log;
       if (log.isEmpty) return 'none (expected on a quiet org)';
       return log.map((e) => e.toString()).join('\n');
@@ -179,7 +212,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Diagnostics (spike F1)'),
+        title: const Text('Diagnostics (spikes F1, F2)'),
         actions: [
           IconButton(
             tooltip: 'Copy report',

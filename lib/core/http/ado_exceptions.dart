@@ -29,6 +29,12 @@ class AdoAuthException extends AdoException {
   });
 }
 
+/// MSAL cannot refresh silently (revoked refresh token, new MFA policy,
+/// no account). The user has to go through interactive sign-in.
+class AuthInteractionRequiredException extends AdoAuthException {
+  const AuthInteractionRequiredException(super.message, {super.url});
+}
+
 /// 401 carrying an `insufficient_claims` challenge (Continuous Access
 /// Evaluation). `claims` must be passed to MSAL on the next interactive or
 /// silent acquisition. Spike F2 decides how, since `msal_auth` 3.5 has no

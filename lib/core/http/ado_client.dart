@@ -9,6 +9,15 @@ import 'rate_limit.dart';
 /// Supplies a bearer token for the given tenant (null = home tenant).
 typedef TokenProvider = Future<String> Function({String? tenantId});
 
+/// Called once when a request comes back 401. [claims] is the decoded
+/// `WWW-Authenticate` claims challenge for Continuous Access Evaluation, or
+/// null for a plain rejection. Returns a fresh token to retry with, or throws
+/// an [AdoAuthException] to give up.
+typedef AuthChallengeHandler = Future<String> Function({
+  String? tenantId,
+  String? claims,
+});
+
 /// Thin, typed wrapper over the Azure DevOps REST API.
 ///
 /// Conventions (from research/05 and the spikes):
@@ -16,13 +25,16 @@ typedef TokenProvider = Future<String> Function({String? tenantId});
 /// * the host is chosen per call (`AdoHost`), never guessed from the path;
 /// * `X-TFS-FedAuthRedirect: Suppress` turns HTML sign-in redirects into 401s;
 /// * rate-limit headers are recorded on every response;
+/// * a 401 is retried exactly once after [AuthChallengeHandler] runs;
 /// * failures surface as `AdoException` subtypes.
 class AdoClient {
   AdoClient({
     required TokenProvider tokenProvider,
+    AuthChallengeHandler? onUnauthorized,
     RateLimitTracker? rateLimits,
     Dio? dio,
   }) : _tokenProvider = tokenProvider, // ignore: prefer_initializing_formals
+       _onUnauthorized = onUnauthorized, // ignore: prefer_initializing_formals
        rateLimits = rateLimits ?? RateLimitTracker(),
        _dio = dio ?? Dio() {
     final options = _dio.options;
@@ -36,6 +48,7 @@ class AdoClient {
   }
 
   final TokenProvider _tokenProvider;
+  final AuthChallengeHandler? _onUnauthorized;
   final Dio _dio;
   final RateLimitTracker rateLimits;
 
@@ -145,7 +158,8 @@ class AdoClient {
   }
 
   /// Sends a request to an absolute URI, attaches the token, records rate
-  /// limit headers, and maps non-success statuses to `AdoException`s.
+  /// limit headers, retries once through the challenge handler on 401, and
+  /// maps non-success statuses to `AdoException`s.
   Future<Response<dynamic>> sendRaw({
     required String method,
     required Uri uri,
@@ -163,6 +177,44 @@ class AdoClient {
       throw AdoAuthException('Could not acquire a token: $e', url: uri);
     }
 
+    final first = await _dispatch(
+      method: method,
+      uri: uri,
+      token: token,
+      body: body,
+      contentType: contentType,
+      cancelToken: cancelToken,
+    );
+    if (_isSuccess(first)) return first;
+
+    final error = _mapError(first, uri);
+    final handler = _onUnauthorized;
+    if (error is! AdoAuthException || handler == null) throw error;
+
+    // One retry: CAE claims challenge or a token the service no longer
+    // accepts. The handler either returns a new token or throws.
+    final claims = error is ClaimsChallengeException ? error.claims : null;
+    final fresh = await handler(tenantId: tenantId, claims: claims);
+    final second = await _dispatch(
+      method: method,
+      uri: uri,
+      token: fresh,
+      body: body,
+      contentType: contentType,
+      cancelToken: cancelToken,
+    );
+    if (_isSuccess(second)) return second;
+    throw _mapError(second, uri);
+  }
+
+  Future<Response<dynamic>> _dispatch({
+    required String method,
+    required Uri uri,
+    required String token,
+    Object? body,
+    String? contentType,
+    CancelToken? cancelToken,
+  }) async {
     final Response<dynamic> response;
     try {
       response = await _dio.requestUri<dynamic>(
@@ -179,18 +231,19 @@ class AdoClient {
     } on DioException catch (e) {
       throw AdoNetworkException(e.message ?? e.type.name, url: uri, cause: e);
     }
-
-    final status = response.statusCode ?? 0;
     rateLimits.record(
       RateLimitInfo.fromHeaders(
         headers: response.headers.map,
-        statusCode: status,
+        statusCode: response.statusCode ?? 0,
         path: uri.path,
       ),
     );
+    return response;
+  }
 
-    if (status >= 200 && status < 300 && status != 203) return response;
-    throw _mapError(response, uri);
+  static bool _isSuccess(Response<dynamic> r) {
+    final status = r.statusCode ?? 0;
+    return status >= 200 && status < 300 && status != 203;
   }
 
   AdoException _mapError(Response<dynamic> response, Uri uri) {
@@ -295,12 +348,25 @@ class AdoClient {
     }
   }
 
-  /// Extracts `claims="…"` from a `WWW-Authenticate: Bearer …` header when the
-  /// error is `insufficient_claims`. Returns null for ordinary 401s.
+  /// Extracts the claims challenge from a `WWW-Authenticate: Bearer …`
+  /// header when the error is `insufficient_claims`. The value is returned
+  /// decoded to the JSON MSAL expects (Entra sends it base64url-encoded, but
+  /// some proxies pass it through as plain JSON). Null for ordinary 401s.
   static String? parseClaimsChallenge(String header) {
     if (!header.toLowerCase().contains('insufficient_claims')) return null;
-    final match = RegExp(r'claims="([^"]+)"').firstMatch(header);
-    return match?.group(1);
+    // Documented form: base64url. Some gateways forward the raw JSON, whose
+    // own quotes would stop a naive match, so take a `{…}` block greedily.
+    final encoded = RegExp(r'claims="([A-Za-z0-9_\-+/=]+)"').firstMatch(header);
+    if (encoded != null) {
+      final value = encoded.group(1)!;
+      try {
+        return utf8.decode(base64Url.decode(base64Url.normalize(value)));
+      } on FormatException {
+        return value;
+      }
+    }
+    final raw = RegExp(r'claims="(\{.*\})"').firstMatch(header);
+    return raw?.group(1);
   }
 
   static String _shorten(String s) =>

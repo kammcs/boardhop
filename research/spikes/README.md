@@ -53,7 +53,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | Spike | Question | Status |
 |---|---|---|
 | F1 | `msal_auth` sign-in, silent restore, org discovery, token size | Done 2026-09-10 on a Pixel 10 Pro / Android 17 emulator (browser fallback; Authenticator broker not yet exercised). Runner: the Diagnostics page in the app. |
-| F2 | Claims challenge (CAE) through `msal_auth` | Package has no `claims` parameter; needs a platform channel or fork. Not yet run. |
+| F2 | Claims challenge (CAE) through `msal_auth` | Done 2026-09-10: plugin vendored and patched (`packages/msal_auth`), `forceRefresh` and `claims` verified on the emulator, 401 retry wired into `AdoClient`. Real revocation event and iOS build still untested. |
 | F3–F5 | HTML round-trip, Kanban drag-and-drop, diff viewer | Not started |
 
 ## Not runnable here
