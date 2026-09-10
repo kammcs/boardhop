@@ -23,11 +23,16 @@ class WorkItemDetailPage extends StatefulWidget {
     required this.org,
     required this.project,
     required this.id,
+    this.embedded = false,
   });
 
   final String org;
   final String project;
   final int id;
+
+  /// True inside the tablet list+detail pane: no back button, the pane's
+  /// own list stays visible.
+  final bool embedded;
 
   @override
   State<WorkItemDetailPage> createState() => _WorkItemDetailPageState();
@@ -185,7 +190,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offline: the comment will post later.')),
+          const SnackBar(
+            content: Text('Offline: the comment will post later.'),
+          ),
         );
       }
       return true;
@@ -207,11 +214,18 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         busy: _writing,
       ),
       appBar: AppBar(
-        title: Text('${widget.project} · #${widget.id}'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+        title: Text(
+          widget.embedded
+              ? '#${widget.id}'
+              : '${widget.project} · #${widget.id}',
         ),
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.pop(),
+              ),
         actions: [
           IconButton(
             tooltip: 'Edit title and description',
@@ -257,7 +271,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                   if (item == null && !_refreshing && _error == null)
                     const Padding(
                       padding: EdgeInsets.all(Spacing.xl),
-                      child: Center(child: CircularProgressIndicator.adaptive()),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
                     ),
                   if (item != null) ...[
                     _Header(
@@ -270,7 +286,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                     ),
                     _Facts(item: item),
                     for (final entry in _longTextFields.entries)
-                      if ((item.field<String>(entry.key) ?? '').trim().isNotEmpty)
+                      if ((item.field<String>(entry.key) ?? '')
+                          .trim()
+                          .isNotEmpty)
                         _Section(
                           title: entry.value,
                           child: RichTextView(
@@ -441,12 +459,7 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Spacing.lg,
-        Spacing.xl,
-        Spacing.lg,
-        0,
-      ),
+      padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.xl, Spacing.lg, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

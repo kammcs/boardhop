@@ -209,9 +209,18 @@ class _BoardsPageState extends State<BoardsPage> {
           card,
         );
         _error = e is AdoStaleRevisionException
-            ? 'Work item ${card.id} changed elsewhere; refresh and try again.'
+            ? 'Work item ${card.id} changed elsewhere; the board was reloaded, try again.'
             : 'Could not move ${card.id}: ${e.message}';
       });
+      if (e is AdoStaleRevisionException) {
+        await _load();
+        if (mounted) {
+          setState(
+            () => _error =
+                'Work item ${card.id} changed elsewhere; the board was reloaded, try again.',
+          );
+        }
+      }
     } finally {
       if (mounted) setState(() => _movesInFlight--);
     }
