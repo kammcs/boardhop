@@ -5,7 +5,7 @@ Locked 2026-09-10, before the feature screens. Everything visual flows from one 
 ## 1. One master theme
 
 - `BoardhopTheme.light()` and `BoardhopTheme.dark()` in [lib/theme/boardhop_theme.dart](lib/theme/boardhop_theme.dart) are the only `ThemeData` in the app. Both are built once in `BoardhopApp` and never rebuilt.
-- The brand hue is a single constant, `BoardhopTheme.seed`. Material 3 derives the full color scheme for both modes from it. Change the seed, and every screen follows. It is not a Microsoft blue: Boardhop is an independent product and its trademark review (research/07) says to stay visually distinct.
+- The scheme is seeded from a neutral slate (`BoardhopTheme.seed`) with Material 3's `neutral` variant, so app chrome is quiet grey in both modes. That is deliberate: the saturated colors on screen are the ones that carry meaning, whether a team's lane and column colors from Azure DevOps or the status palette in `BoardhopColors`, and a strong brand hue would compete with them. It also keeps us visually distinct from Microsoft's blue (research/07). Change the seed or variant in one place and every screen follows.
 - Component looks (app bar, cards, list tiles, buttons, inputs, chips, sheets, dialogs, snackbars, navigation bar and rail) are set in the theme's component blocks. If a widget needs a different look on one screen, the fix goes into the theme, not the screen.
 - `ThemeData` is Material 3 with the platform defaults for transitions, so iOS gets Cupertino navigation feel. Use the `.adaptive` constructors where Flutter offers them: `Switch.adaptive`, `Slider.adaptive`, `CircularProgressIndicator.adaptive`, `AlertDialog.adaptive`.
 

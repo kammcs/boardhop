@@ -10,9 +10,11 @@ import 'tokens.dart';
 /// To retune the whole app, change [seed] (brand hue), the component blocks
 /// in [_build], or the domain palette in `BoardhopColors`.
 abstract final class BoardhopTheme {
-  /// Brand seed. Material 3 derives the full light and dark schemes from it.
-  /// Deliberately not a Microsoft blue: Boardhop is an independent product.
-  static const Color seed = Color(0xFF4F46E5);
+  /// Neutral slate seed. Material 3 derives the full light and dark schemes
+  /// from it with the `neutral` variant, so the chrome stays quiet and the
+  /// colors that carry meaning (team lane colors, work item types, states,
+  /// PR and pipeline status) are the only saturated things on screen.
+  static const Color seed = Color(0xFF64748B);
 
   static ThemeData light() => _build(Brightness.light);
 
@@ -22,6 +24,7 @@ abstract final class BoardhopTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: seed,
       brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.neutral,
     );
     final isDark = brightness == Brightness.dark;
     final domain = isDark ? BoardhopColors.dark : BoardhopColors.light;
