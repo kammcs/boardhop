@@ -271,15 +271,13 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                   for (final v in PrVote.values)
                     PopupMenuItem(
                       value: v,
-                      child: ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          voteIcon(v),
-                          color: voteColor(context, v),
-                        ),
-                        title: Text(v.label),
-                        trailing: v == myVote ? const Icon(Icons.check) : null,
+                      child: Row(
+                        children: [
+                          Icon(voteIcon(v), color: voteColor(context, v)),
+                          const SizedBox(width: Spacing.md),
+                          Expanded(child: Text(v.label)),
+                          if (v == myVote) const Icon(Icons.check, size: 18),
+                        ],
                       ),
                     ),
                 ],
