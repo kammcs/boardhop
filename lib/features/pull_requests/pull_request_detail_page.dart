@@ -107,6 +107,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
       }
     } on AdoException catch (e) {
+      debugPrint('PR action failed: $e');
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _acting = false);
