@@ -70,9 +70,10 @@ In the Entra admin center (`https://entra.microsoft.com`), signed in to the kamm
    ```
    Kelly supplies the hashes (see A5). The hash must be URL-encoded: `+` becomes `%2B`, `/` becomes `%2F`, `=` becomes `%3D`.
 
-4. Scroll to **Advanced settings → Allow public client flows** and set it to **Yes**. Mobile apps cannot hold a client secret.
-5. Leave **Implicit grant and hybrid flows** unchecked.
-6. Save.
+4. Also tick the preset **`https://login.microsoftonline.com/common/oauth2/nativeclient`** in the same platform section. The admin-consent URL in Part B needs a web-style reply address and refuses the `msauth` scheme (`AADSTS500113` otherwise).
+5. Scroll to **Advanced settings → Allow public client flows** and set it to **Yes**. Mobile apps cannot hold a client secret.
+6. Leave **Implicit grant and hybrid flows** unchecked.
+7. Save.
 
 Do not create a client secret or certificate. None is needed for a public client, and one must never ship inside a mobile app.
 
@@ -205,7 +206,15 @@ https://login.microsoftonline.com/342d4cd1-7ea8-4452-8ceb-542b71d159f6/admincons
 
 Review the permission list and accept. This creates the **Boardhop** entry under **Identity → Applications → Enterprise applications** and pre-approves the permissions for every user in the tenant, so individual users are not prompted.
 
-Alternative without the URL: after any user first attempts to sign in, the app appears under Enterprise applications; open it, go to **Permissions**, and click **Grant admin consent for puremedia**.
+**If the URL returns `AADSTS500113: No reply address is registered for the application`:** the consent endpoint needs a web-style redirect to return to, and the app's mobile `msauth` URIs do not qualify. kammcs fixes this on its side by ticking the preset `https://login.microsoftonline.com/common/oauth2/nativeclient` under Authentication → Mobile and desktop applications, after which the URL is:
+
+```
+https://login.microsoftonline.com/342d4cd1-7ea8-4452-8ceb-542b71d159f6/adminconsent?client_id={client-id}&redirect_uri=https%3A%2F%2Flogin.microsoftonline.com%2Fcommon%2Foauth2%2Fnativeclient
+```
+
+After accepting, the browser lands on a plain Microsoft page that can be closed.
+
+Alternative without the URL, done entirely in the puremedia tenant: create the enterprise-application record with `az ad sp create --id {client-id}` (Cloud Shell works), or simply let any user attempt a sign-in once, then open **Enterprise applications → Boardhop → Permissions** and click **Grant admin consent for cloudcover.it**.
 
 If your tenant's user consent setting is "Allow user consent for apps from verified publishers", users could consent themselves once kammcs completes publisher verification. Admin consent is simpler for the pilot.
 
