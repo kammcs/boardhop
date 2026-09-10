@@ -12,25 +12,22 @@ There are two separate jobs, done by two different people:
 
 **Why the registration must live in the kammcs tenant.** Boardhop is a product sold to many organizations. The tenant that owns the registration is the publisher: its name appears on every customer's consent screen, publisher verification is tied to its Partner Center account, and it controls the client ID for the life of the app. Registering in puremedia's tenant would make puremedia the publisher of Boardhop. Puremedia only needs to *consent* to the app.
 
-kammcs does not currently have an Entra tenant. Step A0 creates one. It is free.
+kammcs already has an Entra tenant, created for the Multipass Windows code-signing project. Step A0 prepares it.
 
 ---
 
 ## Part A — Create the app registration (kammcs tenant)
 
-### A0. Create the kammcs Entra tenant (one-time, free, about 30 minutes)
+### A0. Prepare the existing kammcs tenant
 
-App registrations need an Entra ID tenant, not a paid Azure subscription. **Entra ID Free** includes app registrations, multi-tenant apps, custom domains, and up to 50,000 objects at no charge. The easiest way to obtain a tenant is an Azure free account, which provisions a default directory.
+App registrations need an Entra ID tenant, not a paid Azure subscription; **Entra ID Free** covers app registrations, multi-tenant apps and custom domains. The kammcs tenant from the Multipass code-signing work is the right home. Its tenant ID does not change and is the one referenced throughout this document.
 
-1. Go to `https://azure.microsoft.com/free` and sign up with `kelly@kammcs.com`. A credit card is required for identity verification; nothing is charged, and no Azure resources need to be created. If `kelly@kammcs.com` is already a personal Microsoft account, the sign-up still creates a new work directory for it.
-2. After sign-up, open `https://entra.microsoft.com`. The new tenant appears as `kammcs.onmicrosoft.com` (or a variant if that name is taken). Record the **Tenant ID** from Overview.
-3. **Verify the `kammcs.com` domain:** Identity → Settings → Domain names → Add custom domain → `kammcs.com`. Add the TXT record it gives you at the DNS host for kammcs.com, wait for propagation, then click Verify. This is required for the publisher domain in A6 and for a non-`.onmicrosoft.com` name on the consent screen. It does not change email routing or anything else about kammcs.com.
-4. Create a second Global Administrator account (for example `admin@kammcs.com`) so the tenant is not locked to one identity, and enable MFA on both.
-5. Optionally, if kammcs later wants Microsoft 365 mail or Intune for its own use, licenses can be added to this same tenant. Nothing about Boardhop requires them.
+1. Sign in to `https://entra.microsoft.com` for that tenant and record the **Tenant ID** from Overview.
+2. **Verify the `kammcs.com` domain** if it is not already listed as verified: Identity → Settings → Domain names → Add custom domain → `kammcs.com`, add the TXT record at the DNS host, then Verify. Required for the publisher domain in A6 and for a non-`.onmicrosoft.com` publisher name on the consent screen. It does not affect email or anything else about kammcs.com.
+3. Make sure there is a second Global Administrator account and MFA is on for both.
+4. **Do not rename or reuse the existing "Azure Example App" registration.** It was created for code signing and is the wrong shape (single-tenant, holds a secret or certificate, likely has an Azure role). Boardhop needs a multi-tenant public client with delegated Azure DevOps permissions and no secret. Renaming would also keep the old client ID, which the signing pipeline may still reference, and would put a mobile app and a signing credential under one identity. Create a new registration (A2). Leave the old one in place until it is confirmed unused by Multipass, then delete it.
 
 No Azure subscription resources are needed for Boardhop until the push gateway (document 06) is built, and that can run on the free tier of Azure Functions in the same tenant.
-
-**Interim alternative, not recommended:** register the app in the puremedia tenant for the pilot and migrate later. That works technically, since a multi-tenant app can be created in any tenant, but the client ID cannot move between tenants. Migration means a new registration, a new client ID in the app, and every pilot user consenting again. Given the tenant is free and quick, create the kammcs tenant now.
 
 ### A1. Values to decide before starting
 
