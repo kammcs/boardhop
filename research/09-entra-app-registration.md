@@ -105,10 +105,29 @@ Do not create a client secret or certificate. None is needed for a public client
 
 The Android redirect URI embeds the SHA-1 of the signing certificate, base64-encoded. There is one hash per keystore.
 
-Debug keystore:
+`keytool` ships with a JDK, not on its own. On this machine it is bundled with Android Studio at `C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`, and `openssl` is available in Git Bash. Run the commands below in Git Bash.
+
+Debug keystore (already computed on Kelly's machine on 2026-09-10; the debug certificate is machine-specific, so a second developer machine has its own hash):
 
 ```bash
-keytool -exportcert -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android | openssl sha1 -binary | openssl base64
+KT="/c/Program Files/Android/Android Studio/jbr/bin/keytool.exe"
+"$KT" -exportcert -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android | openssl sha1 -binary | openssl base64
+```
+
+Result on Kelly's machine: hash `//ksb0DQrePXmmxPydZ/Ubpze98=`, which URL-encodes to
+
+```
+msauth://com.kammcs.boardhop/%2F%2Fksb0DQrePXmmxPydZ%2FUbpze98%3D
+```
+
+PowerShell alternative without openssl (any keystore):
+
+```powershell
+$kt = "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe"
+$sha1 = (& $kt -list -v -alias androiddebugkey -keystore "$env:USERPROFILE\.android\debug.keystore" -storepass android | Select-String "SHA1:").ToString().Split(":",2)[1].Trim()
+$bytes = $sha1.Split(":") | ForEach-Object { [Convert]::ToByte($_, 16) }
+$b64 = [Convert]::ToBase64String($bytes)
+"$b64  ->  msauth://com.kammcs.boardhop/" + [Uri]::EscapeDataString($b64)
 ```
 
 Release keystore:
