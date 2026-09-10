@@ -86,9 +86,9 @@ class WorkItemRepository {
         body: {'ids': chunk, 'fields': fields, 'errorPolicy': 'omit'},
       );
       out.addAll(
-        ((json['value'] as List?) ?? const [])
-            .whereType<Map>()
-            .map((m) => WorkItem.fromJson(m.cast<String, dynamic>())),
+        ((json['value'] as List?) ?? const []).whereType<Map>().map(
+          (m) => WorkItem.fromJson(m.cast<String, dynamic>()),
+        ),
       );
     }
     // Keep the query's order.
@@ -154,11 +154,13 @@ class WorkItemRepository {
       if (id is int && seen.add(id)) out.add(id);
     }
 
-    for (final w in ((json['workItems'] as List?) ?? const []).whereType<Map>()) {
+    for (final w
+        in ((json['workItems'] as List?) ?? const []).whereType<Map>()) {
       add(w['id']);
     }
-    for (final r in ((json['workItemRelations'] as List?) ?? const [])
-        .whereType<Map>()) {
+    for (final r
+        in ((json['workItemRelations'] as List?) ?? const [])
+            .whereType<Map>()) {
       add((r['target'] as Map?)?['id']);
     }
     return out;
@@ -225,9 +227,10 @@ class WorkItemRepository {
   ) async {
     // A list read carries fewer fields than a detail read; never let it
     // erase a richer cached copy of the same revision.
-    final existing = await (_db.select(_db.workItems)
-          ..where((t) => t.orgName.equals(org) & t.id.equals(item.id)))
-        .getSingleOrNull();
+    final existing =
+        await (_db.select(_db.workItems)
+              ..where((t) => t.orgName.equals(org) & t.id.equals(item.id)))
+            .getSingleOrNull();
     var merged = item;
     if (existing != null && existing.rev == item.rev) {
       final old = WorkItem.fromJson(

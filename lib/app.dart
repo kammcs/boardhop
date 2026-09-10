@@ -20,7 +20,7 @@ class AppDependencies {
     : orgs = OrgRepository(client, db),
       projects = ProjectRepository(client, db),
       workItems = WorkItemRepository(client, db),
-      pullRequests = PullRequestRepository(client) {
+      pullRequests = PullRequestRepository(client, db) {
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems);
   }

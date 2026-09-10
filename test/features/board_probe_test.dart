@@ -129,14 +129,10 @@ void main() {
       final firstFinder = find.text('${first.type} ${first.id}');
       expect(firstFinder, findsOneWidget);
       final targetTitle = data.columns[1].cards[1];
-      final targetFinder = find.text(
-        '${targetTitle.type} ${targetTitle.id}',
-      );
+      final targetFinder = find.text('${targetTitle.type} ${targetTitle.id}');
       expect(targetFinder, findsOneWidget);
 
-      final gesture = await tester.startGesture(
-        tester.getCenter(firstFinder),
-      );
+      final gesture = await tester.startGesture(tester.getCenter(firstFinder));
       await tester.pump(const Duration(milliseconds: 300));
       await gesture.moveTo(tester.getCenter(targetFinder));
       await tester.pump();

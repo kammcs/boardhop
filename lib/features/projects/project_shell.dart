@@ -54,32 +54,33 @@ class _ProjectShellState extends State<ProjectShell>
     await context.read<WriteQueue>().drain();
   }
 
-  static const _destinations = <({String label, IconData icon, IconData selected, String path})>[
-    (
-      label: 'Work items',
-      icon: Icons.assignment_outlined,
-      selected: Icons.assignment,
-      path: 'work-items',
-    ),
-    (
-      label: 'Board',
-      icon: Icons.view_kanban_outlined,
-      selected: Icons.view_kanban,
-      path: 'boards',
-    ),
-    (
-      label: 'Pull requests',
-      icon: Icons.call_merge_outlined,
-      selected: Icons.call_merge,
-      path: 'pull-requests',
-    ),
-    (
-      label: 'Pipelines',
-      icon: Icons.play_circle_outline,
-      selected: Icons.play_circle,
-      path: 'pipelines',
-    ),
-  ];
+  static const _destinations =
+      <({String label, IconData icon, IconData selected, String path})>[
+        (
+          label: 'Work items',
+          icon: Icons.assignment_outlined,
+          selected: Icons.assignment,
+          path: 'work-items',
+        ),
+        (
+          label: 'Board',
+          icon: Icons.view_kanban_outlined,
+          selected: Icons.view_kanban,
+          path: 'boards',
+        ),
+        (
+          label: 'Pull requests',
+          icon: Icons.call_merge_outlined,
+          selected: Icons.call_merge,
+          path: 'pull-requests',
+        ),
+        (
+          label: 'Pipelines',
+          icon: Icons.play_circle_outline,
+          selected: Icons.play_circle,
+          path: 'pipelines',
+        ),
+      ];
 
   String projectPath(String tail) =>
       '/orgs/${Uri.encodeComponent(org)}/projects/${Uri.encodeComponent(project)}/$tail';

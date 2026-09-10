@@ -32,10 +32,18 @@ class KanbanColumnData<T extends Object> {
   final int? count;
 }
 
-typedef KanbanCardBuilder<T> =
-    Widget Function(BuildContext context, T card, bool dragging);
-typedef KanbanMoveCallback<T> =
-    void Function(T card, int fromColumn, int fromIndex, int toColumn, int toIndex);
+typedef KanbanCardBuilder<T> = Widget Function(
+  BuildContext context,
+  T card,
+  bool dragging,
+);
+typedef KanbanMoveCallback<T> = void Function(
+  T card,
+  int fromColumn,
+  int fromIndex,
+  int toColumn,
+  int toIndex,
+);
 
 /// Column width: most of a phone screen so the next column peeks in, capped
 /// so tablets show several columns.
@@ -182,7 +190,9 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>> {
     }
     if (dy != 0) {
       final pos = v.position;
-      v.jumpTo((pos.pixels + dy).clamp(pos.minScrollExtent, pos.maxScrollExtent));
+      v.jumpTo(
+        (pos.pixels + dy).clamp(pos.minScrollExtent, pos.maxScrollExtent),
+      );
     }
   }
 
@@ -387,7 +397,9 @@ class KanbanColumnHeader extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: over ? scheme.errorContainer : scheme.surfaceContainerHighest,
+                color: over
+                    ? scheme.errorContainer
+                    : scheme.surfaceContainerHighest,
                 borderRadius: Radii.chip,
               ),
               child: Text(

@@ -161,9 +161,10 @@ class _BoardProbePageState extends State<BoardProbePage> {
               'drags $_drags · moves $_moves · $_lastMove\n'
               'all:  ${_stats.all.summary(_stats.budget)}\n'
               'drag: ${_stats.drag.summary(_stats.budget)}',
-              style: BoardhopTheme.codeStyle(
-                context,
-              ).copyWith(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+              style: BoardhopTheme.codeStyle(context).copyWith(
+                fontSize: 11,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           Expanded(

@@ -28,7 +28,9 @@ class IdentityRef extends Equatable {
 
   /// Fields carry an object; older payloads carry `"Name <email>"`.
   static IdentityRef? fromField(Object? value) {
-    if (value is Map) return IdentityRef.fromJson(value.cast<String, dynamic>());
+    if (value is Map) {
+      return IdentityRef.fromJson(value.cast<String, dynamic>());
+    }
     if (value is String && value.isNotEmpty) {
       final m = RegExp(r'^(.*?)\s*<([^>]+)>$').firstMatch(value);
       return m == null
@@ -104,8 +106,10 @@ class WorkItem extends Equatable {
   int? get priority => field<num>('Microsoft.VSTS.Common.Priority')?.toInt();
   IdentityRef? get assignedTo =>
       IdentityRef.fromField(fields['System.AssignedTo']);
-  IdentityRef? get createdBy => IdentityRef.fromField(fields['System.CreatedBy']);
-  IdentityRef? get changedBy => IdentityRef.fromField(fields['System.ChangedBy']);
+  IdentityRef? get createdBy =>
+      IdentityRef.fromField(fields['System.CreatedBy']);
+  IdentityRef? get changedBy =>
+      IdentityRef.fromField(fields['System.ChangedBy']);
   DateTime? get changedDate =>
       DateTime.tryParse(field<String>('System.ChangedDate') ?? '');
   DateTime? get createdDate =>
@@ -126,14 +130,13 @@ class WorkItem extends Equatable {
       ? 'markdown'
       : 'html';
 
-  WorkItem copyWithFields(Map<String, dynamic> updates, {int? rev}) =>
-      WorkItem(
-        id: id,
-        rev: rev ?? this.rev,
-        url: url,
-        fields: {...fields, ...updates},
-        multilineFieldsFormat: multilineFieldsFormat,
-      );
+  WorkItem copyWithFields(Map<String, dynamic> updates, {int? rev}) => WorkItem(
+    id: id,
+    rev: rev ?? this.rev,
+    url: url,
+    fields: {...fields, ...updates},
+    multilineFieldsFormat: multilineFieldsFormat,
+  );
 
   @override
   List<Object?> get props => [id, rev, fields];
@@ -199,14 +202,16 @@ class WorkItemType extends Equatable {
   /// Azure DevOps icon ids mapped to Material glyphs.
   static IconData iconFor(String? iconId) => switch (iconId) {
     'icon_bug' || 'icon_insect' => Icons.bug_report_outlined,
-    'icon_task' || 'icon_clipboard' || 'icon_check_box' =>
-      Icons.check_box_outlined,
+    'icon_task' ||
+    'icon_clipboard' ||
+    'icon_check_box' => Icons.check_box_outlined,
     'icon_book' => Icons.auto_stories_outlined,
     'icon_crown' => Icons.emoji_events_outlined,
     'icon_trophy' => Icons.workspace_premium_outlined,
     'icon_list' => Icons.list_alt_outlined,
-    'icon_test_case' || 'icon_test_beaker' || 'icon_test_plan' =>
-      Icons.science_outlined,
+    'icon_test_case' ||
+    'icon_test_beaker' ||
+    'icon_test_plan' => Icons.science_outlined,
     'icon_test_suite' || 'icon_test_step' => Icons.checklist_outlined,
     'icon_traffic_cone' => Icons.warning_amber_outlined,
     'icon_chat_bubble' => Icons.chat_bubble_outline,
@@ -292,8 +297,10 @@ class WorkItemComment extends Equatable {
       WorkItemComment(
         id: json['id'] as int,
         text: json['text'] as String? ?? '',
-        renderedText: json['renderedText'] as String? ?? json['text'] as String? ?? '',
-        createdBy: IdentityRef.fromField(json['createdBy']) ??
+        renderedText:
+            json['renderedText'] as String? ?? json['text'] as String? ?? '',
+        createdBy:
+            IdentityRef.fromField(json['createdBy']) ??
             const IdentityRef(displayName: '?'),
         createdDate: DateTime.tryParse(json['createdDate'] as String? ?? ''),
         modifiedDate: DateTime.tryParse(json['modifiedDate'] as String? ?? ''),

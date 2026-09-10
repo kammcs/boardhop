@@ -5,6 +5,7 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../widgets/thread_card.dart';
 import 'diff_model.dart';
 import 'highlighter.dart';
 
@@ -23,6 +24,9 @@ class DiffView extends StatefulWidget {
     this.onPost,
     this.onCancelComposer,
     this.posting = false,
+    this.canAct = false,
+    this.onReply,
+    this.onSetThreadStatus,
   });
 
   final LineDiffResult diff;
@@ -36,6 +40,12 @@ class DiffView extends StatefulWidget {
   final Future<void> Function(int line, String text)? onPost;
   final VoidCallback? onCancelComposer;
   final bool posting;
+
+  /// Whether threads offer reply and status changes (active PR).
+  final bool canAct;
+  final Future<void> Function(PrThread thread, String text)? onReply;
+  final Future<void> Function(PrThread thread, String status)?
+  onSetThreadStatus;
 
   @override
   State<DiffView> createState() => _DiffViewState();
@@ -187,7 +197,19 @@ class _DiffViewState extends State<DiffView> {
           ? null
           : () => widget.onGutterTap!(row.line.newNo!),
     ),
-    _ThreadRow() => _ThreadView(thread: row.thread, gutterWidth: _gutterWidth),
+    _ThreadRow() => _ThreadView(
+      key: ValueKey('thread-${row.thread.id}'),
+      thread: row.thread,
+      gutterWidth: _gutterWidth,
+      canAct: widget.canAct,
+      busy: widget.posting,
+      onReply: widget.onReply == null
+          ? null
+          : (text) => widget.onReply!(row.thread, text),
+      onSetStatus: widget.onSetThreadStatus == null
+          ? null
+          : (status) => widget.onSetThreadStatus!(row.thread, status),
+    ),
     _ComposerRow() => _ComposerView(
       line: row.line,
       gutterWidth: _gutterWidth,
@@ -298,15 +320,26 @@ class _DiffLineView extends StatelessWidget {
 }
 
 class _ThreadView extends StatelessWidget {
-  const _ThreadView({required this.thread, required this.gutterWidth});
+  const _ThreadView({
+    super.key,
+    required this.thread,
+    required this.gutterWidth,
+    required this.canAct,
+    required this.busy,
+    required this.onReply,
+    required this.onSetStatus,
+  });
 
   final PrThread thread;
   final double gutterWidth;
+  final bool canAct;
+  final bool busy;
+  final Future<void> Function(String text)? onReply;
+  final Future<void> Function(String status)? onSetStatus;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         gutterWidth,
@@ -314,38 +347,17 @@ class _ThreadView extends StatelessWidget {
         Spacing.lg,
         Spacing.xs,
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Material(
-          color: scheme.surfaceContainerHigh,
-          borderRadius: Radii.card,
-          child: Padding(
-            padding: Spacing.card,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 16,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: Spacing.xs),
-                    Text(
-                      '${thread.status}'
-                      '${thread.trackedFromLine != null && thread.trackedFromLine != thread.rightLine ? ' · moved from line ${thread.trackedFromLine}' : ''}',
-                      style: theme.textTheme.labelMedium,
-                    ),
-                  ],
-                ),
-                for (final c in thread.comments) ...[
-                  const SizedBox(height: Spacing.xs),
-                  Text(c.author, style: theme.textTheme.labelLarge),
-                  SelectableText(c.content, style: theme.textTheme.bodyMedium),
-                ],
-              ],
-            ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: ThreadCard(
+            thread: thread,
+            canAct: canAct,
+            busy: busy,
+            onReply: onReply,
+            onSetStatus: onSetStatus,
+            color: scheme.surfaceContainerHigh,
           ),
         ),
       ),

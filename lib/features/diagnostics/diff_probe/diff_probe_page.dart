@@ -269,7 +269,11 @@ class _DiffProbePageState extends State<DiffProbePage> {
       final sw = Stopwatch()..start();
       final oldText = file.isAdd
           ? ''
-          : await src.fileAt(pr, file.originalPath ?? file.path, it.commonCommit);
+          : await src.fileAt(
+              pr,
+              file.originalPath ?? file.path,
+              it.commonCommit,
+            );
       final newText = file.isDelete
           ? ''
           : await src.fileAt(pr, file.path, it.sourceCommit);
@@ -511,9 +515,10 @@ class _DiffProbePageState extends State<DiffProbePage> {
                       'highlight ${_highlightTime?.inMilliseconds} ms · rows ${_rowsTime?.inMilliseconds} ms'
                       '${_lastJump == null ? '' : ' · jump to $_lastJump ${_jumpTime?.inMilliseconds} ms'}\n'
                       'frames: ${_stats.all.summary(_stats.budget)}',
-              style: BoardhopTheme.codeStyle(
-                context,
-              ).copyWith(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+              style: BoardhopTheme.codeStyle(context).copyWith(
+                fontSize: 11,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           Expanded(
@@ -624,8 +629,7 @@ class _DiffProbePageState extends State<DiffProbePage> {
 
   Widget _diffView(BuildContext context) {
     final diff = _diff!;
-    final width =
-        _gutterWidth + diff.maxChars * _charWidth + Spacing.lg * 2;
+    final width = _gutterWidth + diff.maxChars * _charWidth + Spacing.lg * 2;
     return LayoutBuilder(
       builder: (context, constraints) {
         final contentWidth = max(width, constraints.maxWidth);
@@ -688,16 +692,19 @@ class _DiffLineView extends StatelessWidget {
     final colors = context.boardhopColors;
     final scheme = Theme.of(context).colorScheme;
     final line = row.line;
-    final (Color? background, String marker, Color markerColor) =
-        switch (line.kind) {
-          DiffKind.added => (colors.diffAddedBackground, '+', colors.diffAdded),
-          DiffKind.removed => (
-            colors.diffRemovedBackground,
-            '−',
-            colors.diffRemoved,
-          ),
-          DiffKind.context => (null, ' ', scheme.onSurfaceVariant),
-        };
+    final (
+      Color? background,
+      String marker,
+      Color markerColor,
+    ) = switch (line.kind) {
+      DiffKind.added => (colors.diffAddedBackground, '+', colors.diffAdded),
+      DiffKind.removed => (
+        colors.diffRemovedBackground,
+        '−',
+        colors.diffRemoved,
+      ),
+      DiffKind.context => (null, ' ', scheme.onSurfaceVariant),
+    };
     final numberStyle = style.copyWith(color: scheme.onSurfaceVariant);
     return ColoredBox(
       color: background ?? Colors.transparent,
@@ -775,7 +782,12 @@ class _ThreadView extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(gutterWidth, Spacing.xs, Spacing.lg, Spacing.xs),
+      padding: EdgeInsets.fromLTRB(
+        gutterWidth,
+        Spacing.xs,
+        Spacing.lg,
+        Spacing.xs,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Material(
@@ -830,7 +842,12 @@ class _ComposerView extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(gutterWidth, Spacing.xs, Spacing.lg, Spacing.xs),
+      padding: EdgeInsets.fromLTRB(
+        gutterWidth,
+        Spacing.xs,
+        Spacing.lg,
+        Spacing.xs,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Material(

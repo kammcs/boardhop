@@ -35,7 +35,10 @@ Future<SavedQuery?> pickSavedQuery(
                   Spacing.lg,
                   Spacing.sm,
                 ),
-                child: Text('Saved queries', style: theme.textTheme.titleMedium),
+                child: Text(
+                  'Saved queries',
+                  style: theme.textTheme.titleMedium,
+                ),
               ),
               if (leaves.isEmpty)
                 const ListTile(
@@ -60,7 +63,9 @@ Future<SavedQuery?> pickSavedQuery(
                   ListTile(
                     leading: const Icon(Icons.manage_search_outlined),
                     title: Text(q.name),
-                    trailing: q.id == selectedId ? const Icon(Icons.check) : null,
+                    trailing: q.id == selectedId
+                        ? const Icon(Icons.check)
+                        : null,
                     onTap: () => Navigator.of(context).pop(q),
                   ),
               ],

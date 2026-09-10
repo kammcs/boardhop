@@ -26,7 +26,10 @@ Future<String?> pickState(
               Spacing.lg,
               Spacing.sm,
             ),
-            child: Text('State', style: Theme.of(context).textTheme.titleMedium),
+            child: Text(
+              'State',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
           ),
           if (states.isEmpty)
             const ListTile(title: Text('No states known for this type.')),
@@ -75,7 +78,9 @@ Future<AssignAction?> pickAssignment(
           ),
           ListTile(
             leading: const Icon(Icons.person_outline),
-            title: Text(meLabel == null ? 'Assign to me' : 'Assign to $meLabel'),
+            title: Text(
+              meLabel == null ? 'Assign to me' : 'Assign to $meLabel',
+            ),
             enabled: meLabel != null,
             onTap: () => Navigator.of(context).pop(AssignAction.toMe),
           ),

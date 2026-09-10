@@ -73,15 +73,34 @@ class PendingWrites extends Table {
   TextColumn get lastError => text().nullable()();
 }
 
+/// Small JSON blobs keyed by name: pull request lists, later pipelines and
+/// activity pages. One row per key, replaced on every fetch.
+@DataClassName('CacheEntryRow')
+class CacheEntries extends Table {
+  TextColumn get key => text()();
+  TextColumn get json => text()();
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {key};
+}
+
 @DriftDatabase(
-  tables: [Organizations, Projects, WorkItems, WorkItemListEntries, PendingWrites],
+  tables: [
+    Organizations,
+    Projects,
+    WorkItems,
+    WorkItemListEntries,
+    PendingWrites,
+    CacheEntries,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'boardhop'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,6 +109,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await m.createTable(workItems);
         await m.createTable(workItemListEntries);
+      }
+      if (from < 3) {
+        await m.createTable(cacheEntries);
       }
     },
   );

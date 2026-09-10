@@ -24,10 +24,7 @@ void main() {
     });
 
     test('classic Myers example ABCABBA → CBABAC', () {
-      final r = LineDiff.compute(
-        'A\nB\nC\nA\nB\nB\nA\n',
-        'C\nB\nA\nB\nA\nC\n',
-      );
+      final r = LineDiff.compute('A\nB\nC\nA\nB\nB\nA\n', 'C\nB\nA\nB\nA\nC\n');
       expect(r.editDistance, 5);
       expect(r.added, 2);
       expect(r.removed, 3);
@@ -62,10 +59,7 @@ void main() {
     });
 
     test('equal-sized replaced blocks get intra-line emphasis', () {
-      final r = LineDiff.compute(
-        'final x = 1;\n',
-        'final y = 1;\n',
-      );
+      final r = LineDiff.compute('final x = 1;\n', 'final y = 1;\n');
       expect(r.lines.length, 2);
       expect(r.lines[0].emphasis, [(6, 7)]);
       expect(r.lines[1].emphasis, [(6, 7)]);
@@ -122,7 +116,11 @@ void main() {
     });
 
     test('unknown language falls back to plain runs', () {
-      final lines = CodeHighlighter.highlightLines('a\nb\n', null, Brightness.dark);
+      final lines = CodeHighlighter.highlightLines(
+        'a\nb\n',
+        null,
+        Brightness.dark,
+      );
       expect(lines.length, 2);
       expect(lines[0].single.style, isNull);
       expect(CodeHighlighter.languageFor('x/y.cs'), 'csharp');
@@ -132,7 +130,10 @@ void main() {
     test('emphasize splits runs at the changed ranges', () {
       const bold = TextStyle(fontWeight: FontWeight.bold);
       final runs = CodeHighlighter.emphasize(
-        const [CodeRun('final ', null), CodeRun('x = 1;', TextStyle(color: Colors.red))],
+        const [
+          CodeRun('final ', null),
+          CodeRun('x = 1;', TextStyle(color: Colors.red)),
+        ],
         const [(6, 7)],
         bold,
       );

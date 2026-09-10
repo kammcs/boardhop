@@ -1,21 +1,38 @@
+import 'dart:convert';
+
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../db/app_database.dart';
+import '../models/pr_check.dart';
 import '../models/pull_request.dart';
 import 'pr_diff_source.dart';
 
 enum PrListFilter { toReview, mine, all }
 
+/// A pull request list with where it came from.
+typedef PrListResult = ({
+  List<PullRequest> items,
+  DateTime fetchedAt,
+  bool fromCache,
+});
+
 /// Pull request reads and the review writes: vote, complete, abandon, new
-/// threads and replies. The list uses the org-level endpoint verified by
-/// spike S4 (undocumented) and falls back to the project-level one.
+/// threads, replies and thread status. The list uses the org-level endpoint
+/// verified by spike S4 (undocumented) and falls back to the project-level
+/// one; each list is cached as one JSON blob so the inbox opens offline.
 class PullRequestRepository {
-  PullRequestRepository(this._client);
+  PullRequestRepository(this._client, [this._db]);
 
   final AdoClient _client;
+  final AppDatabase? _db;
 
   static const apiVersion = '7.1';
+  static const policyApiVersion = '7.1-preview.1';
 
   final Map<String, String> _me = {};
+
+  static String listKey(String org, String? project, PrListFilter filter) =>
+      'pr-list:$org:${project ?? '*'}:${filter.name}';
 
   /// Identity GUID of the signed-in user in this org (`connectionData`,
   /// semi-official), needed for `reviewerId` filters and voting.
@@ -60,10 +77,51 @@ class PullRequestRepository {
       apiVersion: apiVersion,
       query: query,
     );
-    return ((json['value'] as List?) ?? const [])
+    final raw = ((json['value'] as List?) ?? const [])
         .whereType<Map>()
-        .map((m) => PullRequest.fromJson(m.cast<String, dynamic>()))
+        .map((m) => m.cast<String, dynamic>())
         .toList();
+    if (status == 'active') await _store(listKey(org, project, filter), raw);
+    return raw.map(PullRequest.fromJson).toList();
+  }
+
+  /// The last active list fetched for this org/project/filter, if any.
+  Future<PrListResult?> cachedList(
+    String org, {
+    String? project,
+    PrListFilter filter = PrListFilter.toReview,
+  }) async {
+    final db = _db;
+    if (db == null) return null;
+    final row =
+        await (db.select(db.cacheEntries)
+              ..where((t) => t.key.equals(listKey(org, project, filter))))
+            .getSingleOrNull();
+    if (row == null) return null;
+    final decoded = jsonDecode(row.json);
+    if (decoded is! List) return null;
+    return (
+      items: decoded
+          .whereType<Map>()
+          .map((m) => PullRequest.fromJson(m.cast<String, dynamic>()))
+          .toList(),
+      fetchedAt: row.fetchedAt,
+      fromCache: true,
+    );
+  }
+
+  Future<void> _store(String key, Object json) async {
+    final db = _db;
+    if (db == null) return;
+    await db
+        .into(db.cacheEntries)
+        .insertOnConflictUpdate(
+          CacheEntriesCompanion.insert(
+            key: key,
+            json: jsonEncode(json),
+            fetchedAt: DateTime.now(),
+          ),
+        );
   }
 
   Future<PullRequest> get(String org, int id) async {
@@ -120,6 +178,57 @@ class PullRequestRepository {
         .whereType<Map>()
         .map((m) => m.cast<String, dynamic>())
         .toList();
+  }
+
+  /// Branch policy evaluations for the PR (spike s15: the artifact id is
+  /// `vstfs:///CodeReview/CodeReviewId/{projectId}/{prId}`).
+  Future<List<PrCheck>> policyEvaluations(String org, PullRequest pr) async {
+    final json = await _client.getJson(
+      org: org,
+      project: pr.projectId,
+      path: '_apis/policy/evaluations',
+      apiVersion: policyApiVersion,
+      query: {
+        'artifactId':
+            'vstfs:///CodeReview/CodeReviewId/${pr.projectId}/${pr.id}',
+      },
+    );
+    return ((json['value'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => PrCheck.fromEvaluation(m.cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// External statuses (coverage, bots) for the newest iteration.
+  Future<List<PrCheck>> statuses(String org, PullRequest pr) async {
+    final json = await _client.getJson(
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'statuses'),
+      apiVersion: apiVersion,
+    );
+    return PrCheck.latestStatuses(
+      ((json['value'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((m) => m.cast<String, dynamic>())
+          .toList(),
+    );
+  }
+
+  /// Policies then statuses; either source failing (no policy permission,
+  /// old server) leaves the other in place instead of failing the page.
+  Future<List<PrCheck>> checks(String org, PullRequest pr) async {
+    final out = <PrCheck>[];
+    for (final read in [policyEvaluations, statuses]) {
+      try {
+        out.addAll(await read(org, pr));
+      } on AdoAuthException {
+        rethrow;
+      } on AdoException {
+        // Non-fatal: the section just lacks that source.
+      }
+    }
+    return out;
   }
 
   /// `PUT reviewers/{me}` with the vote (also adds the reviewer).
@@ -235,49 +344,45 @@ class PullRequestRepository {
     return json['id'] as int? ?? 0;
   }
 
+  /// Reply under the thread's root comment (what the web UI does: replies
+  /// are flat, parented on comment 1).
   Future<void> reply(
     String org,
     PullRequest pr,
     int threadId,
-    String content,
-  ) => _client.send(
+    String content, {
+    int parentCommentId = 1,
+  }) => _client.send(
     method: 'POST',
     org: org,
     project: pr.projectId,
     path: _prPath(pr, 'threads/$threadId/comments'),
     apiVersion: apiVersion,
-    body: {'parentCommentId': 0, 'content': content, 'commentType': 1},
+    body: {
+      'parentCommentId': parentCommentId,
+      'content': content,
+      'commentType': 1,
+    },
+  );
+
+  /// Resolve, reactivate, close… a thread ([PrThreadStatus] values).
+  Future<void> setThreadStatus(
+    String org,
+    PullRequest pr,
+    int threadId,
+    String status,
+  ) => _client.send(
+    method: 'PATCH',
+    org: org,
+    project: pr.projectId,
+    path: _prPath(pr, 'threads/$threadId'),
+    apiVersion: apiVersion,
+    body: {'status': status},
   );
 
   /// Conversation entries: non-system, non-file threads, oldest first.
-  static List<PrThread> conversation(List<Map<String, dynamic>> raw) {
-    final out = <PrThread>[];
-    for (final t in raw) {
-      if (t['isDeleted'] == true) continue;
-      if (t['threadContext'] != null) continue;
-      final comments = ((t['comments'] as List?) ?? const [])
-          .whereType<Map>()
-          .where((c) => c['isDeleted'] != true && c['commentType'] != 'system')
-          .map(
-            (c) => PrComment(
-              author: ((c['author'] as Map?)?['displayName'] as String?) ?? '?',
-              content: c['content'] as String? ?? '',
-            ),
-          )
-          .toList();
-      if (comments.isEmpty) continue;
-      out.add(
-        PrThread(
-          id: t['id'] as int,
-          status: t['status'] as String? ?? 'unknown',
-          filePath: null,
-          rightLine: null,
-          leftLine: null,
-          comments: comments,
-          trackedFromLine: null,
-        ),
-      );
-    }
-    return out;
-  }
+  static List<PrThread> conversation(List<Map<String, dynamic>> raw) => [
+    for (final t in raw)
+      if (t['threadContext'] == null) ?PrThread.fromJson(t),
+  ];
 }

@@ -177,9 +177,7 @@ class Board extends Equatable {
       final i = columns.indexWhere((c) => c.name == columnValue);
       if (i >= 0) return i;
     }
-    final byState = columns.indexWhere(
-      (c) => c.stateMappings[type] == state,
-    );
+    final byState = columns.indexWhere((c) => c.stateMappings[type] == state);
     return byState >= 0 ? byState : 0;
   }
 
@@ -189,11 +187,7 @@ class Board extends Equatable {
 
 /// A drop target on the board: a column, or one half of a split column.
 class BoardSlot extends Equatable {
-  const BoardSlot({
-    required this.columnIndex,
-    required this.column,
-    this.done,
-  });
+  const BoardSlot({required this.columnIndex, required this.column, this.done});
 
   final int columnIndex;
   final BoardColumn column;
@@ -225,7 +219,8 @@ class TeamFieldValues extends Equatable {
 
   factory TeamFieldValues.fromJson(Map<String, dynamic> json) =>
       TeamFieldValues(
-        field: (json['field'] as Map?)?['referenceName'] as String? ??
+        field:
+            (json['field'] as Map?)?['referenceName'] as String? ??
             'System.AreaPath',
         defaultValue: json['defaultValue'] as String? ?? '',
         values: ((json['values'] as List?) ?? const [])

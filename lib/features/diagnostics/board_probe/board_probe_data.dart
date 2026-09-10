@@ -140,7 +140,16 @@ class BoardData {
     ' behind a VPN',
   ];
 
-  static const _people = <String>['KK', 'AM', 'JR', 'TS', 'LP', 'DN', 'RB', 'MG'];
+  static const _people = <String>[
+    'KK',
+    'AM',
+    'JR',
+    'TS',
+    'LP',
+    'DN',
+    'RB',
+    'MG',
+  ];
 
   /// Five columns shaped like a Scrum team's board, [cards] cards spread
   /// unevenly (most in the middle columns) so lists are long enough to

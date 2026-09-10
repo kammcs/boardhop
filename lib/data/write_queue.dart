@@ -87,8 +87,7 @@ class WriteQueue {
   bool _draining = false;
 
   Stream<List<PendingWrite>> watch() =>
-      (_db.select(_db.pendingWrites)
-            ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+      (_db.select(_db.pendingWrites)..orderBy([(t) => OrderingTerm.asc(t.id)]))
           .watch()
           .map((rows) => rows.map(PendingWrite.fromRow).toList());
 
@@ -151,9 +150,9 @@ class WriteQueue {
     var synced = 0;
     var conflicts = 0;
     try {
-      final rows = await (_db.select(_db.pendingWrites)
-            ..orderBy([(t) => OrderingTerm.asc(t.id)]))
-          .get();
+      final rows = await (_db.select(
+        _db.pendingWrites,
+      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
       for (final row in rows) {
         final w = PendingWrite.fromRow(row);
         if (w.isConflict) {

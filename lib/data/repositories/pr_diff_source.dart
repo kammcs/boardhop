@@ -1,4 +1,5 @@
 import '../../core/http/ado_client.dart';
+import '../models/work_item.dart';
 
 /// Read-only access to what the diff viewer needs from a pull request:
 /// iterations, changed files, file content at a commit, and threads read for
@@ -29,7 +30,22 @@ class PrIteration {
     required this.sourceCommit,
     required this.commonCommit,
     required this.description,
+    this.createdDate,
+    this.author,
+    this.reason,
   });
+
+  factory PrIteration.fromJson(Map<String, dynamic> it) => PrIteration(
+    id: it['id'] as int,
+    sourceCommit:
+        (it['sourceRefCommit'] as Map<String, dynamic>)['commitId'] as String,
+    commonCommit:
+        (it['commonRefCommit'] as Map<String, dynamic>)['commitId'] as String,
+    description: it['description'] as String? ?? '',
+    createdDate: DateTime.tryParse(it['createdDate'] as String? ?? ''),
+    author: (it['author'] as Map?)?['displayName'] as String?,
+    reason: it['reason'] as String?,
+  );
 
   final int id;
   final String sourceCommit;
@@ -37,6 +53,11 @@ class PrIteration {
   /// Merge base with the target branch; the "old" side of the full PR diff.
   final String commonCommit;
   final String description;
+  final DateTime? createdDate;
+  final String? author;
+
+  /// `push`, `retarget`, `resolveConflicts`, `forcePush`, `create`…
+  final String? reason;
 }
 
 class PrFileChange {
@@ -57,10 +78,59 @@ class PrFileChange {
 }
 
 class PrComment {
-  const PrComment({required this.author, required this.content});
+  const PrComment({
+    required this.author,
+    required this.content,
+    this.id = 0,
+    this.parentId = 0,
+    this.identity,
+    this.publishedDate,
+  });
 
+  factory PrComment.fromJson(Map<String, dynamic> c) {
+    final identity = IdentityRef.fromField(c['author']);
+    return PrComment(
+      id: (c['id'] as num?)?.toInt() ?? 0,
+      parentId: (c['parentCommentId'] as num?)?.toInt() ?? 0,
+      author: identity?.displayName ?? '?',
+      identity: identity,
+      content: c['content'] as String? ?? '',
+      publishedDate: DateTime.tryParse(c['publishedDate'] as String? ?? ''),
+    );
+  }
+
+  final int id;
+  final int parentId;
   final String author;
+  final IdentityRef? identity;
   final String content;
+  final DateTime? publishedDate;
+}
+
+/// Thread statuses the service accepts on `PATCH threads/{id}`.
+abstract final class PrThreadStatus {
+  static const active = 'active';
+  static const fixed = 'fixed';
+  static const wontFix = 'wontFix';
+  static const closed = 'closed';
+  static const byDesign = 'byDesign';
+  static const pending = 'pending';
+
+  static String label(String status) => switch (status) {
+    active => 'Active',
+    fixed => 'Resolved',
+    wontFix => "Won't fix",
+    closed => 'Closed',
+    byDesign => 'By design',
+    pending => 'Pending',
+    _ => status,
+  };
+
+  static bool isResolved(String status) =>
+      status == fixed ||
+      status == wontFix ||
+      status == closed ||
+      status == byDesign;
 }
 
 class PrThread {
@@ -74,6 +144,33 @@ class PrThread {
     required this.trackedFromLine,
   });
 
+  /// Parses one thread of the Threads API; null for deleted threads and
+  /// for those with only system comments (votes, reference updates).
+  static PrThread? fromJson(Map<String, dynamic> t) {
+    if (t['isDeleted'] == true) return null;
+    final ctx = (t['threadContext'] as Map?)?.cast<String, dynamic>();
+    final comments = ((t['comments'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((c) => c.cast<String, dynamic>())
+        .where((c) => c['isDeleted'] != true && c['commentType'] != 'system')
+        .map(PrComment.fromJson)
+        .toList();
+    if (comments.isEmpty) return null;
+    final tracking =
+        ((t['pullRequestThreadContext'] as Map?)?['trackingCriteria'] as Map?)
+            ?.cast<String, dynamic>();
+    return PrThread(
+      id: (t['id'] as num).toInt(),
+      status: t['status'] as String? ?? 'unknown',
+      filePath: ctx?['filePath'] as String?,
+      rightLine: ((ctx?['rightFileStart'] as Map?)?['line'] as num?)?.toInt(),
+      leftLine: ((ctx?['leftFileStart'] as Map?)?['line'] as num?)?.toInt(),
+      comments: comments,
+      trackedFromLine:
+          ((tracking?['origRightFileStart'] as Map?)?['line'] as num?)?.toInt(),
+    );
+  }
+
   final int id;
   final String status;
   final String? filePath;
@@ -83,6 +180,15 @@ class PrThread {
 
   /// Line the thread was posted on, when the service moved it.
   final int? trackedFromLine;
+
+  bool get isResolved => PrThreadStatus.isResolved(status);
+  bool get isFileThread => filePath != null;
+  DateTime? get lastActivity => comments.isEmpty
+      ? null
+      : comments
+            .map((c) => c.publishedDate)
+            .whereType<DateTime>()
+            .fold(null, (DateTime? a, b) => a == null || b.isAfter(a) ? b : a);
 }
 
 class PrDiffSource {
@@ -121,16 +227,7 @@ class PrDiffSource {
     final value = (json['value'] as List?) ?? const [];
     return [
       for (final it in value.cast<Map<String, dynamic>>())
-        PrIteration(
-          id: it['id'] as int,
-          sourceCommit:
-              (it['sourceRefCommit'] as Map<String, dynamic>)['commitId']
-                  as String,
-          commonCommit:
-              (it['commonRefCommit'] as Map<String, dynamic>)['commitId']
-                  as String,
-          description: it['description'] as String? ?? '',
-        ),
+        PrIteration.fromJson(it),
     ];
   }
 
@@ -187,52 +284,11 @@ class PrDiffSource {
       project: pr.projectId,
       path: _prPath(pr, 'threads'),
       apiVersion: '7.1',
-      query: {
-        r'$iteration': '$iteration',
-        r'$baseIteration': '$baseIteration',
-      },
+      query: {r'$iteration': '$iteration', r'$baseIteration': '$baseIteration'},
     );
     final value = (json['value'] as List?) ?? const [];
-    final out = <PrThread>[];
-    for (final t in value.cast<Map<String, dynamic>>()) {
-      if (t['isDeleted'] == true) continue;
-      final ctx = t['threadContext'] as Map<String, dynamic>?;
-      final comments = ((t['comments'] as List?) ?? const [])
-          .cast<Map<String, dynamic>>()
-          .where((c) => c['isDeleted'] != true && c['commentType'] != 'system')
-          .map(
-            (c) => PrComment(
-              author:
-                  ((c['author'] as Map<String, dynamic>?)?['displayName']
-                      as String?) ??
-                  '?',
-              content: c['content'] as String? ?? '',
-            ),
-          )
-          .toList();
-      if (comments.isEmpty) continue;
-      final tracking =
-          (t['pullRequestThreadContext'] as Map<String, dynamic>?)
-                  ?['trackingCriteria']
-              as Map<String, dynamic>?;
-      out.add(
-        PrThread(
-          id: t['id'] as int,
-          status: t['status'] as String? ?? 'unknown',
-          filePath: ctx?['filePath'] as String?,
-          rightLine:
-              (ctx?['rightFileStart'] as Map<String, dynamic>?)?['line']
-                  as int?,
-          leftLine:
-              (ctx?['leftFileStart'] as Map<String, dynamic>?)?['line']
-                  as int?,
-          comments: comments,
-          trackedFromLine:
-              (tracking?['origRightFileStart'] as Map<String, dynamic>?)?['line']
-                  as int?,
-        ),
-      );
-    }
-    return out;
+    return [
+      for (final t in value.cast<Map<String, dynamic>>()) ?PrThread.fromJson(t),
+    ];
   }
 }

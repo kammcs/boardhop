@@ -96,7 +96,11 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
   Future<void> _load() async {
     final repo = context.read<WorkItemRepository>();
     try {
-      final item = await repo.refreshItem(widget.org, widget.project, widget.id);
+      final item = await repo.refreshItem(
+        widget.org,
+        widget.project,
+        widget.id,
+      );
       if (!mounted) return;
       setState(() {
         _item = item;
@@ -216,8 +220,7 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
     } on AdoStaleRevisionException {
       if (mounted) {
         setState(
-          () => _error =
-              'This item changed elsewhere. Go back, reload it, and edit again.',
+          () => _error = 'This item changed elsewhere. Go back, reload it, and edit again.',
         );
       }
     } on AdoValidationException catch (e) {

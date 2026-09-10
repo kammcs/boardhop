@@ -1,7 +1,43 @@
 import 'package:flutter/material.dart';
 
+import '../../../data/models/pr_check.dart';
 import '../../../data/models/pull_request.dart';
 import '../../../theme/theme.dart';
+
+IconData checkIcon(PrCheckState state) => switch (state) {
+  PrCheckState.succeeded => Icons.check_circle,
+  PrCheckState.failed => Icons.cancel,
+  PrCheckState.pending => Icons.schedule,
+  PrCheckState.error => Icons.error_outline,
+  PrCheckState.notApplicable => Icons.remove_circle_outline,
+};
+
+Color checkColor(BuildContext context, PrCheckState state) {
+  final colors = context.boardhopColors;
+  final scheme = Theme.of(context).colorScheme;
+  return switch (state) {
+    PrCheckState.succeeded => colors.voteApproved,
+    PrCheckState.failed => colors.voteRejected,
+    PrCheckState.pending => colors.voteWaiting,
+    PrCheckState.error => scheme.error,
+    PrCheckState.notApplicable => scheme.onSurfaceVariant,
+  };
+}
+
+/// Text and color for `mergeStatus` on the overview; null when the service
+/// has not evaluated the merge yet.
+(String, Color)? mergeStatusLabel(BuildContext context, String? status) {
+  final colors = context.boardhopColors;
+  final scheme = Theme.of(context).colorScheme;
+  return switch (status) {
+    'succeeded' => ('No merge conflicts', colors.voteApproved),
+    'conflicts' => ('Merge conflicts', colors.voteRejected),
+    'queued' => ('Merge check pending', colors.voteWaiting),
+    'failure' => ('Merge failed', scheme.error),
+    'rejectedByPolicy' => ('Merge rejected by policy', scheme.error),
+    _ => null,
+  };
+}
 
 IconData voteIcon(PrVote vote) => switch (vote) {
   PrVote.approved => Icons.check_circle,

@@ -137,12 +137,7 @@ void main() {
     });
 
     test('slots split a column into Doing and Done', () {
-      expect(board.slots.map((s) => s.id), [
-        'c1',
-        'c2/doing',
-        'c2/done',
-        'c3',
-      ]);
+      expect(board.slots.map((s) => s.id), ['c1', 'c2/doing', 'c2/done', 'c3']);
       expect(board.slots[2].subtitle, 'Done');
       expect(board.hasLanes, isFalse);
     });
@@ -180,7 +175,11 @@ void main() {
       expect(ops, [
         {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column', 'value': 'Active'},
         {'op': 'add', 'path': '/fields/System.State', 'value': 'Active'},
-        {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column.Done', 'value': true},
+        {
+          'op': 'add',
+          'path': '/fields/WEF_X_Kanban.Column.Done',
+          'value': true,
+        },
       ]);
       final toClosed = BoardRepository.moveOps(
         board,
@@ -188,7 +187,10 @@ void main() {
         board.slots[3],
       );
       expect(toClosed.length, 2);
-      expect(toClosed.any((o) => o['path'].toString().endsWith('.Done')), isFalse);
+      expect(
+        toClosed.any((o) => o['path'].toString().endsWith('.Done')),
+        isFalse,
+      );
       // Same column, other half: only the Done flag changes.
       final toDone = BoardRepository.moveOps(
         board,
@@ -196,7 +198,11 @@ void main() {
         board.slots[2],
       );
       expect(toDone, [
-        {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column.Done', 'value': true},
+        {
+          'op': 'add',
+          'path': '/fields/WEF_X_Kanban.Column.Done',
+          'value': true,
+        },
       ]);
     });
 
@@ -331,10 +337,22 @@ void main() {
   group('format helpers', () {
     test('relativeTime', () {
       final now = DateTime(2026, 9, 10, 12);
-      expect(relativeTime(now.subtract(const Duration(seconds: 5)), now: now), 'just now');
-      expect(relativeTime(now.subtract(const Duration(minutes: 3)), now: now), '3m');
-      expect(relativeTime(now.subtract(const Duration(hours: 5)), now: now), '5h');
-      expect(relativeTime(now.subtract(const Duration(days: 2)), now: now), '2d');
+      expect(
+        relativeTime(now.subtract(const Duration(seconds: 5)), now: now),
+        'just now',
+      );
+      expect(
+        relativeTime(now.subtract(const Duration(minutes: 3)), now: now),
+        '3m',
+      );
+      expect(
+        relativeTime(now.subtract(const Duration(hours: 5)), now: now),
+        '5h',
+      );
+      expect(
+        relativeTime(now.subtract(const Duration(days: 2)), now: now),
+        '2d',
+      );
       expect(relativeTime(DateTime(2026, 9, 1), now: now), 'Sep 1');
       expect(relativeTime(DateTime(2025, 9, 1), now: now), 'Sep 1, 2025');
     });

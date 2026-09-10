@@ -26,6 +26,9 @@ class PullRequestsPage extends StatefulWidget {
 class _PullRequestsPageState extends State<PullRequestsPage> {
   PrListFilter _filter = PrListFilter.toReview;
   List<PullRequest> _items = const [];
+
+  /// When the list on screen came from the cache: its fetch time.
+  DateTime? _cachedAt;
   String? _error;
   bool _loading = false;
   bool _loadedOnce = false;
@@ -36,18 +39,42 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
+  /// Shows the cached list for this filter first (offline-first), then
+  /// replaces it with the network answer; on failure the cached list stays
+  /// with a note of its age.
   Future<void> _refresh() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-    try {
-      final items = await context.read<PullRequestRepository>().list(
+    final repo = context.read<PullRequestRepository>();
+    final filter = _filter;
+    if (!_loadedOnce) {
+      final cached = await repo.cachedList(
         widget.org,
         project: widget.project,
-        filter: _filter,
+        filter: filter,
       );
-      if (mounted) setState(() => _items = items);
+      if (mounted && cached != null && filter == _filter) {
+        setState(() {
+          _items = cached.items;
+          _cachedAt = cached.fetchedAt;
+          _loadedOnce = true;
+        });
+      }
+    }
+    try {
+      final items = await repo.list(
+        widget.org,
+        project: widget.project,
+        filter: filter,
+      );
+      if (mounted && filter == _filter) {
+        setState(() {
+          _items = items;
+          _cachedAt = null;
+        });
+      }
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
@@ -69,6 +96,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
     setState(() {
       _filter = f;
       _items = const [];
+      _cachedAt = null;
       _loadedOnce = false;
     });
     _refresh();
@@ -147,6 +175,11 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
                 ListTile(
                   leading: Icon(Icons.error_outline, color: scheme.error),
                   title: Text(_error!),
+                  subtitle: _cachedAt == null
+                      ? null
+                      : Text(
+                          'Showing the list from ${relativeTime(_cachedAt)}.',
+                        ),
                 ),
               if (_items.isEmpty && _loadedOnce && !_loading)
                 Padding(

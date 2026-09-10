@@ -12,10 +12,7 @@ void main() {
       {'op': 'add', 'path': '/fields/WEF_X_Kanban.Column', 'value': 'Active'},
       {'op': 'remove', 'path': '/fields/System.Tags'},
     ]);
-    expect(fields, {
-      'System.State': 'Active',
-      'WEF_X_Kanban.Column': 'Active',
-    });
+    expect(fields, {'System.State': 'Active', 'WEF_X_Kanban.Column': 'Active'});
   });
 
   test('PendingWrite decodes a queued patch and a conflict', () {

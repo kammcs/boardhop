@@ -282,7 +282,11 @@ class BoardRepository {
     }
     final doneField = board.fields.doneField;
     if (target.done != null && doneField != null) {
-      ops.add({'op': 'add', 'path': '/fields/$doneField', 'value': target.done});
+      ops.add({
+        'op': 'add',
+        'path': '/fields/$doneField',
+        'value': target.done,
+      });
     }
     return ops;
   }
