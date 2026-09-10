@@ -79,7 +79,23 @@ Do not create a client secret or certificate. None is needed for a public client
 ### A4. API permissions
 
 1. Open **API permissions → Add a permission**.
-2. On the **Microsoft APIs** tab, scroll to and select **Azure DevOps**. (If it is not listed there, use the **APIs my organization uses** tab and search for `Azure DevOps`; its application ID is `499b84ac-1321-427f-aa17-267ca6975798`.)
+2. On the **Microsoft APIs** tab, scroll past the "Commonly used" Graph tile to the full list, or type `Azure DevOps` in that tab's search box, and select **Azure DevOps**.
+
+   **If Azure DevOps is not listed anywhere** (as happened in the kammcs tenant on 2026-09-10): the Azure DevOps service principal is only provisioned in a tenant once someone in that tenant has used Azure DevOps, and "APIs my organization uses" lists only provisioned service principals. Create it with the Azure CLI (Cloud Shell in the portal works, no subscription needed):
+
+   ```powershell
+   az login --tenant <kammcs-tenant-id> --allow-no-subscriptions
+   az ad sp create --id 499b84ac-1321-427f-aa17-267ca6975798
+   ```
+
+   or with Microsoft Graph PowerShell:
+
+   ```powershell
+   Connect-MgGraph -TenantId <kammcs-tenant-id> -Scopes "Application.ReadWrite.All"
+   New-MgServicePrincipal -AppId 499b84ac-1321-427f-aa17-267ca6975798
+   ```
+
+   Then reopen Add a permission → **APIs my organization uses** → search `Azure DevOps`. Alternatively, sign in at `https://dev.azure.com` with a kammcs-tenant account and create a free organization; that provisions the service principal as a side effect and gives kammcs a dogfooding org. Customer tenants that already use Azure DevOps (puremedia) are unaffected.
 3. Choose **Delegated permissions** and tick:
 
    | Permission | Used for |
