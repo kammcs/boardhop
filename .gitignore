@@ -11,16 +11,47 @@ research/spikes/results/*.md
 *.p12
 *.jks
 
-# Node / Expo (for when the app scaffold lands)
-node_modules/
-.expo/
-dist/
-web-build/
-ios/build/
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+*.ipr
+*.iws
+.flutter-plugins
+.flutter-plugins-dependencies
+coverage/
+*.log
+*.orig.*
+
+# Android
+android/.gradle/
 android/build/
 android/app/build/
-*.orig.*
-*.log
+android/local.properties
+android/key.properties
+android/secret.properties
+android/app/*.keystore
+android/**/GeneratedPluginRegistrant.java
+android/.cxx/
+
+# iOS
+ios/Pods/
+ios/Podfile.lock
+ios/.symlinks/
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.*
+ios/**/xcuserdata/
+ios/**/*.mode1v3
+ios/**/*.mode2v3
+ios/**/*.perspectivev3
+ios/**/*.pbxuser
+ios/**/DerivedData/
 
 # OS / editor
 .DS_Store

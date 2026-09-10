@@ -1,6 +1,6 @@
 # Boardhop — state and next steps
 
-**As of:** 2026-09-10, end of the discovery session.
+**As of:** 2026-09-10, Flutter scaffold committed; spike F1 awaits a device run.
 **Read first:** [research/00-feasibility-summary.md](research/00-feasibility-summary.md) section 0 (decisions) and 6a (spike results), then [research/08-stack-comparison.md](research/08-stack-comparison.md).
 
 ## Where things stand
@@ -15,19 +15,20 @@
 | Entra | kammcs tenant exists (from the Multipass code-signing project). **Boardhop registration created** as multi-tenant public client with Azure DevOps delegated permissions (`vso.threads_full` is not offered in Entra; `vso.code_write` covers PR threads). **Puremedia admin consent granted** for tenant `342d4cd1-7ea8-4452-8ceb-542b71d159f6` (verified domain `cloudcover.it`); the trailing browser error was the redirect to the `msauth` URI, not a failure. |
 | Test org | `https://dev.azure.com/puremedia`, project "CloudCover 2.0" for read tests; scratch project **"DevOps Mobile App"** for writes (work items #15503–#15507 and PR 8319 left there). PAT in the AzureDevOps MCP config is authorized for spikes; it now has near-full scopes. |
 | Repo | `git@github.com:kammcs/boardhop.git`, branch `main`. Commit and push are pre-approved. |
+| App scaffold | Done. Flutter 3.47.3 / Dart 3.13. `lib/core` (config, `AdoClient`, rate limits, typed errors), `lib/auth` (`AuthService` over `msal_auth` 3.5.3, `AuthBloc`), `lib/data` (drift: organizations, projects, pending_writes), `lib/features/*` (sign-in, org picker, project list, diagnostics; placeholders for work items, boards, PRs, pipelines, activity). Android: `assets/msal_config.json`, `BrowserTabActivity` with the hash from gitignored `android/secret.properties`. iOS: URL scheme, `LSApplicationQueriesSchemes`, keychain group entitlement, deployment target 16.0. 13 unit tests pass; `flutter analyze` is clean. |
 | Still administrative | Partner Center + MPN ID for publisher verification; Visual Studio Marketplace publisher; Apple and Google developer accounts; privacy policy; domain for boardhop. |
 
 ## Values needed from Kelly
 
-- **Entra client ID** of the Boardhop registration (not yet recorded anywhere; keep it out of the public repo, put it in a gitignored `.env` or `--dart-define`).
+- ~~Entra client ID~~ Provided in the gitignored `.env` as `BOARDHOP_CLIENT_ID`; run with `--dart-define-from-file=.env`.
 - Confirmation that `msauth.com.kammcs.boardhop://auth` and the Android debug redirect `msauth://com.kammcs.boardhop/%2F%2Fksb0DQrePXmmxPydZ%2FUbpze98%3D` are saved on the registration.
 - A test device with Microsoft Authenticator signed in to the puremedia tenant (iOS or Android).
 
 ## Next steps, in order
 
-1. **Scaffold the Flutter app** in this repo (`flutter create` with org `com.kammcs`, package `com.kammcs.boardhop`; Flutter from `C:\Users\sixfe\Projects\flutter\flutter\bin`). Structure: `lib/core` (http client with per-service host routing, api-version pinned per call, rate-limit header handling), `lib/auth` (`msal_auth` wrapper, per-tenant account cache), `lib/data` (drift schema, repositories), `lib/features/{work_items,boards,pull_requests,pipelines,activity}`, go_router, bloc. Add CI later.
-2. **Spike F1: `msal_auth` broker sign-in** against puremedia on a real device. Configure client ID, `organizations` authority, redirect URIs, Android `BrowserTabActivity` with the debug signature hash, iOS `LSApplicationQueriesSchemes` (`msauthv2`, `msauthv3`) and keychain group. Verify: interactive sign-in via Authenticator, `acquireTokenSilent` after restart, a call to `https://dev.azure.com/puremedia/_apis/projects?api-version=7.1` with the token, token byte size. Then call `app.vssps.visualstudio.com/_apis/profile/profiles/me` and `/_apis/accounts?memberId=` with the Entra token to confirm org discovery.
-3. **Spike F2: claims-challenge path.** Confirm whether `msal_auth` can pass `claims` to native MSAL for Azure DevOps Continuous Access Evaluation; if not, fork or add a platform channel. Design the 401-with-`WWW-Authenticate`-claims handler in the http client either way.
+1. ~~**Scaffold the Flutter app**~~ Done (see the App scaffold row above). CI still to add.
+2. **Spike F1: `msal_auth` broker sign-in** on a real device. The code is in place; what remains is the device run. Steps: `flutter run --dart-define-from-file=.env` on a phone with Authenticator signed in to puremedia; tap "Sign in with Microsoft"; confirm the org picker lists puremedia and the project list loads; kill and relaunch the app to prove `acquireTokenSilent` restores the session; open Diagnostics from the org picker, run the checks against `puremedia`, and paste the copied report (no tokens in it) into `research/spikes/results/f1-device-run.md` (gitignored). The report covers token byte size, expiry, tenant, scopes, `profiles/me`, `accounts?memberId`, projects, org-scoped profile, and rate-limit headers.
+3. **Spike F2: claims-challenge path.** Half answered: `msal_auth` 3.5.3 has no `claims` parameter on `acquireToken` or `acquireTokenSilent` (checked in the package source), so Continuous Access Evaluation needs a platform channel or a fork. `AdoClient` already surfaces the challenge as `ClaimsChallengeException(claims)`. Remaining: decide fork vs. channel, and confirm on a device that a CAE-triggered 401 actually carries `insufficient_claims`.
 4. **Spike F3: HTML round-trip.** Pull five real descriptions from CloudCover 2.0 (tables, nested lists, inline images, mentions), run through `flutter_quill` Delta conversion and `html_editor_enhanced`, diff the output, pick the editor.
 5. **Spike F4: Kanban drag-and-drop** with `drag_and_drop_lists` (and the team's `super_drag_and_drop` experience): 200 cards, cross-column drop, haptics, auto-scroll, 60 fps on a phone.
 6. **Spike F5: diff viewer prototype.** `diff_match_patch` + `re_highlight` + `super_sliver_list` on a 3,000-line file with a tap-to-comment gutter; threads read with `$iteration`/`$baseIteration`.
@@ -37,7 +38,8 @@
 
 ## Conventions
 
-- Never commit client IDs, tokens or raw spike results. `.gitignore` already excludes `research/spikes/results/*.md` except the README.
+- Never commit client IDs, tokens or raw spike results. `.gitignore` already excludes `research/spikes/results/*.md` except the README, plus `.env` and `android/secret.properties`.
+- After changing drift tables run `dart run build_runner build`; the generated `app_database.g.dart` is committed.
 - Spikes against puremedia: writes only in the "DevOps Mobile App" project. Run with `python research/spikes/_run_with_mcp_creds.py <script>`.
 - Commit messages end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 - Azure DevOps API: pin `api-version=7.1` per operation; read work items without a `fields` filter when the format map is needed; always send `test /rev`.
