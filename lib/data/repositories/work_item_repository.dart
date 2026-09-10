@@ -263,6 +263,38 @@ class WorkItemRepository {
         .toList();
   }
 
+  /// `POST comments?format=markdown` (spike w01): the service stores the
+  /// Markdown and returns the rendered HTML.
+  Future<WorkItemComment> addComment(
+    String org,
+    String project,
+    int id,
+    String text, {
+    String format = 'markdown',
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: project,
+      path: '_apis/wit/workItems/$id/comments',
+      apiVersion: commentsApiVersion,
+      query: {'format': format},
+      body: {'text': text},
+    );
+    return WorkItemComment.fromJson(json);
+  }
+
+  /// Sets plain fields (state, assignee, title…) in one guarded patch.
+  Future<WorkItem> updateFields(
+    String org,
+    String project,
+    WorkItem item,
+    Map<String, Object?> values,
+  ) => patch(org, project, item, [
+    for (final e in values.entries)
+      {'op': 'add', 'path': '/fields/${e.key}', 'value': e.value},
+  ]);
+
   /// Work item types with their colors and icons, cached for a day.
   Future<List<WorkItemType>> types(String org, String project) async {
     final key = '$org/$project';

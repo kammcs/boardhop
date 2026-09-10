@@ -24,8 +24,11 @@ class WorkItemVisuals {
   IconData typeIcon(WorkItem item) =>
       typeOf(item)?.icon ?? WorkItemType.iconFor(_guessIcon(item.type));
 
-  Color stateColor(BuildContext context, WorkItem item) {
-    final state = typeOf(item)?.stateNamed(item.state);
+  Color stateColor(BuildContext context, WorkItem item) =>
+      stateColorFor(context, item, item.state);
+
+  Color stateColorFor(BuildContext context, WorkItem item, String stateName) {
+    final state = typeOf(item)?.stateNamed(stateName);
     final api = parseHexColor(state?.color);
     if (api != null) return tintApiColor(context, api);
     return context.boardhopColors.stateCategory(state?.category ?? '');

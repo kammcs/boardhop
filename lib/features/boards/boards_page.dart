@@ -9,7 +9,6 @@ import '../../data/models/board.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/board_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
-import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import 'widgets/kanban_board.dart';
 
