@@ -6,7 +6,7 @@ Boardhop is an independent product by kammcs. It works with Azure DevOps but is 
 
 ## Status
 
-Discovery is complete and the stack is decided: Flutter (see [research/08-stack-comparison.md](research/08-stack-comparison.md)). The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The app scaffold has not been started yet.
+Discovery is complete and the stack is decided: Flutter (see [research/08-stack-comparison.md](research/08-stack-comparison.md)). The research, decisions, and spike results live in [research/](research/), starting with the [feasibility summary](research/00-feasibility-summary.md). The app scaffold has not been started yet. Current state and the ordered plan are in [NEXT-STEPS.md](NEXT-STEPS.md).
 
 ## Repository layout
 
