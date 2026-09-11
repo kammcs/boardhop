@@ -24,6 +24,7 @@ import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
+import 'features/shared/splash_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_item_edit_page.dart';
 import 'features/work_items/work_items_page.dart';
@@ -47,11 +48,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
       };
     },
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (_, _) =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
-      ),
+      GoRoute(path: '/', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/sign-in', builder: (_, _) => const SignInPage()),
       GoRoute(path: '/diagnostics', builder: (_, _) => const DiagnosticsPage()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),

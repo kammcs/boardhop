@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Edge of the splash artwork (assets/brand/splash.png); the Android 12+
+         system splash and the pre-12 window background sit on it. -->
+    <color name="splash_background">#1d2739</color>
+	<color name="ic_launcher_background">#1d2739</color>
+</resources>

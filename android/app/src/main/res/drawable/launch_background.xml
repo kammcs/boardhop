@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Window background while the engine starts (and, on Android 12+, behind
+     the system splash as it hands over): the splash artwork centered on its
+     own edge color. Bitmap drawables cannot cover-scale, so the Flutter
+     splash page draws the true cover version on its first frame. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <item android:drawable="@color/splash_background" />
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash_cover" />
+    </item>
 </layer-list>
