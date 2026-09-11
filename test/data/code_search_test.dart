@@ -52,6 +52,12 @@ void main() {
       contains('still being built'),
     );
     expect(CodeSearchResults.fromJson({'infoCode': 3}).problem, isNotNull);
+    // Undocumented codes (15 came back for a young scratch project) get a
+    // plain fallback that names the likely cause.
+    expect(
+      CodeSearchResults.fromJson({'infoCode': 15}).problem,
+      allOf(contains('status 15'), contains('indexed')),
+    );
     expect(CodeSearchResults.fromJson({}).problem, isNull);
   });
 }

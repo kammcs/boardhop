@@ -174,6 +174,10 @@ class _ReposPageState extends State<ReposPage> {
         ),
         action: SnackBarAction(label: 'Show', onPressed: () => _reveal(r.id)),
         duration: const Duration(seconds: 6),
+        // Flutter 3.47 keeps a snackbar with an action open until it is
+        // dismissed, which also blocks every later snackbar; this one is a
+        // transient confirmation.
+        persist: false,
       ),
     );
     try {

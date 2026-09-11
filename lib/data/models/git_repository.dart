@@ -620,7 +620,12 @@ class CodeSearchResults extends Equatable {
     3 => 'That query is not valid for code search.',
     4 => 'A wildcard cannot start a term.',
     5 => 'Multiple words are not supported with a code facet.',
-    _ => 'Code search returned status $infoCode.',
+    // The service documents 0-11, 19 and 20 and calls the rest internal;
+    // 15 came back for a young project whose repository was not searchable
+    // yet (iOS walkthrough, 2026-09-11).
+    _ =>
+      'Code search could not run this query (status $infoCode). '
+          'The repository may not be indexed yet; try again later.',
   };
 
   @override

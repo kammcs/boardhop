@@ -335,7 +335,13 @@ class _WorkItemTile extends StatelessWidget {
       title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: Spacing.xs),
-        child: Row(
+        // A Wrap rather than a Row: at large text scales (or with a long
+        // state name) the segments flow onto a second line instead of
+        // overflowing the tile.
+        child: Wrap(
+          spacing: Spacing.sm,
+          runSpacing: Spacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               '${item.type} ${item.id}',
@@ -343,22 +349,23 @@ class _WorkItemTile extends StatelessWidget {
                 color: scheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(width: Spacing.sm),
-            StateDot(color: visuals.stateColor(context, item)),
-            const SizedBox(width: Spacing.xs),
-            Text(item.state, style: theme.textTheme.labelMedium),
-            if (iteration.isNotEmpty) ...[
-              const SizedBox(width: Spacing.sm),
-              Flexible(
-                child: Text(
-                  iteration,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                StateDot(color: visuals.stateColor(context, item)),
+                const SizedBox(width: Spacing.xs),
+                Text(item.state, style: theme.textTheme.labelMedium),
+              ],
+            ),
+            if (iteration.isNotEmpty)
+              Text(
+                iteration,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
           ],
         ),
       ),

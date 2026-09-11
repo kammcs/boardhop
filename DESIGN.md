@@ -48,7 +48,7 @@ Locked 2026-09-10, before the feature screens. Everything visual flows from one 
 - Lists: `ListTile` inside `ListView` for navigation lists; `Card` only when an item has several lines of mixed content (work item cards on a board, PR summaries).
 - Primary action: `FilledButton`. Secondary: `OutlinedButton` or `TextButton`. Never two filled buttons side by side.
 - Loading: `LinearProgressIndicator` under the app bar for refreshes that keep stale content visible; `CircularProgressIndicator.adaptive` only for a truly empty screen.
-- Errors: inline, near the content they concern, in `colorScheme.error`, with the Azure DevOps message shown verbatim where it helps the user or their admin (AADSTS codes, TF codes). Snackbars only for transient confirmations.
+- Errors: inline, near the content they concern, in `colorScheme.error`, with the Azure DevOps message shown verbatim where it helps the user or their admin (AADSTS codes, TF codes). Snackbars only for transient confirmations; one with an action passes `persist: false`, because Flutter 3.47 otherwise keeps it open until dismissed and every later snackbar queues behind it.
 - Offline and queued writes (a settled decision) show a persistent, unobtrusive banner, not a dialog.
 - Empty states have one sentence and, where possible, one action.
 

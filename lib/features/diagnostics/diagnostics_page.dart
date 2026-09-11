@@ -274,6 +274,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             label: Text(_running ? 'Running…' : 'Run checks'),
           ),
           const SizedBox(height: 16),
+          const _EnvironmentCard(),
           for (final c in _checks)
             Card(
               child: ListTile(
@@ -291,6 +292,41 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// What the platform tells Flutter about this session: the layout class,
+/// text scale and accessibility flags that change behaviour (for one,
+/// `accessibleNavigation` keeps snackbars with an action open until they
+/// are dismissed). DESIGN.md section 8 checks dynamic type and screen
+/// readers here before each milestone.
+class _EnvironmentCard extends StatelessWidget {
+  const _EnvironmentCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final lines = <String>[
+      'platform: ${Theme.of(context).platform.name}',
+      'size: ${mq.size.width.round()} x ${mq.size.height.round()} dp, '
+          'breakpoint: ${context.breakpoint.name}',
+      'textScale: ${mq.textScaler.scale(16) / 16}',
+      'accessibleNavigation: ${mq.accessibleNavigation}',
+      'boldText: ${mq.boldText}, highContrast: ${mq.highContrast}',
+      'disableAnimations: ${mq.disableAnimations}, '
+          'invertColors: ${mq.invertColors}',
+    ];
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.phone_iphone),
+        title: const Text('Environment'),
+        subtitle: Text(
+          lines.join('\n'),
+          style: BoardhopTheme.codeStyle(context),
+        ),
+        isThreeLine: true,
       ),
     );
   }
