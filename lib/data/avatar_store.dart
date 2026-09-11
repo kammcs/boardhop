@@ -34,36 +34,42 @@ class AvatarStore {
   /// Cache file name: the source key with unsafe characters replaced, so
   /// the same person at the same size maps to one file across sessions.
   @visibleForTesting
-  static String fileNameFor(AvatarSource source) {
-    final safe = source.key.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  static String fileNameFor(AvatarSource source) => fileNameForKey(source.key);
+
+  static String fileNameForKey(String key) {
+    final safe = key.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     return '${safe.length > 150 ? safe.substring(safe.length - 150) : safe}.png';
   }
 
   /// Bytes already in memory, else null (no I/O).
   Uint8List? cached(AvatarSource source) => _memory[source.key];
+  Uint8List? cachedKey(String key) => _memory[key];
 
   /// Loads from memory, then disk, then the service. Null when the fetch
   /// failed; failures are remembered for the session so lists do not
   /// hammer the endpoint.
-  Future<Uint8List?> load(AvatarSource source) {
-    final key = source.key;
+  Future<Uint8List?> load(AvatarSource source) =>
+      loadWith(source.key, () => _fetch(source));
+
+  /// Same pipeline for any keyed image (the account photo from Graph).
+  Future<Uint8List?> loadWith(String key, Future<Uint8List?> Function() fetch) {
     final hit = _memory[key];
     if (hit != null) return Future.value(hit);
     if (_failed.contains(key)) return Future.value(null);
     return _inFlight.putIfAbsent(key, () async {
       try {
-        final fromDisk = await _readDisk(source);
+        final fromDisk = await _readDisk(key);
         if (fromDisk != null) {
           _memory[key] = fromDisk;
           return fromDisk;
         }
-        final bytes = await _fetch(source);
+        final bytes = await fetch();
         if (bytes == null || bytes.isEmpty) {
           _failed.add(key);
           return null;
         }
         _memory[key] = bytes;
-        unawaited(_writeDisk(source, bytes));
+        unawaited(_writeDisk(key, bytes));
         return bytes;
       } on AdoException catch (e) {
         debugPrint('avatar $key: ${e.message}');
@@ -109,10 +115,10 @@ class AvatarStore {
     }
   }
 
-  Future<Uint8List?> _readDisk(AvatarSource source) async {
+  Future<Uint8List?> _readDisk(String key) async {
     final dir = await _dir();
     if (dir == null) return null;
-    final file = File(p.join(dir.path, fileNameFor(source)));
+    final file = File(p.join(dir.path, fileNameForKey(key)));
     try {
       if (!await file.exists()) return null;
       final stat = await file.stat();
@@ -124,11 +130,11 @@ class AvatarStore {
     }
   }
 
-  Future<void> _writeDisk(AvatarSource source, Uint8List bytes) async {
+  Future<void> _writeDisk(String key, Uint8List bytes) async {
     final dir = await _dir();
     if (dir == null) return;
     try {
-      await File(p.join(dir.path, fileNameFor(source)))
+      await File(p.join(dir.path, fileNameForKey(key)))
           .writeAsBytes(bytes, flush: true);
     } catch (e) {
       debugPrint('avatar cache write failed: $e');

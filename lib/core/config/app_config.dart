@@ -24,6 +24,10 @@ abstract final class AppConfig {
   static const adoResourceId = '499b84ac-1321-427f-aa17-267ca6975798';
   static const adoScopes = <String>['$adoResourceId/.default'];
 
+  /// Microsoft Graph, own profile only (name, mail, company, photo) for
+  /// the account header. Requested silently; never prompts.
+  static const graphScopes = <String>['User.Read'];
+
   /// `CP1` declares Continuous Access Evaluation support: longer-lived
   /// tokens, and 401 claims challenges that `AuthService.resolveChallenge`
   /// answers. Android reads the same flag from `assets/msal_config.json`.

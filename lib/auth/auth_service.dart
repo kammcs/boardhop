@@ -113,10 +113,11 @@ class AuthService {
     String? tenantId,
     String? claims,
     bool forceRefresh = false,
+    List<String> scopes = AppConfig.adoScopes,
   }) async {
     try {
       final result = await _client.acquireTokenSilent(
-        scopes: AppConfig.adoScopes,
+        scopes: scopes,
         authority: tenantId == null ? null : AppConfig.authorityFor(tenantId),
         claims: claims,
         forceRefresh: forceRefresh,
@@ -133,6 +134,28 @@ class AuthService {
       throw AdoAuthException('${e.runtimeType}: ${e.message}');
     }
   }
+
+  /// Microsoft Graph token (`User.Read`) for the signed-in person's own
+  /// name, mail, company and photo. Silent only: null when the tenant has
+  /// not consented or MSAL would need the user, so callers fall back to
+  /// the Azure DevOps profile instead of prompting.
+  Future<String?> graphAccessToken() async {
+    final cached = _graphToken;
+    if (cached != null &&
+        cached.expiresOn.isAfter(DateTime.now().add(_expirySlack))) {
+      return cached.accessToken;
+    }
+    try {
+      final result = await acquireSilent(scopes: AppConfig.graphScopes);
+      _graphToken = result;
+      return result.accessToken;
+    } on AdoException catch (e) {
+      debugPrint('Graph token unavailable: ${e.message}');
+      return null;
+    }
+  }
+
+  AuthenticationResult? _graphToken;
 
   /// `TokenProvider` for `AdoClient`: cached token if fresh, else silent.
   Future<String> accessToken({String? tenantId}) async {
@@ -168,6 +191,7 @@ class AuthService {
 
   Future<void> signOut() async {
     _byTenant.clear();
+    _graphToken = null;
     if (_pca == null) return;
     try {
       await _client.signOut();

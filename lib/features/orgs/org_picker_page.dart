@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -5,7 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../data/models/organization.dart';
+import '../../data/repositories/account_repository.dart';
 import '../../data/repositories/org_repository.dart';
+import '../../theme/theme.dart';
+import 'widgets/account_header.dart';
 
 class OrgPickerPage extends StatefulWidget {
   const OrgPickerPage({super.key});
@@ -17,11 +21,38 @@ class OrgPickerPage extends StatefulWidget {
 class _OrgPickerPageState extends State<OrgPickerPage> {
   String? _error;
   bool _refreshing = false;
+  AccountHeader? _header;
+  Uint8List? _photo;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHeader();
+      _refresh();
+    });
+  }
+
+  /// Cached header first, then Graph / profile; the photo arrives on its
+  /// own so the text never waits for it.
+  Future<void> _loadHeader() async {
+    final account = context.read<AccountRepository>();
+    final cached = await account.cached();
+    if (mounted && cached != null) {
+      setState(() {
+        _header = cached;
+        _photo = account.cachedPhoto();
+      });
+    }
+    account.photo().then((bytes) {
+      if (mounted && bytes != null) setState(() => _photo = bytes);
+    });
+    try {
+      final fresh = await account.refresh();
+      if (mounted) setState(() => _header = fresh);
+    } on AdoException catch (e) {
+      debugPrint('account header: ${e.message}');
+    }
   }
 
   Future<void> _refresh() async {
@@ -77,13 +108,26 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                if (username != null)
-                  ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(username),
-                    dense: true,
-                  ),
+                AccountHeaderBar(
+                  header: _header,
+                  fallbackEmail: username,
+                  photo: _photo,
+                ),
                 if (_refreshing) const LinearProgressIndicator(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Spacing.lg,
+                    Spacing.lg,
+                    Spacing.lg,
+                    Spacing.xs,
+                  ),
+                  child: Text(
+                    'Azure DevOps organizations',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
                 if (_error != null)
                   ListTile(
                     leading: Icon(

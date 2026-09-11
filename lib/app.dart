@@ -10,6 +10,7 @@ import 'core/notifications/notification_service.dart';
 import 'data/activity_sync.dart';
 import 'data/avatar_store.dart';
 import 'data/db/app_database.dart';
+import 'data/repositories/account_repository.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/board_repository.dart';
@@ -37,6 +38,7 @@ class AppDependencies {
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems);
     activity = ActivityRepository(client, db, pullRequests, pipelines);
+    account = AccountRepository(auth, orgs, avatars, db: db);
     activitySync = ActivitySync(
       activity: activity,
       orgs: orgs,
@@ -60,6 +62,7 @@ class AppDependencies {
   late final WriteQueue queue;
   late final ActivityRepository activity;
   late final ActivitySync activitySync;
+  late final AccountRepository account;
 }
 
 class BoardhopApp extends StatefulWidget {
@@ -139,6 +142,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.activitySync),
         RepositoryProvider.value(value: deps.notifications),
         RepositoryProvider.value(value: deps.avatars),
+        RepositoryProvider.value(value: deps.account),
       ],
       child: BlocProvider.value(
         value: _authBloc,

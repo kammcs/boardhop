@@ -1,6 +1,7 @@
 import 'package:boardhop/core/util/format.dart';
 import 'package:boardhop/data/models/board.dart';
 import 'package:boardhop/data/avatar_store.dart';
+import 'package:boardhop/data/repositories/account_repository.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/repositories/board_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
@@ -411,6 +412,24 @@ void main() {
         AvatarStore.fileNameFor(AvatarSource.url('https://x/y?id=1')),
         'url_https___x_y_id_1.png',
       );
+    });
+  });
+
+  group('AccountHeader', () {
+    test('from Graph me + organization, and json round trip', () {
+      final h = AccountHeader.fromGraph(
+        {'displayName': 'Kelly Kamm', 'mail': 'kkamm@cloudcover.it'},
+        {'displayName': 'CloudCover IoT, Inc'},
+      );
+      expect(h.email, 'kkamm@cloudcover.it');
+      expect(h.organizationName, 'CloudCover IoT, Inc');
+      expect(AccountHeader.fromJson(h.toJson()), h);
+      final upn = AccountHeader.fromGraph({
+        'displayName': 'X',
+        'userPrincipalName': 'x@y.z',
+      }, null);
+      expect(upn.email, 'x@y.z');
+      expect(upn.organizationName, isNull);
     });
   });
 }
