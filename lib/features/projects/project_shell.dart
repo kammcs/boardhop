@@ -17,11 +17,16 @@ class ProjectShell extends StatefulWidget {
     required this.shell,
     required this.org,
     required this.project,
+    required this.location,
   });
 
   final StatefulNavigationShell shell;
   final String org;
   final String project;
+
+  /// Current path inside the shell, used to tell sideways-scrolling
+  /// pages (which run under the glass rail) from vertical ones.
+  final String location;
 
   @override
   State<ProjectShell> createState() => _ProjectShellState();
@@ -87,11 +92,17 @@ class _ProjectShellState extends State<ProjectShell>
   /// Share of the shell height the glass rail spans on Apple tablets.
   static const _railHeightFactor = 0.8;
 
-  /// Room on each side of the rail for its shadow to fade out (its blur
-  /// radius), and the body inset that follows from it.
+  /// Room between the screen edge and the rail for its shadow to fade
+  /// (its blur radius), and the gutter a page keeps clear of the rail.
   static const _railMargin = Spacing.xl;
   static const _railGutter =
-      _railMargin + GlassNavigationRail.width + _railMargin;
+      _railMargin + GlassNavigationRail.width + Spacing.lg;
+
+  /// Pages whose content scrolls sideways (the Kanban board) run under
+  /// the rail: they get the gutter as left safe-area padding, so columns
+  /// rest clear of the rail and slide under it when scrolled. Vertical
+  /// pages are padded clear of it instead.
+  static bool _bleedsUnderRail(String location) => location.endsWith('/boards');
 
   String projectPath(BuildContext context, String tail) =>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
@@ -135,18 +146,29 @@ class _ProjectShellState extends State<ProjectShell>
       // Apple tablets get a floating glass rail over the page background
       // (no rail column, no divider), so the scaffold color runs edge to
       // edge and the page app bar is not cut into on the left.
-      // The rail is layered above the body (a later Stack child), so its
-      // shadow falls over the page edge instead of being painted over, and
-      // the gutter leaves the shadow room to fade before the screen edge.
+      // Liquid glass: the rail floats above the page (a later Stack child)
+      // and shows what passes under it through its blur. Vertical pages
+      // are padded clear of it; sideways scrollers run under it with the
+      // gutter as their leading inset. The page app bar stays clear because
+      // the rail keeps a tenth of the height free at the top.
+      final mq = MediaQuery.of(context);
+      final page = _bleedsUnderRail(widget.location)
+          ? MediaQuery(
+              data: mq.copyWith(
+                padding: mq.padding.copyWith(
+                  left: mq.padding.left + _railGutter,
+                ),
+              ),
+              child: body,
+            )
+          : Padding(
+              padding: const EdgeInsets.only(left: _railGutter),
+              child: body,
+            );
       return Scaffold(
         body: Stack(
           children: [
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.only(left: _railGutter),
-                child: body,
-              ),
-            ),
+            Positioned.fill(child: page),
             Positioned(
               left: _railMargin,
               top: 0,

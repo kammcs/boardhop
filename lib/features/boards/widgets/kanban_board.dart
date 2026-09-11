@@ -239,12 +239,17 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           _columnWidth = kanbanColumnWidth(constraints.maxWidth);
+          // The left safe-area padding is the shell's floating rail on
+          // Apple tablets: columns rest clear of it and scroll under it.
+          final inset = MediaQuery.paddingOf(context).left;
           return ListView.builder(
             controller: _horizontal,
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(
-              horizontal: Spacing.lg,
-              vertical: Spacing.sm,
+            padding: EdgeInsets.fromLTRB(
+              Spacing.lg + inset,
+              Spacing.sm,
+              Spacing.lg,
+              Spacing.sm,
             ),
             itemCount: widget.columns.length,
             itemBuilder: (context, c) => Padding(

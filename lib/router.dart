@@ -103,6 +103,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   shell: shell,
                   org: state.pathParameters['org']!,
                   project: state.pathParameters['project']!,
+                  location: state.uri.path,
                 ),
                 branches: [
                   StatefulShellBranch(

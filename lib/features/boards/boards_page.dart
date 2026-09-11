@@ -330,9 +330,11 @@ class _BoardsPageState extends State<BoardsPage> {
               height: 48,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Spacing.lg,
-                  vertical: Spacing.xs,
+                padding: EdgeInsets.fromLTRB(
+                  Spacing.lg + MediaQuery.paddingOf(context).left,
+                  Spacing.xs,
+                  Spacing.lg,
+                  Spacing.xs,
                 ),
                 children: [
                   ChoiceChip(

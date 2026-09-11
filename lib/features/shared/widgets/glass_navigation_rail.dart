@@ -25,9 +25,14 @@ class GlassRailDestination {
 /// stays one color from edge to edge and the page's app bar keeps its
 /// full width to the right of the gutter.
 ///
-/// Colors come from the theme: the tint is a translucent container tone,
-/// the selected destination reuses the rail indicator color, and text and
-/// icons use the on-surface roles, so both modes read the same way.
+/// Follows Apple's Liquid Glass material: the page scrolls under the rail
+/// and stays visible through it (a blur plus a mild saturation boost, so
+/// what lies behind reads as color rather than mud), a thin translucent
+/// tint, a specular highlight along the top edge and a soft shadow that
+/// lifts it off the page. Colors come from the theme: the tint is the
+/// surface tone, the selected destination reuses the rail indicator
+/// color, and text and icons use the on-surface roles, so both modes read
+/// the same way.
 class GlassNavigationRail extends StatelessWidget {
   const GlassNavigationRail({
     super.key,
@@ -48,6 +53,24 @@ class GlassNavigationRail extends StatelessWidget {
 
   /// Width of one destination and so of the whole rail.
   static const double width = 72;
+
+  /// Blur radius of the glass; the shell keeps this much margin around
+  /// the rail so the shadow can fade.
+  static const double blurSigma = 20;
+
+  /// Saturation boost applied to whatever shows through the glass.
+  static const double _saturation = 1.25;
+
+  static ColorFilter _saturate(double s) {
+    const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+    final sr = (1 - s) * lr, sg = (1 - s) * lg, sb = (1 - s) * lb;
+    return ColorFilter.matrix(<double>[
+      sr + s, sg, sb, 0, 0, //
+      sr, sg + s, sb, 0, 0, //
+      sr, sg, sb + s, 0, 0, //
+      0, 0, 0, 1, 0,
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,13 +95,32 @@ class GlassNavigationRail extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: DecoratedBox(
+          filter: ImageFilter.compose(
+            outer: _saturate(_saturation),
+            inner: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          ),
+          child: Container(
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+              color: scheme.surface.withValues(alpha: 0.42),
+              borderRadius: radius,
+            ),
+            // Painted over the content so they do not change the layout
+            // width: the hairline edge, and a specular sheen along the top
+            // that fades out, the way glass picks up the light above it.
+            foregroundDecoration: BoxDecoration(
               borderRadius: radius,
               border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
+                color: scheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0, 0.35, 1],
+                colors: [
+                  scheme.surfaceBright.withValues(alpha: 0.35),
+                  scheme.surfaceBright.withValues(alpha: 0.04),
+                  scheme.onSurface.withValues(alpha: 0.03),
+                ],
               ),
             ),
             child: Padding(
