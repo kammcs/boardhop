@@ -5,8 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/pending_writes_banner.dart';
-import '../shared/widgets/glass_navigation_rail.dart';
 import '../shared/account_scope.dart';
+import '../shared/widgets/glass_navigation_rail.dart';
+import 'glass_shell_layout.dart';
 
 /// Bottom navigation (phones) or a rail (wider) across a project's areas.
 /// Each branch keeps its own navigator and scroll state. Also the place
@@ -89,26 +90,8 @@ class _ProjectShellState extends State<ProjectShell>
         ),
       ];
 
-  /// Share of the shell height (landscape) or width (portrait) the glass
-  /// rail spans on Apple tablets.
-  static const _railHeightFactor = 0.8;
-
-  /// Room between the screen edge and the rail for its shadow to fade
-  /// (its blur radius), and the gutter a page keeps clear of the rail.
-  static const _railMargin = Spacing.xl;
-  static const _railGutter =
-      _railMargin + GlassNavigationRail.width + Spacing.lg;
-
-  /// Portrait: the same rail lies along the bottom; pages get this much
-  /// bottom safe-area padding, so vertical content scrolls under the bar
-  /// and its end still clears it (the usual home-indicator mechanism).
-  static const _barGutter =
-      _railMargin + GlassNavigationRail.thickness + Spacing.lg;
-
   /// Pages whose content scrolls sideways (the Kanban board) run under
-  /// the rail: they get the gutter as left safe-area padding, so columns
-  /// rest clear of the rail and slide under it when scrolled. Vertical
-  /// pages are padded clear of it instead.
+  /// the glass rail; see [GlassShellLayout].
   static bool _bleedsUnderRail(String location) => location.endsWith('/boards');
 
   String projectPath(BuildContext context, String tail) =>
@@ -150,136 +133,51 @@ class _ProjectShellState extends State<ProjectShell>
     }
     final platform = Theme.of(context).platform;
     if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
-      // Apple tablets get a floating glass rail over the page background
-      // (no rail column, no divider), so the scaffold color runs edge to
-      // edge and the page app bar is not cut into on the left.
-      // Liquid glass: the rail floats above the page (a later Stack child)
-      // and shows what passes under it through its blur. Vertical pages
-      // are padded clear of it; sideways scrollers run under it with the
-      // gutter as their leading inset. The page app bar stays clear because
-      // the rail keeps a tenth of the height free at the top.
-      final mq = MediaQuery.of(context);
-      final destinations = [
-        for (final d in _destinations)
-          GlassRailDestination(
-            icon: d.icon,
-            selectedIcon: d.selected,
-            label: d.label,
-          ),
-      ];
-      if (mq.orientation == Orientation.portrait) {
-        return Scaffold(
-          body: Stack(
-            children: [
-              Positioned.fill(
-                child: MediaQuery(
-                  data: mq.copyWith(
-                    padding: mq.padding.copyWith(
-                      bottom: mq.padding.bottom + _barGutter,
-                    ),
-                  ),
-                  child: body,
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: _railMargin,
-                child: SafeArea(
-                  top: false,
-                  child: Center(
-                    child: FractionallySizedBox(
-                      widthFactor: _railHeightFactor,
-                      child: GlassNavigationRail(
-                        axis: Axis.horizontal,
-                        spread: true,
-                        selectedIndex: shell.currentIndex,
-                        onDestinationSelected: (i) => _select(context, i),
-                        destinations: destinations,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-      // Landscape: the rail floats on the side chosen in Settings >
-      // Appearance (right by default).
-      final onRight = ThemeScope.of(context).railSide == RailSide.right;
-      final page = _bleedsUnderRail(widget.location)
-          ? MediaQuery(
-              data: mq.copyWith(
-                padding: mq.padding.copyWith(
-                  left: onRight
-                      ? mq.padding.left
-                      : mq.padding.left + _railGutter,
-                  right: onRight
-                      ? mq.padding.right + _railGutter
-                      : mq.padding.right,
-                ),
-              ),
-              child: body,
-            )
-          : Padding(
-              padding: EdgeInsets.only(
-                left: onRight ? 0 : _railGutter,
-                right: onRight ? _railGutter : 0,
-              ),
-              child: body,
-            );
-      return Scaffold(
-        body: Stack(
-          children: [
-            Positioned.fill(child: page),
-            Positioned(
-              left: onRight ? null : _railMargin,
-              right: onRight ? _railMargin : null,
-              top: 0,
-              bottom: 0,
-              width: GlassNavigationRail.width,
-              child: SafeArea(
-                left: !onRight,
-                right: onRight,
-                // Centered, four fifths of the height, destinations spread
-                // along it (Kelly's iPad feedback).
-                child: Center(
-                  child: FractionallySizedBox(
-                    heightFactor: _railHeightFactor,
-                    child: GlassNavigationRail(
-                      spread: true,
-                      selectedIndex: shell.currentIndex,
-                      onDestinationSelected: (i) => _select(context, i),
-                      destinations: destinations,
-                    ),
-                  ),
-                ),
-              ),
+      // Apple tablets, and phones in landscape, get the floating glass
+      // rail on the side chosen in Settings > Appearance (right by
+      // default); the layout rules live in GlassShellLayout.
+      return GlassShellLayout(
+        body: body,
+        destinations: [
+          for (final d in _destinations)
+            GlassRailDestination(
+              icon: d.icon,
+              selectedIcon: d.selected,
+              label: d.label,
             ),
-          ],
-        ),
+        ],
+        selectedIndex: shell.currentIndex,
+        onDestinationSelected: (i) => _select(context, i),
+        bleedsUnderRail: _bleedsUnderRail(widget.location),
+        railOnRight: ThemeScope.of(context).railSide == RailSide.right,
       );
     }
     return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: shell.currentIndex,
-            onDestinationSelected: (i) => _select(context, i),
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              for (final d in _destinations)
-                NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selected),
-                  label: Text(d.label),
-                ),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: body),
-        ],
+      // Android keeps Material's rail. The row as a whole keeps clear of a
+      // display cutout on the side, as the glass layout does (no Android
+      // device in landscape checked yet).
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: shell.currentIndex,
+              onDestinationSelected: (i) => _select(context, i),
+              labelType: NavigationRailLabelType.all,
+              destinations: [
+                for (final d in _destinations)
+                  NavigationRailDestination(
+                    icon: Icon(d.icon),
+                    selectedIcon: Icon(d.selected),
+                    label: Text(d.label),
+                  ),
+              ],
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: body),
+          ],
+        ),
       ),
     );
   }

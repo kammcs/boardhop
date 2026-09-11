@@ -71,18 +71,23 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
             final accounts = state is AuthSignedIn
                 ? state.accounts
                 : const <Account>[];
-            return RefreshIndicator(
-              onRefresh: _refreshAll,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  for (final account in accounts)
-                    _AccountSection(
-                      key: ValueKey(account.id),
-                      account: account,
-                      refreshTick: _refreshTick,
-                    ),
-                ],
+            // Clear of the Dynamic Island and the corners in landscape.
+            return SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator(
+                onRefresh: _refreshAll,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    for (final account in accounts)
+                      _AccountSection(
+                        key: ValueKey(account.id),
+                        account: account,
+                        refreshTick: _refreshTick,
+                      ),
+                  ],
+                ),
               ),
             );
           },

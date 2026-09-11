@@ -51,9 +51,10 @@ class GlassNavigationRail extends StatelessWidget {
   /// (a tablet in portrait).
   final Axis axis;
 
-  /// When true the rail fills the height it is given and spaces the
-  /// destinations evenly along it (the shell hands it 80% of the screen,
-  /// centered); when false it is only as tall as its destinations.
+  /// When true the destinations are spaced evenly along the rail, which
+  /// then takes whatever length it is held to beyond their own (the shell
+  /// holds it to at least 80% of the screen, centered); when false it is
+  /// only as long as its destinations.
   final bool spread;
 
   /// Width of one destination and so of a vertical rail.
@@ -138,7 +139,7 @@ class GlassNavigationRail extends StatelessWidget {
                   : const EdgeInsets.symmetric(horizontal: Spacing.sm),
               child: Flex(
                 direction: axis,
-                mainAxisSize: spread ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: spread
                     ? MainAxisAlignment.spaceEvenly
                     : MainAxisAlignment.start,

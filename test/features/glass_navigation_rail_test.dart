@@ -108,6 +108,41 @@ void main() {
     expect((last.dy - first.dy) / 3, greaterThan(100));
   });
 
+  testWidgets('spread mode takes a minimum length and grows only for its items', (
+    tester,
+  ) async {
+    Future<double> heightHeldTo(double minHeight) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: minHeight),
+                child: GlassNavigationRail(
+                  spread: true,
+                  destinations: destinations,
+                  selectedIndex: 0,
+                  onDestinationSelected: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return tester.getSize(find.byType(GlassNavigationRail)).height;
+    }
+
+    // The shell holds the rail to 80% of the screen: it takes exactly that.
+    expect(await heightHeldTo(400), 400);
+    // Held to less than its destinations need, it stays as tall as they
+    // are (large text on a phone in landscape) rather than overflowing.
+    final packed = await heightHeldTo(0);
+    expect(packed, greaterThan(100));
+    expect(await heightHeldTo(100), packed);
+  });
+
   testWidgets('horizontal spread mode fills the given width', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

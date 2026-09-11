@@ -76,48 +76,53 @@ class _ProjectListPageState extends State<ProjectListPage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: StreamBuilder<List<Project>>(
-          stream: context.read<ProjectRepository>().watch(widget.org),
-          builder: (context, snapshot) {
-            final projects = snapshot.data ?? const <Project>[];
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                if (_refreshing) const LinearProgressIndicator(),
-                if (_error != null)
-                  ListTile(
-                    leading: Icon(
-                      Icons.error_outline,
-                      color: Theme.of(context).colorScheme.error,
+      // Clear of the Dynamic Island and the corners in landscape.
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: StreamBuilder<List<Project>>(
+            stream: context.read<ProjectRepository>().watch(widget.org),
+            builder: (context, snapshot) {
+              final projects = snapshot.data ?? const <Project>[];
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  if (_refreshing) const LinearProgressIndicator(),
+                  if (_error != null)
+                    ListTile(
+                      leading: Icon(
+                        Icons.error_outline,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      title: Text(_error!),
                     ),
-                    title: Text(_error!),
-                  ),
-                for (final p in projects)
-                  ListTile(
-                    leading: AdoTile(
-                      name: p.name,
-                      color: AdoTiles.serviceColor(p.name),
-                      initials: AdoTiles.serviceInitials(p.name),
-                      source: p.tileSource(widget.org),
+                  for (final p in projects)
+                    ListTile(
+                      leading: AdoTile(
+                        name: p.name,
+                        color: AdoTiles.serviceColor(p.name),
+                        initials: AdoTiles.serviceInitials(p.name),
+                        source: p.tileSource(widget.org),
+                      ),
+                      title: Text(p.name),
+                      subtitle: p.description == null || p.description!.isEmpty
+                          ? null
+                          : Text(
+                              p.description!,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                      onTap: () => context.go(
+                        '${orgRoute(context, widget.org)}'
+                        '/projects/${Uri.encodeComponent(p.name)}/home',
+                      ),
                     ),
-                    title: Text(p.name),
-                    subtitle: p.description == null || p.description!.isEmpty
-                        ? null
-                        : Text(
-                            p.description!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                    onTap: () => context.go(
-                      '${orgRoute(context, widget.org)}'
-                      '/projects/${Uri.encodeComponent(p.name)}/home',
-                    ),
-                  ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

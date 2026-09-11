@@ -257,41 +257,45 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            controller: _orgController,
-            decoration: const InputDecoration(
-              labelText: 'Organization to probe',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _running ? null : _run,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(_running ? 'Running…' : 'Run checks'),
-          ),
-          const SizedBox(height: 16),
-          const _EnvironmentCard(),
-          for (final c in _checks)
-            Card(
-              child: ListTile(
-                leading: Icon(switch (c.status) {
-                  'ok' => Icons.check_circle,
-                  'fail' => Icons.error,
-                  _ => Icons.hourglass_empty,
-                }),
-                title: Text(c.name),
-                subtitle: Text(
-                  '${c.detail}\n${c.elapsed?.inMilliseconds ?? '-'} ms',
-                  style: BoardhopTheme.codeStyle(context),
-                ),
-                isThreeLine: true,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            TextField(
+              controller: _orgController,
+              decoration: const InputDecoration(
+                labelText: 'Organization to probe',
+                border: OutlineInputBorder(),
               ),
             ),
-        ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _running ? null : _run,
+              icon: const Icon(Icons.play_arrow),
+              label: Text(_running ? 'Running…' : 'Run checks'),
+            ),
+            const SizedBox(height: 16),
+            const _EnvironmentCard(),
+            for (final c in _checks)
+              Card(
+                child: ListTile(
+                  leading: Icon(switch (c.status) {
+                    'ok' => Icons.check_circle,
+                    'fail' => Icons.error,
+                    _ => Icons.hourglass_empty,
+                  }),
+                  title: Text(c.name),
+                  subtitle: Text(
+                    '${c.detail}\n${c.elapsed?.inMilliseconds ?? '-'} ms',
+                    style: BoardhopTheme.codeStyle(context),
+                  ),
+                  isThreeLine: true,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
