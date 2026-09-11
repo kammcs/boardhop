@@ -15,10 +15,20 @@ import 'widgets/pr_visuals.dart';
 /// Pull request inbox: to review, created by me, or all active, across the
 /// organization (spike S4's org-level list) or inside one project.
 class PullRequestsPage extends StatefulWidget {
-  const PullRequestsPage({super.key, required this.org, this.project});
+  const PullRequestsPage({
+    super.key,
+    required this.org,
+    this.project,
+    this.repositoryId,
+    this.repositoryName,
+  });
 
   final String org;
   final String? project;
+
+  /// Narrow the list to one repository (from the repository page).
+  final String? repositoryId;
+  final String? repositoryName;
 
   @override
   State<PullRequestsPage> createState() => _PullRequestsPageState();
@@ -56,6 +66,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
         widget.org,
         project: widget.project,
         filter: filter,
+        repositoryId: widget.repositoryId,
       );
       if (mounted && cached != null && filter == _filter) {
         setState(() {
@@ -70,6 +81,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
         widget.org,
         project: widget.project,
         filter: filter,
+        repositoryId: widget.repositoryId,
       );
       if (mounted && filter == _filter) {
         setState(() {
@@ -122,7 +134,10 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.project ?? widget.org, overflow: TextOverflow.ellipsis),
+            Text(
+              widget.repositoryName ?? widget.project ?? widget.org,
+              overflow: TextOverflow.ellipsis,
+            ),
             Text(
               'Pull requests',
               style: theme.textTheme.labelMedium?.copyWith(
@@ -132,11 +147,13 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
           ],
         ),
         leading: IconButton(
-          tooltip: inProject ? 'Projects' : 'Back',
+          tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => inProject
-              ? context.go('${orgRoute(context, widget.org)}/projects')
-              : context.pop(),
+          // Pushed from Home, a repository page or the org bell; a deep link
+          // has nowhere to pop to and lands on the projects.
+          onPressed: () => context.canPop()
+              ? context.pop()
+              : context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
           IconButton(

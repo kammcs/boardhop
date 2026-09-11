@@ -31,8 +31,12 @@ class PullRequestRepository {
 
   final Map<String, String> _me = {};
 
-  static String listKey(String org, String? project, PrListFilter filter) =>
-      'pr-list:$org:${project ?? '*'}:${filter.name}';
+  static String listKey(
+    String org,
+    String? project,
+    PrListFilter filter, {
+    String? repositoryId,
+  }) => 'pr-list:$org:${project ?? '*'}:${repositoryId ?? '*'}:${filter.name}';
 
   /// Identity GUID of the signed-in user in this org (`connectionData`,
   /// semi-official), needed for `reviewerId` filters and voting.
@@ -58,10 +62,12 @@ class PullRequestRepository {
     PrListFilter filter = PrListFilter.toReview,
     String status = 'active',
     int top = 100,
+    String? repositoryId,
   }) async {
     final query = <String, String>{
       'searchCriteria.status': status,
       r'$top': '$top',
+      'searchCriteria.repositoryId': ?repositoryId,
     };
     if (filter != PrListFilter.all) {
       final me = await meId(org);
@@ -81,7 +87,12 @@ class PullRequestRepository {
         .whereType<Map>()
         .map((m) => m.cast<String, dynamic>())
         .toList();
-    if (status == 'active') await _store(listKey(org, project, filter), raw);
+    if (status == 'active') {
+      await _store(
+        listKey(org, project, filter, repositoryId: repositoryId),
+        raw,
+      );
+    }
     return raw.map(PullRequest.fromJson).toList();
   }
 
@@ -90,8 +101,11 @@ class PullRequestRepository {
     String org, {
     String? project,
     PrListFilter filter = PrListFilter.toReview,
+    String? repositoryId,
   }) async {
-    final hit = await _cache.get(listKey(org, project, filter));
+    final hit = await _cache.get(
+      listKey(org, project, filter, repositoryId: repositoryId),
+    );
     final decoded = hit?.json;
     if (hit == null || decoded is! List) return null;
     return (

@@ -157,7 +157,7 @@ void main() {
   test('list cache keys are scoped by org, project and filter', () {
     expect(
       PullRequestRepository.listKey('puremedia', null, PrListFilter.toReview),
-      'pr-list:puremedia:*:toReview',
+      'pr-list:puremedia:*:*:toReview',
     );
     expect(
       PullRequestRepository.listKey(
@@ -165,7 +165,7 @@ void main() {
         'CloudCover 2.0',
         PrListFilter.all,
       ),
-      'pr-list:puremedia:CloudCover 2.0:all',
+      'pr-list:puremedia:CloudCover 2.0:*:all',
     );
   });
 

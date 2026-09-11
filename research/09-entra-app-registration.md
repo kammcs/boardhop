@@ -111,6 +111,8 @@ Do not create a client secret or certificate. None is needed for a public client
    | `vso.build_execute` | Queueing and cancelling runs |
    | `vso.wiki` | Reading wiki pages |
    | `vso.graph` | Looking up people and avatars for pickers |
+   | `vso.analytics` | Repository language breakdown on the Repos tab (`projectanalysis/languagemetrics`); added 2026-09-11 |
+   | `vso.profile_write` | Starring repositories (the Favorites API); added 2026-09-11 |
 
    The app requests only the read scopes at first sign-in and asks for the write scopes when the user first performs a write, so the initial consent screen stays small. Listing them all here lets a tenant admin consent once for everything.
 
@@ -176,7 +178,9 @@ Record for the app configuration (never commit real IDs to a public repo):
 
 - Client ID
 - Authority for first sign-in: `https://login.microsoftonline.com/organizations`
-- Scopes: `499b84ac-1321-427f-aa17-267ca6975798/vso.profile`, `.../vso.project`, `.../vso.work`, `.../vso.code`, `.../vso.build`, `.../vso.wiki`, `.../vso.graph`, plus `offline_access`, `openid`, `profile`
+- Scopes: `499b84ac-1321-427f-aa17-267ca6975798/vso.profile`, `.../vso.project`, `.../vso.work`, `.../vso.code`, `.../vso.build`, `.../vso.wiki`, `.../vso.graph`, `.../vso.analytics`, `.../vso.profile_write`, plus `offline_access`, `openid`, `profile`
+
+> **2026-09-11:** `vso.analytics` and `vso.profile_write` were added for the Repos tab (language metrics, favorites). Adding delegated permissions after consent means puremedia's admin consent has to be granted again (Part B) before the token carries them; until then the app shows repositories without a language line and the star says which permission is missing.
 - Redirect URIs as registered
 
 ---

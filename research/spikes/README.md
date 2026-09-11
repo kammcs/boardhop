@@ -53,6 +53,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `s14_rank_check.py` | Read-only: StackRank / BacklogPriority of the scratch stories and the WIQL order the app uses. | Used while verifying the app's reorder write |
 | `s15_pr_checks_shape.py` | Read-only: payload shapes for policy evaluations, PR statuses, thread comment ids/dates and iteration metadata (`PR_ID` env selects the PR). | Done 2026-09-10; drives the PR detail Checks section and thread replies |
 | `w10_scratch_project_avatar.py` | Set a picture on the scratch project so the app's project tile can be checked with a real image. | Blocked 2026-09-11: 400 "No permission to change picture" for the PAT user (needs team administrator, same as w05) |
+| `w11_scratch_repo_favorite.py` | Favorite the scratch repository through the Favorites API, read it back, delete it. | Done 2026-09-11: POST `_apis/Favorite/Favorites` with `{artifactId, artifactName, artifactType: Microsoft.TeamFoundation.Git.Repository, artifactScope: {id, type: Project}}` returns the favorite (`id`, `owner`); GET filtered by scope lists it; DELETE `Favorites/{id}` needs `artifactType`, `artifactScopeType`, `artifactScopeId` query parameters (405 without them) |
 | `w04_service_hook_payloads.py` | Capture "Minimal" webhook payload shapes for the five event types in document 06. | Not written: needs an HTTPS receiver and project-admin rights |
 
 ## App spikes (Flutter, on device or emulator)

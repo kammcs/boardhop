@@ -19,6 +19,7 @@ import 'data/repositories/board_repository.dart';
 import 'data/repositories/pipeline_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/pull_request_repository.dart';
+import 'data/repositories/repo_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/write_queue.dart';
 import 'router.dart';
@@ -38,6 +39,7 @@ class AccountDeps {
     workItems = WorkItemRepository(client, db, userId: accountId);
     pullRequests = PullRequestRepository(client, db, accountId);
     pipelines = PipelineRepository(client, db, accountId);
+    repos = RepoRepository(client, db, accountId);
     boards = BoardRepository(client, workItems);
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
@@ -73,6 +75,7 @@ class AccountDeps {
   late final WorkItemRepository workItems;
   late final PullRequestRepository pullRequests;
   late final PipelineRepository pipelines;
+  late final RepoRepository repos;
   late final BoardRepository boards;
   late final WriteQueue queue;
   late final ActivityRepository activity;
@@ -89,6 +92,7 @@ class AccountDeps {
     RepositoryProvider<WriteQueue>.value(value: queue),
     RepositoryProvider<PullRequestRepository>.value(value: pullRequests),
     RepositoryProvider<PipelineRepository>.value(value: pipelines),
+    RepositoryProvider<RepoRepository>.value(value: repos),
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
     RepositoryProvider<AvatarStore>.value(value: avatars),
