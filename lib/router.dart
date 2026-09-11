@@ -32,6 +32,7 @@ import 'features/repos/commit_page.dart';
 import 'features/repos/commits_page.dart';
 import 'features/repos/compare_page.dart';
 import 'features/repos/file_diff_page.dart';
+import 'features/repos/file_edit_page.dart';
 import 'features/repos/file_page.dart';
 import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
@@ -249,6 +250,21 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                                     ),
                                   ),
                                 ],
+                              ),
+                              GoRoute(
+                                path: 'edit',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => FileEditPage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    ref: _refOf(state, repo),
+                                    path:
+                                        state.uri.queryParameters['path'] ??
+                                        '/',
+                                  ),
+                                ),
                               ),
                               GoRoute(
                                 path: 'diff',

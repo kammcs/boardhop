@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_bloc.dart';
@@ -279,6 +280,24 @@ class _FilePageState extends State<FilePage> {
     isFolder: false,
   );
 
+  /// Editing is offered for text on a branch (not a tag or a commit),
+  /// within the size limit.
+  bool get _canEdit =>
+      _kind == _Kind.text &&
+      _content != null &&
+      !GitVersion.isCommit(widget.ref) &&
+      !widget.ref.startsWith('refs/tags/') &&
+      (_size ?? 0) <= RepoRepository.maxEditableBytes;
+
+  void _edit() {
+    context.push(
+      '${projectRoute(context, widget.org, widget.project)}'
+      '/repos/${Uri.encodeComponent(widget.repo.name)}'
+      '/edit?ref=${Uri.encodeQueryComponent(widget.ref)}'
+      '&path=${Uri.encodeQueryComponent(_path)}',
+    );
+  }
+
   Future<void> _openInBrowser() async {
     final url = RepoWebUrls.file(widget.repo, _path, widget.ref);
     if (url == null) return;
@@ -307,6 +326,12 @@ class _FilePageState extends State<FilePage> {
           ],
         ),
         actions: [
+          if (_canEdit)
+            IconButton(
+              tooltip: 'Edit',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _edit,
+            ),
           if (_isMarkdown && _content != null)
             IconButton(
               tooltip: _preview ? 'Show source' : 'Show preview',

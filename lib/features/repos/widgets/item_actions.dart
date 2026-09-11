@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../data/models/git_repository.dart';
@@ -113,6 +114,19 @@ Future<void> showItemActions(
                 await Clipboard.setData(ClipboardData(text: webUrl));
                 messenger.showSnackBar(
                   const SnackBar(content: Text('Link copied.')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_outlined),
+              title: const Text('Share link'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                SharePlus.instance.share(
+                  ShareParams(
+                    uri: Uri.parse(webUrl),
+                    title: normalized == '/' ? repo.name : normalized,
+                  ),
                 );
               },
             ),

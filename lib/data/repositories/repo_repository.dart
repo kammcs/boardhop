@@ -738,4 +738,146 @@ class RepoRepository {
     );
     return CodeSearchResults.fromJson(json);
   }
+
+  /// Text files above this size are not offered for editing on a phone
+  /// (Kelly's decision, research/10 §7).
+  static const maxEditableBytes = 200 * 1024;
+
+  static const zeroObjectId = '0000000000000000000000000000000000000000';
+
+  /// `alias/stem-MMdd-HHmm` for a phone edit of [path], sanitized.
+  static String branchNameFor(String alias, String path, {DateTime? now}) {
+    final t = now ?? DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final name = RepoPaths.segments(path).lastOrNull ?? 'file';
+    final dot = name.lastIndexOf('.');
+    final stem = dot > 0 ? name.substring(0, dot) : name;
+    return sanitizeBranchName(
+      '$alias/$stem-${two(t.month)}${two(t.day)}-${two(t.hour)}${two(t.minute)}',
+    );
+  }
+
+  /// Keeps a branch name acceptable to Git: no spaces or control
+  /// characters, no `..`, `~ ^ : ? * [ \`, no leading or trailing
+  /// separators, no `.lock` suffix. Empty when nothing is left.
+  static String sanitizeBranchName(String input) {
+    var s = input.trim().toLowerCase();
+    s = s.replaceAll(RegExp(r'[\s~^:?*\[\]\\@{}]+'), '-');
+    s = s.replaceAll(RegExp(r'[^a-z0-9._/\-]'), '');
+    s = s.replaceAll(RegExp(r'\.\.+'), '.');
+    s = s.replaceAll(RegExp(r'-{2,}'), '-');
+    s = s.replaceAll(RegExp(r'/{2,}'), '/');
+    s = s.replaceAll(RegExp(r'(^[./\-]+)|([./\-]+$)'), '');
+    s = s
+        .replaceAll(RegExp(r'/[.\-]+'), '/')
+        .replaceAll(RegExp(r'[.\-]+/'), '/');
+    if (s.endsWith('.lock')) s = s.substring(0, s.length - 5);
+    return s;
+  }
+
+  /// Creates `refs/heads/[name]` at [fromCommit]. A push cannot create the
+  /// ref and change a file in one call (spike w03), so this comes first.
+  Future<void> createBranch(
+    String org,
+    String project,
+    String repoId, {
+    required String name,
+    required String fromCommit,
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/refs',
+      apiVersion: apiVersion,
+      body: [
+        {
+          'name': 'refs/heads/$name',
+          'oldObjectId': zeroObjectId,
+          'newObjectId': fromCommit,
+        },
+      ],
+    );
+    final results = _value(json);
+    if (results.isEmpty) return;
+    final first = results.first;
+    if (first['success'] != true) {
+      throw AdoServerException(
+        'Could not create branch "$name": '
+        '${first['customMessage'] ?? first['updateStatus'] ?? 'refused'}',
+      );
+    }
+  }
+
+  /// Commits one edited file to [branch] through the Pushes API, guarded
+  /// by [oldObjectId] (the tip the app read). Returns the new commit id.
+  Future<String> pushFile(
+    String org,
+    String project,
+    String repoId, {
+    required String branch,
+    required String oldObjectId,
+    required String path,
+    required String content,
+    required String message,
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/pushes',
+      apiVersion: apiVersion,
+      body: {
+        'refUpdates': [
+          {'name': 'refs/heads/$branch', 'oldObjectId': oldObjectId},
+        ],
+        'commits': [
+          {
+            'comment': message,
+            'changes': [
+              {
+                'changeType': 'edit',
+                'item': {'path': RepoPaths.normalize(path)},
+                'newContent': {'content': content, 'contentType': 'rawtext'},
+              },
+            ],
+          },
+        ],
+      },
+    );
+    final commits = json['commits'];
+    if (commits is List && commits.isNotEmpty && commits.first is Map) {
+      return (commits.first as Map)['commitId'] as String? ?? '';
+    }
+    return '';
+  }
+
+  /// Opens a pull request from [sourceBranch] into [targetBranch]; returns
+  /// its id.
+  Future<int> createPullRequest(
+    String org,
+    String project,
+    String repoId, {
+    required String sourceBranch,
+    required String targetBranch,
+    required String title,
+    String description = '',
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/pullrequests',
+      apiVersion: apiVersion,
+      body: {
+        'sourceRefName': 'refs/heads/$sourceBranch',
+        'targetRefName': 'refs/heads/$targetBranch',
+        'title': title,
+        'description': description,
+      },
+    );
+    final id = json['pullRequestId'];
+    if (id is num) return id.toInt();
+    throw AdoServerException('The pull request was created without an id.');
+  }
 }

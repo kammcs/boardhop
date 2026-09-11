@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_bloc.dart';
@@ -156,6 +157,15 @@ class _CommitPageState extends State<CommitPage> {
                   _copy(widget.commitId, 'Commit id');
                 case 'copy-link':
                   if (_webUrl != null) _copy(_webUrl!, 'Link');
+                case 'share':
+                  if (_webUrl != null) {
+                    SharePlus.instance.share(
+                      ShareParams(
+                        uri: Uri.parse(_webUrl!),
+                        title: _commit?.subject ?? short,
+                      ),
+                    );
+                  }
                 case 'open':
                   if (_webUrl != null) {
                     launchUrl(
@@ -186,6 +196,13 @@ class _CommitPageState extends State<CommitPage> {
                   child: ListTile(
                     leading: Icon(Icons.link),
                     title: Text('Copy link'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'share',
+                  child: ListTile(
+                    leading: Icon(Icons.share_outlined),
+                    title: Text('Share link'),
                   ),
                 ),
                 const PopupMenuItem(

@@ -596,14 +596,15 @@ class CodeSearchResults extends Equatable {
     required this.infoCode,
   });
 
-  factory CodeSearchResults.fromJson(Map<String, dynamic> json) => CodeSearchResults(
-    count: (json['count'] as num?)?.toInt() ?? 0,
-    hits: [
-      for (final r in (json['results'] as List?) ?? const [])
-        if (r is Map) CodeSearchHit.fromJson(r.cast<String, dynamic>()),
-    ],
-    infoCode: (json['infoCode'] as num?)?.toInt() ?? 0,
-  );
+  factory CodeSearchResults.fromJson(Map<String, dynamic> json) =>
+      CodeSearchResults(
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        hits: [
+          for (final r in (json['results'] as List?) ?? const [])
+            if (r is Map) CodeSearchHit.fromJson(r.cast<String, dynamic>()),
+        ],
+        infoCode: (json['infoCode'] as num?)?.toInt() ?? 0,
+      );
 
   final int count;
   final List<CodeSearchHit> hits;
