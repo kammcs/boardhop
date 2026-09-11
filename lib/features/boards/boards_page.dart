@@ -278,11 +278,6 @@ class _BoardsPageState extends State<BoardsPage> {
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
-          WorkViewSwitch(
-            org: widget.org,
-            project: widget.project,
-            current: WorkView.board,
-          ),
           if (_boards.length > 1)
             PopupMenuButton<String>(
               tooltip: 'Choose board',
@@ -297,7 +292,14 @@ class _BoardsPageState extends State<BoardsPage> {
                   ),
               ],
             ),
-          if (_boards.length <= 1) const SizedBox(width: Spacing.sm),
+          // The switch stays rightmost so it never moves when an action
+          // appears next to it.
+          WorkViewSwitch(
+            org: widget.org,
+            project: widget.project,
+            current: WorkView.board,
+          ),
+          const SizedBox(width: Spacing.sm),
         ],
       ),
       body: Column(
