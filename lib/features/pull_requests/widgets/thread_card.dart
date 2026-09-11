@@ -39,14 +39,51 @@ class ThreadCard extends StatefulWidget {
   State<ThreadCard> createState() => _ThreadCardState();
 }
 
-class _ThreadCardState extends State<ThreadCard> {
+class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
   final _controller = TextEditingController();
+
+  /// The reply field and its buttons, so both can be scrolled clear of
+  /// the keyboard.
+  final _composerKey = GlobalKey();
   bool _replying = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  /// The keyboard rising changes the viewport: Flutter only guarantees
+  /// the focused field is visible, which leaves Cancel and Reply under
+  /// the keyboard, so reveal the whole composer each time the insets move.
+  @override
+  void didChangeMetrics() {
+    if (_replying) _revealComposer();
+  }
+
+  void _revealComposer() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _composerKey.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _startReply() {
+    setState(() => _replying = true);
+    _revealComposer();
   }
 
   Future<void> _send() async {
@@ -185,6 +222,7 @@ class _ThreadCardState extends State<ThreadCard> {
             if (widget.canAct && widget.onReply != null)
               if (_replying)
                 Padding(
+                  key: _composerKey,
                   padding: const EdgeInsets.only(
                     left: 28,
                     right: Spacing.sm,
@@ -228,9 +266,7 @@ class _ThreadCardState extends State<ThreadCard> {
                 Padding(
                   padding: const EdgeInsets.only(left: 20),
                   child: TextButton.icon(
-                    onPressed: widget.busy
-                        ? null
-                        : () => setState(() => _replying = true),
+                    onPressed: widget.busy ? null : _startReply,
                     icon: const Icon(Icons.reply, size: 18),
                     label: const Text('Reply'),
                   ),
