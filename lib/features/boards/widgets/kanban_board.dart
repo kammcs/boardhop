@@ -275,6 +275,8 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>> {
               onAcceptWithDetails: (d) => _drop(d.data, c, column.cards.length),
               builder: (context, candidates, _) => ListView.builder(
                 controller: _verticalFor(column.id),
+                // Short columns must still overscroll for pull-to-refresh.
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(
                   Spacing.sm,
                   0,

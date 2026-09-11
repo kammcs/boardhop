@@ -278,6 +278,11 @@ class _BoardsPageState extends State<BoardsPage> {
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
+          WorkViewSwitch(
+            org: widget.org,
+            project: widget.project,
+            current: WorkView.board,
+          ),
           if (_boards.length > 1)
             PopupMenuButton<String>(
               tooltip: 'Choose board',
@@ -292,17 +297,8 @@ class _BoardsPageState extends State<BoardsPage> {
                   ),
               ],
             ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
+          if (_boards.length <= 1) const SizedBox(width: Spacing.sm),
         ],
-        bottom: WorkViewSwitch(
-          org: widget.org,
-          project: widget.project,
-          current: WorkView.board,
-        ),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -360,42 +356,49 @@ class _BoardsPageState extends State<BoardsPage> {
                           child: CircularProgressIndicator.adaptive(),
                         )
                       : const SizedBox.shrink())
-                : KanbanBoard<WorkItem>(
-                    columns: [
-                      for (var i = 0; i < board.slots.length; i++)
-                        KanbanColumnData<WorkItem>(
-                          id: board.slots[i].id,
-                          title: board.slots[i].title,
-                          subtitle: board.slots[i].subtitle,
-                          wipLimit: board.slots[i].column.itemLimit,
-                          count: board.slots[i].column.isSplit
-                              ? _columnCount(board.slots[i].columnIndex)
-                              : null,
-                          accent: parseHexColor(
-                            board.rows.isNotEmpty
-                                ? board.rows.first.color
+                // Pull down on any column to reload; the columns sit one
+                // level inside the horizontal scroller.
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    notificationPredicate: (n) =>
+                        n.depth == 1 && n.metrics.axis == Axis.vertical,
+                    child: KanbanBoard<WorkItem>(
+                      columns: [
+                        for (var i = 0; i < board.slots.length; i++)
+                          KanbanColumnData<WorkItem>(
+                            id: board.slots[i].id,
+                            title: board.slots[i].title,
+                            subtitle: board.slots[i].subtitle,
+                            wipLimit: board.slots[i].column.itemLimit,
+                            count: board.slots[i].column.isSplit
+                                ? _columnCount(board.slots[i].columnIndex)
                                 : null,
+                            accent: parseHexColor(
+                              board.rows.isNotEmpty
+                                  ? board.rows.first.color
+                                  : null,
+                            ),
+                            cards: _visible(i),
                           ),
-                          cards: _visible(i),
-                        ),
-                    ],
-                    keyOf: (item) => item.id,
-                    // `canEdit` covers board configuration, not card moves
-                    // (spike S10); a move the user may not make fails as a
-                    // work item write and is reverted with the message.
-                    canDrag: true,
-                    cardBuilder: (context, item, dragging) => WorkItemCard(
-                      item: item,
-                      visuals: _visuals,
-                      dragging: dragging,
-                      badge: board.hasLanes && _lane == null
-                          ? (BoardRepository.laneOf(board, item).isEmpty
-                                ? null
-                                : BoardRepository.laneOf(board, item))
-                          : null,
+                      ],
+                      keyOf: (item) => item.id,
+                      // `canEdit` covers board configuration, not card moves
+                      // (spike S10); a move the user may not make fails as a
+                      // work item write and is reverted with the message.
+                      canDrag: true,
+                      cardBuilder: (context, item, dragging) => WorkItemCard(
+                        item: item,
+                        visuals: _visuals,
+                        dragging: dragging,
+                        badge: board.hasLanes && _lane == null
+                            ? (BoardRepository.laneOf(board, item).isEmpty
+                                  ? null
+                                  : BoardRepository.laneOf(board, item))
+                            : null,
+                      ),
+                      onCardTap: _open,
+                      onMove: _move,
                     ),
-                    onCardTap: _open,
-                    onMove: _move,
                   ),
           ),
         ],

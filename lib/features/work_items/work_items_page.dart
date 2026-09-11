@@ -158,17 +158,13 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshing ? null : _refresh,
+          WorkViewSwitch(
+            org: widget.org,
+            project: widget.project,
+            current: WorkView.items,
           ),
+          const SizedBox(width: Spacing.sm),
         ],
-        bottom: WorkViewSwitch(
-          org: widget.org,
-          project: widget.project,
-          current: WorkView.items,
-        ),
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
