@@ -282,11 +282,14 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>> {
                 controller: _verticalFor(column.id),
                 // Short columns must still overscroll for pull-to-refresh.
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
+                // The bottom safe-area padding is the shell's floating bar
+                // on a tablet in portrait: cards scroll under it and the
+                // last one can still clear it.
+                padding: EdgeInsets.fromLTRB(
                   Spacing.sm,
                   0,
                   Spacing.sm,
-                  Spacing.sm,
+                  Spacing.sm + MediaQuery.paddingOf(context).bottom,
                 ),
                 itemCount: column.cards.length + 1,
                 itemBuilder: (context, i) {

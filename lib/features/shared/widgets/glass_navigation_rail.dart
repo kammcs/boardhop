@@ -18,8 +18,8 @@ class GlassRailDestination {
 }
 
 /// The tablet rail on iOS: a floating, translucent, blurred pill that
-/// sits over the page background (sized to its destinations, or spread
-/// along a given height),
+/// sits over the page (sized to its destinations, or spread along a given
+/// length), vertical beside the page or horizontal along its bottom,
 /// in the spirit of iOS 26's glass sidebars. Unlike [NavigationRail] it
 /// paints no full-height column of its own, so the scaffold background
 /// stays one color from edge to edge and the page's app bar keeps its
@@ -40,19 +40,28 @@ class GlassNavigationRail extends StatelessWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.spread = false,
+    this.axis = Axis.vertical,
   });
 
   final List<GlassRailDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
 
+  /// Vertical along a side of the screen, or horizontal along the bottom
+  /// (a tablet in portrait).
+  final Axis axis;
+
   /// When true the rail fills the height it is given and spaces the
   /// destinations evenly along it (the shell hands it 80% of the screen,
   /// centered); when false it is only as tall as its destinations.
   final bool spread;
 
-  /// Width of one destination and so of the whole rail.
+  /// Width of one destination and so of a vertical rail.
   static const double width = 72;
+
+  /// Cross-axis size of a horizontal rail: icon pill, gap, label line and
+  /// the item's vertical padding. The shell uses it as the page inset.
+  static const double thickness = 32 + Spacing.xs + 16 + 2 * Spacing.sm;
 
   /// Blur radius of the glass; the shell keeps this much margin around
   /// the rail so the shadow can fade.
@@ -124,8 +133,11 @@ class GlassNavigationRail extends StatelessWidget {
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
-              child: Column(
+              padding: axis == Axis.vertical
+                  ? const EdgeInsets.symmetric(vertical: Spacing.sm)
+                  : const EdgeInsets.symmetric(horizontal: Spacing.sm),
+              child: Flex(
+                direction: axis,
                 mainAxisSize: spread ? MainAxisSize.max : MainAxisSize.min,
                 mainAxisAlignment: spread
                     ? MainAxisAlignment.spaceEvenly

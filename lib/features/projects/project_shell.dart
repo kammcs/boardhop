@@ -89,7 +89,8 @@ class _ProjectShellState extends State<ProjectShell>
         ),
       ];
 
-  /// Share of the shell height the glass rail spans on Apple tablets.
+  /// Share of the shell height (landscape) or width (portrait) the glass
+  /// rail spans on Apple tablets.
   static const _railHeightFactor = 0.8;
 
   /// Room between the screen edge and the rail for its shadow to fade
@@ -97,6 +98,12 @@ class _ProjectShellState extends State<ProjectShell>
   static const _railMargin = Spacing.xl;
   static const _railGutter =
       _railMargin + GlassNavigationRail.width + Spacing.lg;
+
+  /// Portrait: the same rail lies along the bottom; pages get this much
+  /// bottom safe-area padding, so vertical content scrolls under the bar
+  /// and its end still clears it (the usual home-indicator mechanism).
+  static const _barGutter =
+      _railMargin + GlassNavigationRail.thickness + Spacing.lg;
 
   /// Pages whose content scrolls sideways (the Kanban board) run under
   /// the rail: they get the gutter as left safe-area padding, so columns
@@ -152,6 +159,52 @@ class _ProjectShellState extends State<ProjectShell>
       // gutter as their leading inset. The page app bar stays clear because
       // the rail keeps a tenth of the height free at the top.
       final mq = MediaQuery.of(context);
+      final destinations = [
+        for (final d in _destinations)
+          GlassRailDestination(
+            icon: d.icon,
+            selectedIcon: d.selected,
+            label: d.label,
+          ),
+      ];
+      if (mq.orientation == Orientation.portrait) {
+        return Scaffold(
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: MediaQuery(
+                  data: mq.copyWith(
+                    padding: mq.padding.copyWith(
+                      bottom: mq.padding.bottom + _barGutter,
+                    ),
+                  ),
+                  child: body,
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: _railMargin,
+                child: SafeArea(
+                  top: false,
+                  child: Center(
+                    child: FractionallySizedBox(
+                      widthFactor: _railHeightFactor,
+                      child: GlassNavigationRail(
+                        axis: Axis.horizontal,
+                        spread: true,
+                        selectedIndex: shell.currentIndex,
+                        onDestinationSelected: (i) => _select(context, i),
+                        destinations: destinations,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       final page = _bleedsUnderRail(widget.location)
           ? MediaQuery(
               data: mq.copyWith(
@@ -185,14 +238,7 @@ class _ProjectShellState extends State<ProjectShell>
                       spread: true,
                       selectedIndex: shell.currentIndex,
                       onDestinationSelected: (i) => _select(context, i),
-                      destinations: [
-                        for (final d in _destinations)
-                          GlassRailDestination(
-                            icon: d.icon,
-                            selectedIcon: d.selected,
-                            label: d.label,
-                          ),
-                      ],
+                      destinations: destinations,
                     ),
                   ),
                 ),

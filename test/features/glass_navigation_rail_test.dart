@@ -108,6 +108,36 @@ void main() {
     expect((last.dy - first.dy) / 3, greaterThan(100));
   });
 
+  testWidgets('horizontal spread mode fills the given width', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BoardhopTheme.light(),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 640,
+              child: GlassNavigationRail(
+                axis: Axis.horizontal,
+                spread: true,
+                destinations: destinations,
+                selectedIndex: 2,
+                onDestinationSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final size = tester.getSize(find.byType(GlassNavigationRail));
+    expect(size.width, 640);
+    expect(size.height, GlassNavigationRail.thickness);
+    final first = tester.getCenter(find.text('Home'));
+    final last = tester.getCenter(find.text('Pipelines'));
+    expect(first.dy, last.dy);
+    expect((last.dx - first.dx) / 3, greaterThan(120));
+  });
+
   testWidgets('builds in dark mode too', (tester) async {
     await pump(tester, theme: BoardhopTheme.dark(), onSelected: (_) {});
     expect(find.byType(GlassNavigationRail), findsOneWidget);
