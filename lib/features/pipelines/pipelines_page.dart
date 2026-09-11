@@ -102,6 +102,11 @@ class _PipelinesPageState extends State<PipelinesPage> {
       rethrow;
     } on AdoException catch (e) {
       if (mounted) setState(() => _approvalsError = e.message);
+    } catch (e) {
+      // A payload the parser does not expect must not take the page down.
+      if (mounted) {
+        setState(() => _approvalsError = 'Could not read approvals: $e');
+      }
     }
   }
 

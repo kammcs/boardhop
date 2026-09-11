@@ -2,6 +2,14 @@ import 'package:equatable/equatable.dart';
 
 import 'work_item.dart';
 
+/// Ids arrive as numbers in most payloads and as strings in the approvals
+/// service (`pipeline.id`, `pipeline.owner.id`).
+int? _int(Object? v) => switch (v) {
+  num n => n.toInt(),
+  String s => int.tryParse(s),
+  _ => null,
+};
+
 /// `refs/heads/main` → `main`, `refs/pull/123/merge` → `PR 123`,
 /// `refs/tags/v1` → `v1`.
 String shortRef(String ref) {
@@ -33,6 +41,7 @@ class BuildRun extends Equatable {
     this.triggerMessage,
     this.webUrl,
     this.projectName,
+    this.validationMessages = const [],
   });
 
   factory BuildRun.fromJson(Map<String, dynamic> json) {
@@ -59,6 +68,12 @@ class BuildRun extends Equatable {
           trigger['ci.message'] as String? ?? trigger['pr.title'] as String?,
       webUrl: (links?['web'] as Map?)?['href'] as String?,
       projectName: (json['project'] as Map?)?['name'] as String?,
+      validationMessages: [
+        for (final v
+            in ((json['validationResults'] as List?) ?? const [])
+                .whereType<Map>())
+          if (v['message'] is String) v['message'] as String,
+      ],
     );
   }
 
@@ -67,6 +82,10 @@ class BuildRun extends Equatable {
   final int definitionId;
   final String definitionName;
   final String? projectName;
+
+  /// Why a run never started (pool not authorized, YAML errors): the
+  /// service completes it as failed with no timeline.
+  final List<String> validationMessages;
 
   /// `none | inProgress | completed | cancelling | postponed | notStarted`.
   final String status;
@@ -303,6 +322,23 @@ class Timeline {
       if (c.isTask) c,
   ];
 
+  /// What a checkpoint job is waiting on, from its child records:
+  /// `Checkpoint.Authorization` (first use of an environment or pool by
+  /// this pipeline, needs a permit in the web UI) or `Checkpoint.Approval`.
+  String? checkpointReason(TimelineRecord checkpoint) {
+    if (!checkpoint.isCheckpoint || checkpoint.isCompleted) return null;
+    final kids = children(checkpoint.id);
+    if (kids.any(
+      (c) => c.type == 'Checkpoint.Authorization' && !c.isCompleted,
+    )) {
+      return 'waiting for resource authorization';
+    }
+    if (kids.any((c) => c.type == 'Checkpoint.Approval' && !c.isCompleted)) {
+      return 'waiting for approval';
+    }
+    return 'waiting for checks';
+  }
+
   /// Direct task children of a section that is itself a job (classic
   /// builds put tasks under the root phase/job).
   bool isLeafSection(TimelineRecord section) =>
@@ -371,14 +407,13 @@ class PipelineApproval extends Equatable {
           .whereType<Map>()
           .map((m) => ApprovalStep.fromJson(m.cast<String, dynamic>()))
           .toList(),
-      pipelineId: (pipeline['id'] as num?)?.toInt(),
+      pipelineId: _int(pipeline['id']),
       pipelineName: pipeline['name'] as String?,
-      runId: (owner['id'] as num?)?.toInt(),
+      runId: _int(owner['id']),
       runName: owner['name'] as String?,
       instructions: json['instructions'] as String?,
       createdOn: DateTime.tryParse(json['createdOn'] as String? ?? ''),
-      minRequiredApprovers:
-          (json['minRequiredApprovers'] as num?)?.toInt() ?? 1,
+      minRequiredApprovers: _int(json['minRequiredApprovers']) ?? 1,
       executionOrder: json['executionOrder'] as String?,
     );
   }

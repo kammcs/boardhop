@@ -308,6 +308,9 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
                                   job: job,
                                   tasks: timeline.tasksOf(job),
                                   onOpenLog: _openLog,
+                                  checkpointReason: timeline.checkpointReason(
+                                    job,
+                                  ),
                                 ),
                           ],
                           if (timeline.stages.isEmpty)
@@ -388,6 +391,24 @@ class _RunHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+          for (final m in run.validationMessages) ...[
+            const SizedBox(height: Spacing.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline, size: 18, color: scheme.error),
+                const SizedBox(width: Spacing.xs),
+                Expanded(
+                  child: SelectableText(
+                    m,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: Spacing.sm),
           Wrap(
             spacing: Spacing.md,
@@ -446,9 +467,10 @@ class _StageHeader extends StatelessWidget {
           Text(
             stage.isSkipped
                 ? 'skipped'
-                : stage.attempt > 1
-                ? 'attempt ${stage.attempt} · ${formatDuration(stage.duration)}'
-                : formatDuration(stage.duration),
+                : [
+                    if (stage.attempt > 1) 'attempt ${stage.attempt}',
+                    if (stage.duration != null) formatDuration(stage.duration),
+                  ].join(' · '),
             style: theme.textTheme.labelMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -465,11 +487,15 @@ class _JobTile extends StatelessWidget {
     required this.job,
     required this.tasks,
     required this.onOpenLog,
+    this.checkpointReason,
   });
 
   final TimelineRecord job;
   final List<TimelineRecord> tasks;
   final ValueChanged<TimelineRecord> onOpenLog;
+
+  /// For checkpoint jobs: what they wait on.
+  final String? checkpointReason;
 
   @override
   Widget build(BuildContext context) {
@@ -479,7 +505,7 @@ class _JobTile extends StatelessWidget {
     final subtitle = [
       if (job.isInProgress && (job.currentOperation ?? '').isNotEmpty)
         job.currentOperation!,
-      if (job.isCheckpoint && !job.isCompleted) 'waiting for approval',
+      ?checkpointReason,
       if (job.errorCount > 0) '${job.errorCount} errors',
       if (job.warningCount > 0) '${job.warningCount} warnings',
       if ((job.workerName ?? '').isNotEmpty && job.isCompleted) job.workerName!,

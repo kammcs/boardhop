@@ -184,6 +184,22 @@ void main() {
     expect(a.awaits(null), isFalse);
   });
 
+  test('PipelineApproval accepts string ids (approvals service shape)', () {
+    final a = PipelineApproval.fromJson({
+      'id': 'ap-2',
+      'status': 'pending',
+      'minRequiredApprovers': '1',
+      'pipeline': {
+        'id': '139',
+        'name': 'boardhop-scratch',
+        'owner': {'id': '20120', 'name': '20260911.2'},
+      },
+    });
+    expect(a.pipelineId, 139);
+    expect(a.runId, 20120);
+    expect(a.minRequiredApprovers, 1);
+  });
+
   test('cache keys', () {
     expect(
       PipelineRepository.runsKey('puremedia', 'DevOps Mobile App'),
