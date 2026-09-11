@@ -9,7 +9,7 @@ class SplashPage extends StatelessWidget {
 
   /// Edge color of the artwork; matches `splash_background` on Android and
   /// the storyboard background on iOS.
-  static const background = Color(0xFF162746);
+  static const background = Color(0xFF293242);
 
   @override
   Widget build(BuildContext context) {
