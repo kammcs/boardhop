@@ -116,3 +116,13 @@ Each phase ends with emulator screenshots and a push; phases 1 to 3 are the ones
 8. **Order**: shell first (phase 0), then repositories.
 
 Phase 5 (added): tags page, share links, file editing with `re_editor` and the pushes API already used for suggestion apply — about 1.5 days.
+
+## 8. Phase 2 notes (2026-09-11)
+
+- Routes: `…/repos/{repo}/code?ref=&path=` (folder) and `…/repos/{repo}/file?ref=&path=[&line=]` (file). Both resolve the repository object through `_RepoRoute` in `lib/router.dart` (cached list first, then the network), so deep links work cold.
+- The Items API marks SVG as text (`isImage` false), so `.svg` files show as XML source; PNG/JPG come back with `isImage: true` and load through `$format=octetStream`, which honours the bearer token where `Image.network` cannot.
+- File flow on open: cached copy (if any) → `items?includeContentMetadata=true` → `blobs/{sha}` size → skip the download when the cached object id matches → content. Text above 1 MB waits for "Load anyway"; above 20 MB it is refused; highlighting is skipped above 300 KB.
+- Highlighting runs in `Isolate.run` (`CodeHighlighter.highlightLinesAsync`); `re_highlight` registers grammars lazily so a fresh isolate is cheap, and `TextStyle` runs cross the isolate boundary as plain objects. Plain rows are shown while the grammar pass runs.
+- Markdown links inside repository files resolve against the file folder (`RepoPaths.resolve`): a target with an extension opens the file viewer, one without opens the folder.
+- Deferred to later phases: jump-to-line from search (the `line` query is already honoured), History (phase 3 commits route with `path`), share sheet (phase 5).
+

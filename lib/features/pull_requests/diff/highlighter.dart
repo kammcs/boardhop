@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/material.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
@@ -50,13 +52,83 @@ abstract final class CodeHighlighter {
     'toml': 'ini',
     'ini': 'ini',
     'proto': 'protobuf',
+    'c': 'c',
+    'h': 'c',
+    'cpp': 'cpp',
+    'cc': 'cpp',
+    'hpp': 'cpp',
+    'm': 'objectivec',
+    'mm': 'objectivec',
+    'vue': 'vue',
+    'less': 'less',
+    'graphql': 'graphql',
+    'gql': 'graphql',
+    'groovy': 'groovy',
+    'scala': 'scala',
+    'lua': 'lua',
+    'pl': 'perl',
+    'r': 'r',
+    'vb': 'vbnet',
+    'fs': 'fsharp',
+    'ex': 'elixir',
+    'exs': 'elixir',
+    'hs': 'haskell',
+    'bat': 'dos',
+    'cmd': 'dos',
+    'psm1': 'powershell',
+    'bash': 'bash',
+    'zsh': 'bash',
+    'makefile': 'makefile',
+    'mk': 'makefile',
+    'tf': 'ini',
+    'csproj': 'xml',
+    'props': 'xml',
+    'targets': 'xml',
+    'plist': 'xml',
+    'svg': 'xml',
+    'xaml': 'xml',
+    'resx': 'xml',
+    'config': 'xml',
+    'properties': 'properties',
+    'env': 'properties',
+    'diff': 'diff',
+    'patch': 'diff',
+    'tex': 'latex',
+    'nginx': 'nginx',
+    'http': 'http',
+    'cmake': 'cmake',
+  };
+
+  static const _byName = <String, String>{
+    'dockerfile': 'dockerfile',
+    'makefile': 'makefile',
+    'cmakelists.txt': 'cmake',
+    '.gitignore': 'properties',
+    '.editorconfig': 'ini',
   };
 
   /// highlight.js language name for a file path, or null for plain text.
   static String? languageFor(String path) {
-    final dot = path.lastIndexOf('.');
+    final slash = path.lastIndexOf('/');
+    final name = (slash < 0 ? path : path.substring(slash + 1)).toLowerCase();
+    final byName = _byName[name];
+    if (byName != null) return byName;
+    final dot = name.lastIndexOf('.');
     if (dot < 0) return null;
-    return _byExtension[path.substring(dot + 1).toLowerCase()];
+    return _byExtension[name.substring(dot + 1)];
+  }
+
+  /// [highlightLines] on a background isolate, for whole files: the
+  /// grammar work for a few thousand lines takes hundreds of milliseconds
+  /// (spike F5) and must not block the UI thread. Registration is lazy, so
+  /// a fresh isolate costs little.
+  static Future<List<List<CodeRun>>> highlightLinesAsync(
+    String code,
+    String? language,
+    Brightness brightness,
+  ) {
+    if (language == null) return Future.value(_plain(code));
+    return Isolate.run(() => highlightLines(code, language, brightness));
   }
 
   static Map<String, TextStyle> themeFor(Brightness b) =>

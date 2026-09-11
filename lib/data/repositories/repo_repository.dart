@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/http/ado_client.dart';
+import '../../core/http/ado_host.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../db/app_database.dart';
 import '../db/json_cache.dart';
 import '../models/git_repository.dart';
 import 'pipeline_repository.dart' show CachedList;
+
+typedef CachedFile = ({String? objectId, String content, DateTime fetchedAt});
 
 /// Repositories of a project and what the Repos tab shows about them:
 /// language breakdown, the user's favorites (the web star, per account),
@@ -34,6 +39,20 @@ class RepoRepository {
   static String branchKey(String repoId) => 'repos:branch:$repoId';
   static String readmeKey(String repoId, String branch) =>
       'repos:readme:$repoId:$branch';
+  static String treeKey(String repoId, String ref, String path) =>
+      'repos:tree:$repoId:$ref:$path';
+  static const fileKeyPrefix = 'repos:file:';
+  static String fileKey(String repoId, String ref, String path) =>
+      '$fileKeyPrefix$repoId:$ref:$path';
+
+  /// Files kept for offline reopening, newest first; older ones are dropped.
+  static const maxCachedFiles = 20;
+
+  /// Text files above this size open only on request (research/10 §3.3).
+  static const largeFileBytes = 1024 * 1024;
+
+  /// Hard ceiling for text and images loaded into memory on a phone.
+  static const maxFileBytes = 20 * 1024 * 1024;
 
   List<Map<String, dynamic>> _value(Map<String, dynamic> json) =>
       ((json['value'] as List?) ?? const [])
@@ -329,4 +348,183 @@ class RepoRepository {
     final json = cached?.json;
     return json is String ? json : null;
   }
+
+  Map<String, String> _version(String ref) => {
+    'versionDescriptor.version': ref,
+    'versionDescriptor.versionType': 'branch',
+  };
+
+  static List<GitItem> parseTree(List<Map<String, dynamic>> raw, String path) {
+    final folder = RepoPaths.normalize(path);
+    return raw
+        .map(GitItem.fromJson)
+        .where((i) => RepoPaths.normalize(i.path) != folder)
+        .toList()
+      ..sort(GitItem.compare);
+  }
+
+  /// One level of the tree at [path] on branch [ref], folders first. The
+  /// service has no paging here, so one call is the whole level.
+  Future<List<GitItem>> tree(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    String path = '/',
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/items',
+      apiVersion: apiVersion,
+      query: {
+        'scopePath': RepoPaths.normalize(path),
+        'recursionLevel': 'OneLevel',
+        ..._version(ref),
+      },
+    );
+    final raw = _value(json);
+    await _cache.put(treeKey(repoId, ref, RepoPaths.normalize(path)), raw);
+    return parseTree(raw, path);
+  }
+
+  Future<List<GitItem>?> cachedTree(
+    String repoId, {
+    required String ref,
+    String path = '/',
+  }) async {
+    final cached = await _cache.get(
+      treeKey(repoId, ref, RepoPaths.normalize(path)),
+    );
+    final json = cached?.json;
+    return json is List ? parseTree(_value({'value': json}), path) : null;
+  }
+
+  /// Metadata of one file (object id, binary and image flags) without its
+  /// content; null when the path does not exist on the branch.
+  Future<GitItem?> fileMetadata(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    required String path,
+  }) async {
+    try {
+      final json = await _client.getJson(
+        org: org,
+        project: project,
+        path: '_apis/git/repositories/$repoId/items',
+        apiVersion: apiVersion,
+        query: {
+          'path': RepoPaths.normalize(path),
+          'includeContentMetadata': 'true',
+          r'$format': 'json',
+          ..._version(ref),
+        },
+      );
+      return GitItem.fromJson(json);
+    } on AdoNotFoundException {
+      return null;
+    }
+  }
+
+  /// Size in bytes of a blob, the gate before downloading its content.
+  Future<int?> blobSize(
+    String org,
+    String project,
+    String repoId,
+    String objectId,
+  ) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/blobs/$objectId',
+      apiVersion: apiVersion,
+    );
+    return (json['size'] as num?)?.toInt();
+  }
+
+  /// Text content of a file on [ref]; cached with its object id so a file
+  /// reopens offline and is not downloaded again while unchanged.
+  Future<String> fileContent(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    required String path,
+    String? objectId,
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/items',
+      apiVersion: apiVersion,
+      query: {
+        'path': RepoPaths.normalize(path),
+        'includeContent': 'true',
+        r'$format': 'json',
+        ..._version(ref),
+      },
+    );
+    final content = json['content'] as String? ?? '';
+    await _cache.put(fileKey(repoId, ref, RepoPaths.normalize(path)), {
+      'objectId': objectId ?? json['objectId'],
+      'content': content,
+    });
+    await _trimFiles();
+    return content;
+  }
+
+  Future<CachedFile?> cachedFile(
+    String repoId, {
+    required String ref,
+    required String path,
+  }) async {
+    final cached = await _cache.get(
+      fileKey(repoId, ref, RepoPaths.normalize(path)),
+    );
+    final json = cached?.json;
+    if (json is! Map || json['content'] is! String) return null;
+    return (
+      objectId: json['objectId'] as String?,
+      content: json['content'] as String,
+      fetchedAt: cached!.fetchedAt,
+    );
+  }
+
+  Future<void> _trimFiles() async {
+    final keys = await _cache.keysWithPrefix(fileKeyPrefix);
+    for (final key in keys.skip(maxCachedFiles)) {
+      await _cache.remove(key);
+    }
+  }
+
+  /// Raw bytes of a file (images) on [ref].
+  Future<Uint8List> fileBytes(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    required String path,
+  }) {
+    final uri = AdoClient.buildUri(
+      host: AdoHost.core,
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/items',
+      apiVersion: apiVersion,
+      query: {
+        'path': RepoPaths.normalize(path),
+        r'$format': 'octetStream',
+        'download': 'false',
+        ..._version(ref),
+      },
+    );
+    return _client.getBytes(uri);
+  }
+
+  /// Text decoded from [fileBytes], for the rare content the JSON form
+  /// cannot carry.
+  static String decodeText(Uint8List bytes) =>
+      utf8.decode(bytes, allowMalformed: true);
 }

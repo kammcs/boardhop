@@ -47,6 +47,14 @@ class JsonCache {
         );
   }
 
+  Future<void> remove(String key) async {
+    final db = _db;
+    if (db == null) return;
+    await (db.delete(
+      db.cacheEntries,
+    )..where((t) => t.key.equals(_k(key)))).go();
+  }
+
   /// Keys (without the namespace) starting with [prefix], newest first.
   Future<List<String>> keysWithPrefix(String prefix, {int? limit}) async {
     final db = _db;

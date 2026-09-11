@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +13,7 @@ import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
 import '../shared/widgets/ado_tile.dart';
 import 'repos_page.dart' show ReposPageErrors;
+import 'widgets/repo_markdown.dart';
 import 'widgets/repo_visuals.dart';
 
 /// One repository: the rows from Kelly's mockup (pull requests, the
@@ -373,22 +373,13 @@ class _RepoPageState extends State<RepoPage> {
                         )
                       : _readme!.isEmpty
                       ? _NoReadme(languages: _languages)
-                      : MarkdownBody(
+                      : RepoMarkdown(
                           data: _readme!,
-                          selectable: true,
-                          onTapLink: (text, href, title) {
-                            if (href == null) return;
-                            final uri = Uri.tryParse(href);
-                            if (uri != null && uri.hasScheme) {
-                              launchUrl(
-                                uri,
-                                mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          },
-                          imageBuilder: (uri, title, alt) => uri.hasScheme
-                              ? Image.network(uri.toString())
-                              : _RelativeImage(path: uri.toString(), alt: alt),
+                          org: widget.org,
+                          project: widget.project,
+                          repo: repo,
+                          ref: branch ?? '',
+                          path: '/README.md',
                         ),
                 ),
               ],
@@ -459,40 +450,6 @@ class _NoReadme extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Repository-relative images need the bearer token; phase 2 fetches them
-/// through the Items API. Until then, name the image.
-class _RelativeImage extends StatelessWidget {
-  const _RelativeImage({required this.path, this.alt});
-
-  final String path;
-  final String? alt;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(Spacing.sm),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: Radii.chip,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.image_outlined, color: scheme.onSurfaceVariant),
-          const SizedBox(width: Spacing.sm),
-          Flexible(
-            child: Text(
-              alt?.isNotEmpty == true ? alt! : path,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

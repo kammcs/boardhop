@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'app.dart';
 import 'auth/auth_bloc.dart';
 import 'data/models/git_repository.dart';
-import 'data/repositories/pipeline_repository.dart' show CachedList;
 import 'data/repositories/repo_repository.dart';
 import 'features/activity/activity_page.dart';
 import 'features/auth/sign_in_page.dart';
@@ -27,6 +26,8 @@ import 'features/pull_requests/pr_file_diff_page.dart';
 import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/repos/branch_picker_page.dart';
+import 'features/repos/code_browser_page.dart';
+import 'features/repos/file_page.dart';
 import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
 import 'features/settings/settings_page.dart';
@@ -162,20 +163,51 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                             routes: [
                               GoRoute(
                                 path: 'branches',
-                                builder: (_, state) => _BranchPickerRoute(
-                                  org: state.pathParameters['org']!,
-                                  project: state.pathParameters['project']!,
-                                  repoName: state.pathParameters['repo']!,
-                                  current: state.uri.queryParameters['current'],
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => BranchPickerPage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repoId: repo.id,
+                                    repoName: repo.name,
+                                    current:
+                                        state.uri.queryParameters['current'],
+                                    defaultBranch: repo.defaultBranchName,
+                                  ),
                                 ),
                               ),
                               GoRoute(
                                 path: 'code',
-                                builder: (_, state) =>
-                                    const FeaturePlaceholderPage(
-                                      title: 'Code',
-                                      plannedIn: 'phase 2 of the repos plan',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => CodeBrowserPage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    ref: _refOf(state, repo),
+                                    path:
+                                        state.uri.queryParameters['path'] ??
+                                        '/',
+                                  ),
+                                ),
+                              ),
+                              GoRoute(
+                                path: 'file',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => FilePage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    ref: _refOf(state, repo),
+                                    path:
+                                        state.uri.queryParameters['path'] ??
+                                        '/',
+                                    line: int.tryParse(
+                                      state.uri.queryParameters['line'] ?? '',
                                     ),
+                                  ),
+                                ),
                               ),
                               GoRoute(
                                 path: 'commits',
@@ -287,43 +319,66 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
   );
 }
 
-/// The branch picker needs the repository id, which only the cached list
-/// knows; resolve the name first.
-class _BranchPickerRoute extends StatelessWidget {
-  const _BranchPickerRoute({
-    required this.org,
-    required this.project,
-    required this.repoName,
-    this.current,
-  });
+/// Branch the query names, else the repository's default branch.
+String _refOf(GoRouterState state, GitRepository repo) {
+  final ref = state.uri.queryParameters['ref'];
+  return ref == null || ref.isEmpty ? repo.defaultBranchName ?? '' : ref;
+}
 
-  final String org;
-  final String project;
-  final String repoName;
-  final String? current;
+/// Pages under `repos/:repo` need the repository object (id, default
+/// branch, web URL), which the route only names; resolve it from the cached
+/// list, or the network on a cold deep link.
+class _RepoRoute extends StatefulWidget {
+  const _RepoRoute({required this.state, required this.builder});
+
+  final GoRouterState state;
+  final Widget Function(GitRepository repo) builder;
+
+  @override
+  State<_RepoRoute> createState() => _RepoRouteState();
+}
+
+class _RepoRouteState extends State<_RepoRoute> {
+  late final Future<GitRepository?> _repo = _resolve();
+
+  Future<GitRepository?> _resolve() async {
+    final repos = context.read<RepoRepository>();
+    final org = widget.state.pathParameters['org']!;
+    final project = widget.state.pathParameters['project']!;
+    final name = widget.state.pathParameters['repo']!;
+    final cached = await repos.cachedList(org, project);
+    for (final r in cached?.items ?? const <GitRepository>[]) {
+      if (r.name == name) return r;
+    }
+    for (final r in await repos.list(org, project)) {
+      if (r.name == name) return r;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final repos = context.read<RepoRepository>();
-    return FutureBuilder<CachedList<GitRepository>?>(
-      future: repos.cachedList(org, project),
+    return FutureBuilder<GitRepository?>(
+      future: _repo,
       builder: (context, snapshot) {
-        GitRepository? repo;
-        for (final r in snapshot.data?.items ?? const <GitRepository>[]) {
-          if (r.name == repoName) repo = r;
-        }
-        if (repo == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return BranchPickerPage(
-          org: org,
-          project: project,
-          repoId: repo.id,
-          repoName: repo.name,
-          current: current,
-          defaultBranch: repo.defaultBranchName,
+        final repo = snapshot.data;
+        if (repo != null) return widget.builder(repo);
+        final name = widget.state.pathParameters['repo']!;
+        return Scaffold(
+          appBar: AppBar(title: Text(name)),
+          body: Center(
+            child: snapshot.hasError
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      '${snapshot.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                : snapshot.connectionState == ConnectionState.done
+                ? Text('Repository "$name" not found.')
+                : const CircularProgressIndicator(),
+          ),
         );
       },
     );

@@ -155,3 +155,147 @@ class GitBranch extends Equatable {
   @override
   List<Object?> get props => [name, commitId];
 }
+
+/// One entry of a folder listing or a single file from the Items API.
+/// Listings (`recursionLevel=OneLevel`) carry no content metadata; a
+/// single-item read with `includeContentMetadata=true` fills [isBinary],
+/// [isImage], [contentType] and [encoding].
+class GitItem extends Equatable {
+  const GitItem({
+    required this.path,
+    required this.isFolder,
+    this.objectId,
+    this.commitId,
+    this.isBinary,
+    this.isImage,
+    this.contentType,
+    this.encoding,
+  });
+
+  factory GitItem.fromJson(Map<String, dynamic> json) {
+    final meta = json['contentMetadata'];
+    final m = meta is Map ? meta.cast<String, dynamic>() : null;
+    return GitItem(
+      path: json['path'] as String? ?? '/',
+      isFolder: json['isFolder'] == true || json['gitObjectType'] == 'tree',
+      objectId: json['objectId'] as String?,
+      commitId: json['commitId'] as String?,
+      isBinary: m == null ? null : m['isBinary'] == true,
+      isImage: m == null ? null : m['isImage'] == true,
+      contentType: m?['contentType'] as String?,
+      encoding: (m?['encoding'] as num?)?.toInt(),
+    );
+  }
+
+  final String path;
+  final bool isFolder;
+  final String? objectId;
+  final String? commitId;
+  final bool? isBinary;
+  final bool? isImage;
+  final String? contentType;
+  final int? encoding;
+
+  /// `main.dart` for `/lib/main.dart`; the repository name is the root.
+  String get name {
+    final p = path.endsWith('/') && path.length > 1
+        ? path.substring(0, path.length - 1)
+        : path;
+    final i = p.lastIndexOf('/');
+    return i < 0 ? p : p.substring(i + 1);
+  }
+
+  /// Lower-case extension without the dot, or empty.
+  String get extension {
+    final n = name;
+    final dot = n.lastIndexOf('.');
+    return dot <= 0 ? '' : n.substring(dot + 1).toLowerCase();
+  }
+
+  /// Folders first, then files, each alphabetically and case-insensitive,
+  /// which is how the web and every desktop client order a tree.
+  static int compare(GitItem a, GitItem b) {
+    if (a.isFolder != b.isFolder) return a.isFolder ? -1 : 1;
+    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+
+  @override
+  List<Object?> get props => [path, objectId];
+}
+
+/// Path helpers for repository paths (`/`-rooted, no trailing slash).
+abstract final class RepoPaths {
+  /// Parent of [path]; `/` for a top-level entry and for the root.
+  static String parent(String path) {
+    final p = normalize(path);
+    if (p == '/') return '/';
+    final i = p.lastIndexOf('/');
+    return i <= 0 ? '/' : p.substring(0, i);
+  }
+
+  /// Always starts with `/`, never ends with one (except the root).
+  static String normalize(String path) {
+    var p = path.trim();
+    if (!p.startsWith('/')) p = '/$p';
+    while (p.length > 1 && p.endsWith('/')) {
+      p = p.substring(0, p.length - 1);
+    }
+    return p;
+  }
+
+  /// Segments of [path] for a breadcrumb: `/a/b` → `[a, b]`.
+  static List<String> segments(String path) =>
+      normalize(path).split('/').where((s) => s.isNotEmpty).toList();
+
+  /// Path made of the first [count] segments of [path].
+  static String prefix(String path, int count) {
+    final segs = segments(path).take(count);
+    return segs.isEmpty ? '/' : '/${segs.join('/')}';
+  }
+
+  /// Resolves a Markdown-style relative link against the folder holding
+  /// [from]: `./x`, `../x`, `x` and `/x` all become repository paths.
+  /// Returns null for links with a scheme or an empty target.
+  static String? resolve(String from, String href) {
+    var h = href.trim();
+    final hash = h.indexOf('#');
+    if (hash >= 0) h = h.substring(0, hash);
+    final q = h.indexOf('?');
+    if (q >= 0) h = h.substring(0, q);
+    if (h.isEmpty || Uri.tryParse(h)?.hasScheme == true) return null;
+    final base = h.startsWith('/') ? const <String>[] : segments(parent(from));
+    final out = List<String>.of(base);
+    for (final seg in h.split('/')) {
+      if (seg.isEmpty || seg == '.') continue;
+      if (seg == '..') {
+        if (out.isNotEmpty) out.removeLast();
+        continue;
+      }
+      out.add(Uri.decodeComponent(seg));
+    }
+    return out.isEmpty ? '/' : '/${out.join('/')}';
+  }
+}
+
+/// Web links matching what the browser shows, for "Open in browser" and
+/// "Copy link".
+abstract final class RepoWebUrls {
+  static String? folder(GitRepository repo, String path, String ref) =>
+      _item(repo, path, ref);
+
+  static String? file(GitRepository repo, String path, String ref) =>
+      _item(repo, path, ref);
+
+  static String? _item(GitRepository repo, String path, String ref) {
+    final base = repo.webUrl;
+    if (base == null) return null;
+    final p = RepoPaths.normalize(path);
+    return '$base?path=${Uri.encodeQueryComponent(p)}'
+        '&version=GB${Uri.encodeQueryComponent(ref)}';
+  }
+
+  static String? commit(GitRepository repo, String commitId) {
+    final base = repo.webUrl;
+    return base == null ? null : '$base/commit/$commitId';
+  }
+}
