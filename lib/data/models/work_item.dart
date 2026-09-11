@@ -3,6 +3,46 @@ import 'package:flutter/material.dart' show IconData, Icons;
 
 import '../../core/util/format.dart';
 
+/// Graph avatar sizes: small 32 px, medium 64 px, large 256 px.
+enum AvatarSize { small, medium, large }
+
+/// Where an avatar comes from; [key] is stable per person and size and
+/// names the cache entry.
+class AvatarSource extends Equatable {
+  const AvatarSource._({
+    required this.key,
+    this.org,
+    this.descriptor,
+    this.url,
+    this.size = AvatarSize.medium,
+  });
+
+  factory AvatarSource.graph({
+    required String org,
+    required String descriptor,
+    AvatarSize size = AvatarSize.medium,
+  }) => AvatarSource._(
+    key: 'graph:$org:$descriptor:${size.name}',
+    org: org,
+    descriptor: descriptor,
+    size: size,
+  );
+
+  factory AvatarSource.url(String url) =>
+      AvatarSource._(key: 'url:$url', url: url);
+
+  final String key;
+  final String? org;
+  final String? descriptor;
+  final String? url;
+  final AvatarSize size;
+
+  bool get isGraph => descriptor != null;
+
+  @override
+  List<Object?> get props => [key];
+}
+
 /// A person as Azure DevOps returns it inside a field or a comment.
 class IdentityRef extends Equatable {
   const IdentityRef({
@@ -10,6 +50,7 @@ class IdentityRef extends Equatable {
     this.uniqueName,
     this.id,
     this.imageUrl,
+    this.descriptor,
   });
 
   factory IdentityRef.fromJson(Map<String, dynamic> json) {
@@ -22,7 +63,10 @@ class IdentityRef extends Equatable {
       displayName: json['displayName'] as String? ?? '',
       uniqueName: json['uniqueName'] as String?,
       id: json['id'] as String?,
-      imageUrl: json['imageUrl'] as String? ?? avatar,
+      // The Graph avatar link takes a size and answers with the token;
+      // `imageUrl` may be the legacy identityImage form.
+      imageUrl: avatar ?? json['imageUrl'] as String?,
+      descriptor: json['descriptor'] as String?,
     );
   }
 
@@ -45,7 +89,36 @@ class IdentityRef extends Equatable {
   final String? id;
   final String? imageUrl;
 
+  /// Graph subject descriptor (`aad.…`), the key for avatars.
+  final String? descriptor;
+
   String get initialsLabel => initials(displayName);
+
+  /// Organization the identity's links point at (`dev.azure.com/{org}/…`).
+  String? get org {
+    final url = imageUrl;
+    if (url == null || url.isEmpty) return null;
+    final segments = Uri.parse(url).pathSegments;
+    return segments.isEmpty || segments.first.startsWith('_')
+        ? null
+        : segments.first;
+  }
+
+  /// How to fetch this person's picture, or null when nothing is known.
+  /// The Graph `Subjects/{descriptor}/avatars` endpoint on vssps answers
+  /// JSON (base64) to the app's bearer token; the image links on
+  /// dev.azure.com (`GraphProfile/MemberAvatars`, `_api/_common/
+  /// identityImage`) return 401 to it although a PAT can read them.
+  AvatarSource? avatarSource({AvatarSize size = AvatarSize.medium}) {
+    final o = org;
+    final d = descriptor;
+    if (o != null && d != null && d.isNotEmpty) {
+      return AvatarSource.graph(org: o, descriptor: d, size: size);
+    }
+    final url = imageUrl;
+    if (url != null && url.isNotEmpty) return AvatarSource.url(url);
+    return null;
+  }
 
   @override
   List<Object?> get props => [displayName, uniqueName, id];

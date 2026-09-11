@@ -33,6 +33,8 @@ class PrReviewer extends Equatable {
     this.isContainer = false,
     this.hasDeclined = false,
     this.uniqueName,
+    this.imageUrl,
+    this.descriptor,
   });
 
   factory PrReviewer.fromJson(Map<String, dynamic> json) => PrReviewer(
@@ -43,6 +45,8 @@ class PrReviewer extends Equatable {
     isContainer: json['isContainer'] as bool? ?? false,
     hasDeclined: json['hasDeclined'] as bool? ?? false,
     uniqueName: json['uniqueName'] as String?,
+    imageUrl: IdentityRef.fromJson(json).imageUrl,
+    descriptor: json['descriptor'] as String?,
   );
 
   final String id;
@@ -52,9 +56,16 @@ class PrReviewer extends Equatable {
   final bool isContainer;
   final bool hasDeclined;
   final String? uniqueName;
+  final String? imageUrl;
+  final String? descriptor;
 
-  IdentityRef get identity =>
-      IdentityRef(displayName: displayName, id: id, uniqueName: uniqueName);
+  IdentityRef get identity => IdentityRef(
+    displayName: displayName,
+    id: id,
+    uniqueName: uniqueName,
+    imageUrl: imageUrl,
+    descriptor: descriptor,
+  );
 
   @override
   List<Object?> get props => [id, vote, isRequired];

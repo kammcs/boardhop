@@ -1,6 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/util/format.dart';
+import '../../../data/avatar_store.dart';
 import '../../../data/models/work_item.dart';
 import '../../../theme/theme.dart';
 import '../../boards/widgets/kanban_board.dart' show tintApiColor;
@@ -60,30 +64,87 @@ class StateDot extends StatelessWidget {
   );
 }
 
-class IdentityAvatar extends StatelessWidget {
+/// A person: their Azure DevOps avatar when the [AvatarStore] can fetch
+/// it (authenticated Graph endpoint), initials meanwhile or without one.
+class IdentityAvatar extends StatefulWidget {
   const IdentityAvatar({super.key, required this.identity, this.radius = 12});
 
   final IdentityRef? identity;
   final double radius;
 
   @override
+  State<IdentityAvatar> createState() => _IdentityAvatarState();
+}
+
+class _IdentityAvatarState extends State<IdentityAvatar> {
+  Uint8List? _bytes;
+  AvatarSource? _source;
+
+  AvatarStore? get _store {
+    try {
+      return context.read<AvatarStore>();
+    } catch (_) {
+      // No store above this widget (tests, previews): initials only.
+      return null;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(IdentityAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.identity != widget.identity || old.radius != widget.radius) {
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    final source = widget.identity?.avatarSource(
+      size: widget.radius > 24 ? AvatarSize.large : AvatarSize.medium,
+    );
+    if (source == _source) return;
+    _source = source;
+    _bytes = null;
+    final store = _store;
+    if (source == null || store == null) return;
+    final hit = store.cached(source);
+    if (hit != null) {
+      _bytes = hit;
+      return;
+    }
+    store.load(source).then((bytes) {
+      if (mounted && _source == source && bytes != null) {
+        setState(() => _bytes = bytes);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final identity = widget.identity;
     final label = identity?.initialsLabel ?? '–';
+    final bytes = _bytes;
     return Tooltip(
       message: identity?.displayName ?? 'Unassigned',
       child: CircleAvatar(
-        radius: radius,
+        radius: widget.radius,
         backgroundColor: identity == null
             ? scheme.surfaceContainerHighest
             : scheme.secondaryContainer,
+        foregroundImage: bytes == null ? null : MemoryImage(bytes),
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: identity == null
                 ? scheme.onSurfaceVariant
                 : scheme.onSecondaryContainer,
-            fontSize: radius * 0.85,
+            fontSize: widget.radius * 0.85,
           ),
         ),
       ),

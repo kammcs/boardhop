@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
@@ -158,6 +159,25 @@ class AdoClient {
     );
   }
 
+  /// Fetches a binary resource (avatar, attachment) with the bearer token.
+  /// Same 401 retry as JSON calls; non-success statuses map to exceptions.
+  Future<Uint8List> getBytes(Uri uri, {String? tenantId}) async {
+    final response = await sendRaw(
+      method: 'GET',
+      uri: uri,
+      tenantId: tenantId,
+      responseType: ResponseType.bytes,
+    );
+    final data = response.data;
+    if (data is Uint8List) return data;
+    if (data is List<int>) return Uint8List.fromList(data);
+    throw AdoServerException(
+      'Expected bytes, got ${data.runtimeType}',
+      statusCode: response.statusCode,
+      url: uri,
+    );
+  }
+
   /// Sends a request to an absolute URI, attaches the token, records rate
   /// limit headers, retries once through the challenge handler on 401, and
   /// maps non-success statuses to `AdoException`s.
@@ -167,6 +187,7 @@ class AdoClient {
     String? tenantId,
     Object? body,
     String? contentType,
+    ResponseType? responseType,
     CancelToken? cancelToken,
   }) async {
     final String token;
@@ -184,6 +205,7 @@ class AdoClient {
       token: token,
       body: body,
       contentType: contentType,
+      responseType: responseType,
       cancelToken: cancelToken,
     );
     if (_isSuccess(first)) return first;
@@ -202,6 +224,7 @@ class AdoClient {
       token: fresh,
       body: body,
       contentType: contentType,
+      responseType: responseType,
       cancelToken: cancelToken,
     );
     if (_isSuccess(second)) return second;
@@ -214,6 +237,7 @@ class AdoClient {
     required String token,
     Object? body,
     String? contentType,
+    ResponseType? responseType,
     CancelToken? cancelToken,
   }) async {
     final Response<dynamic> response;
@@ -227,6 +251,7 @@ class AdoClient {
           headers: <String, String>{'Authorization': 'Bearer $token'},
           contentType:
               contentType ?? (body == null ? null : Headers.jsonContentType),
+          responseType: responseType,
         ),
       );
     } on DioException catch (e) {

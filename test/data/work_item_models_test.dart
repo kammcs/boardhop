@@ -1,5 +1,6 @@
 import 'package:boardhop/core/util/format.dart';
 import 'package:boardhop/data/models/board.dart';
+import 'package:boardhop/data/avatar_store.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/repositories/board_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
@@ -363,6 +364,53 @@ void main() {
       expect(initials(''), '?');
       expect(pathLeaf(r'CloudCover 2.0\Sprint 12'), 'Sprint 12');
       expect(pathLeaf('Root'), 'Root');
+    });
+  });
+
+  group('avatars', () {
+    test('IdentityRef keeps the descriptor and derives the org', () {
+      final ref = IdentityRef.fromJson({
+        'displayName': 'Kelly Kamm',
+        'id': 'k',
+        'descriptor': 'aad.abc',
+        'imageUrl': 'https://dev.azure.com/o/_api/_common/identityImage?id=k',
+        '_links': {
+          'avatar': {
+            'href': 'https://dev.azure.com/o/_apis/GraphProfile/MemberAvatars/aad.abc',
+          },
+        },
+      });
+      expect(ref.org, 'o');
+      final source = ref.avatarSource()!;
+      expect(source.isGraph, isTrue);
+      expect(source.key, 'graph:o:aad.abc:medium');
+      expect(ref.avatarSource(size: AvatarSize.large)!.key, endsWith(':large'));
+      // Without a descriptor the image link is the fallback.
+      final noDescriptor = IdentityRef.fromJson({
+        'displayName': 'X',
+        'imageUrl': 'https://dev.azure.com/o/_api/_common/identityImage?id=x',
+      });
+      expect(noDescriptor.avatarSource()!.isGraph, isFalse);
+      expect(noDescriptor.avatarSource()!.url, noDescriptor.imageUrl);
+      expect(const IdentityRef(displayName: 'n').avatarSource(), isNull);
+      expect(const IdentityRef(displayName: 'n').org, isNull);
+    });
+
+    test('cache file names come from the source key', () {
+      expect(
+        AvatarStore.fileNameFor(
+          AvatarSource.graph(
+            org: 'o',
+            descriptor: 'aad.NWVk',
+            size: AvatarSize.small,
+          ),
+        ),
+        'graph_o_aad.NWVk_small.png',
+      );
+      expect(
+        AvatarStore.fileNameFor(AvatarSource.url('https://x/y?id=1')),
+        'url_https___x_y_id_1.png',
+      );
     });
   });
 }

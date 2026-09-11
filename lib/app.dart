@@ -8,6 +8,7 @@ import 'auth/auth_service.dart';
 import 'core/http/ado_client.dart';
 import 'core/notifications/notification_service.dart';
 import 'data/activity_sync.dart';
+import 'data/avatar_store.dart';
 import 'data/db/app_database.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/org_repository.dart';
@@ -27,7 +28,8 @@ class AppDependencies {
     required this.client,
     required this.db,
     required this.notifications,
-  }) : orgs = OrgRepository(client, db),
+  }) : avatars = AvatarStore(client),
+       orgs = OrgRepository(client, db),
        projects = ProjectRepository(client, db),
        workItems = WorkItemRepository(client, db),
        pullRequests = PullRequestRepository(client, db),
@@ -48,6 +50,7 @@ class AppDependencies {
   final AdoClient client;
   final AppDatabase db;
   final NotificationService notifications;
+  final AvatarStore avatars;
   final OrgRepository orgs;
   final ProjectRepository projects;
   final WorkItemRepository workItems;
@@ -98,6 +101,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         deps.activitySync.start();
       } else if (state is AuthSignedOut) {
         deps.activitySync.stop();
+        deps.avatars.clear();
       }
     });
   }
@@ -134,6 +138,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.activity),
         RepositoryProvider.value(value: deps.activitySync),
         RepositoryProvider.value(value: deps.notifications),
+        RepositoryProvider.value(value: deps.avatars),
       ],
       child: BlocProvider.value(
         value: _authBloc,
