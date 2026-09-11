@@ -54,6 +54,7 @@ Either way the payload is a pointer, never content. Titles, comments and code st
 - Enterprise trust: no vendor-hosted store of customer data.
 - A natural paid tier: individuals keep the free foreground polling; teams pay for the extension and relay.
 - A place for per-user preferences and future features (digest emails, Teams cards) without touching the mobile app.
+- **Live task log tail (deferred here 2026-09-11, Kelly's call).** Spikes s20, s21, w12 and w13 showed the agent uploads a task's log only when the task finishes, even for 18 KB of output, so the app's REST reads cannot follow a running task; the web console gets its live lines from the undocumented SignalR feed the agent appends to (`AppendTimelineRecordFeed`). A relay running in the customer's tenancy can hold that SignalR subscription (or a service hook plus the timeline record feed) for the runs a person is watching and push new lines to the phone, which is the same channel the notifications already use. The app side stays small: a "Follow" toggle on the run and log pages that subscribes through the relay, with the REST log read as the fallback when no relay is configured.
 
 ## What it does not fix
 
