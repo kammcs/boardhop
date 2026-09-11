@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/display_cutout.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/pending_writes_banner.dart';
@@ -39,11 +41,28 @@ class _ProjectShellState extends State<ProjectShell>
   String get org => widget.org;
   String get project => widget.project;
 
+  /// Where the Dynamic Island is while in landscape (Apple only), so the
+  /// glass rail can hug the other edge; read again after every rotation.
+  CutoutSide _cutout = CutoutSide.unknown;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
+    _readCutout();
+  }
+
+  @override
+  void didChangeMetrics() => _readCutout();
+
+  Future<void> _readCutout() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.macOS) {
+      return;
+    }
+    final side = await DisplayCutout.side();
+    if (mounted && side != _cutout) setState(() => _cutout = side);
   }
 
   @override
@@ -150,6 +169,7 @@ class _ProjectShellState extends State<ProjectShell>
         onDestinationSelected: (i) => _select(context, i),
         bleedsUnderRail: _bleedsUnderRail(widget.location),
         railOnRight: ThemeScope.of(context).railSide == RailSide.right,
+        cutoutSide: _cutout,
       );
     }
     return Scaffold(

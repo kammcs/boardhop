@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../core/display_cutout.dart';
 import '../../theme/tokens.dart';
 import '../shared/widgets/glass_navigation_rail.dart';
 
@@ -14,11 +17,15 @@ import '../shared/widgets/glass_navigation_rail.dart';
 /// Pure layout, so the placement rules are testable without the router:
 ///
 /// * The page keeps clear of the display's sides (the Dynamic Island and
-///   the rounded corners of an iPhone in landscape) with a [SafeArea], and
-///   the rail sits outside those insets as well. A SafeArea inside the
-///   rail's own 72 pt box would shrink the rail by the inset instead of
-///   moving it: an iPhone 17 in landscape showed a 13 pt sliver of rail
-///   (2026-09-11).
+///   the rounded corners of an iPhone in landscape) with a [SafeArea]. A
+///   SafeArea inside the rail's own 72 pt box would shrink the rail by the
+///   inset instead of moving it: an iPhone 17 in landscape showed a 13 pt
+///   sliver of rail (2026-09-11).
+/// * iOS reports the same side inset on both sides, but the island is on
+///   one of them ([cutoutSide], from [DisplayCutout]). The rail keeps only
+///   its [margin] from an edge known to be free of the island (the inset
+///   plus the margin there was far too much, Kelly, 2026-09-11) and clears
+///   the inset on the island's side, or when the side is unknown.
 /// * Vertical pages are padded clear of the rail by [railGutter]. Pages
 ///   whose content scrolls sideways ([bleedsUnderRail], the board) get the
 ///   gutter as safe-area padding instead, so their columns rest clear of
@@ -39,6 +46,7 @@ class GlassShellLayout extends StatelessWidget {
     required this.onDestinationSelected,
     required this.bleedsUnderRail,
     required this.railOnRight,
+    this.cutoutSide = CutoutSide.unknown,
   });
 
   final Widget body;
@@ -52,6 +60,9 @@ class GlassShellLayout extends StatelessWidget {
   /// Landscape: the rail floats on the right (Settings > Appearance).
   final bool railOnRight;
 
+  /// Which side of the screen holds the display cutout in landscape.
+  final CutoutSide cutoutSide;
+
   /// Share of the safe height (landscape) or width (portrait) the rail
   /// spans, centered.
   static const double heightFactor = 0.8;
@@ -60,7 +71,8 @@ class GlassShellLayout extends StatelessWidget {
   /// blur radius).
   static const double margin = Spacing.xl;
 
-  /// What a page keeps clear beside the rail in landscape.
+  /// What a page keeps clear beside the rail in landscape, measured from
+  /// the screen edge (plus that side's inset when the rail must clear it).
   static const double railGutter =
       margin + GlassNavigationRail.width + Spacing.lg;
 
@@ -112,12 +124,20 @@ class GlassShellLayout extends StatelessWidget {
         ),
       );
     }
+    final railSideInset = railOnRight ? inset.right : inset.left;
+    final railSideClear =
+        cutoutSide == CutoutSide.none ||
+        cutoutSide == (railOnRight ? CutoutSide.left : CutoutSide.right);
+    // From the screen edge: where the rail starts, and where the page's
+    // content starts beside it.
+    final railEdge = margin + (railSideClear ? 0 : railSideInset);
+    final gutter = railGutter + (railSideClear ? 0 : railSideInset);
     final page = bleedsUnderRail
         ? MediaQuery(
             data: mq.copyWith(
               padding: inset.copyWith(
-                left: inset.left + (railOnRight ? 0 : railGutter),
-                right: inset.right + (railOnRight ? railGutter : 0),
+                left: railOnRight ? inset.left : gutter,
+                right: railOnRight ? gutter : inset.right,
               ),
             ),
             child: body,
@@ -126,14 +146,14 @@ class GlassShellLayout extends StatelessWidget {
             top: false,
             bottom: false,
             child: Padding(
+              // The SafeArea already took the inset off this side.
               padding: EdgeInsets.only(
-                left: railOnRight ? 0 : railGutter,
-                right: railOnRight ? railGutter : 0,
+                left: railOnRight ? 0 : math.max(0, gutter - inset.left),
+                right: railOnRight ? math.max(0, gutter - inset.right) : 0,
               ),
               child: body,
             ),
           );
-    final railEdge = margin + (railOnRight ? inset.right : inset.left);
     return Scaffold(
       body: Stack(
         children: [

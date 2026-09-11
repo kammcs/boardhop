@@ -1,3 +1,4 @@
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/features/projects/glass_shell_layout.dart';
 import 'package:boardhop/features/shared/widgets/glass_navigation_rail.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
@@ -45,6 +46,7 @@ void main() {
     required EdgeInsets insets,
     bool bleed = false,
     bool onRight = true,
+    CutoutSide cutout = CutoutSide.unknown,
   }) async {
     seen = null;
     tester.view.physicalSize = size;
@@ -65,6 +67,7 @@ void main() {
           onDestinationSelected: (_) {},
           bleedsUnderRail: bleed,
           railOnRight: onRight,
+          cutoutSide: cutout,
           body: Builder(
             builder: (context) {
               seen = MediaQuery.paddingOf(context);
@@ -80,9 +83,8 @@ void main() {
       tester.getRect(find.byType(GlassNavigationRail));
   Rect body(WidgetTester tester) => tester.getRect(find.byKey(bodyKey));
 
-  testWidgets('landscape phone: full-width rail outside the side inset', (
-    tester,
-  ) async {
+  testWidgets('landscape phone, island side unknown: full-width rail '
+      'outside the side inset', (tester) async {
     await pump(tester, size: phone, insets: phoneInsets);
     final r = rail(tester);
     expect(r.width, GlassNavigationRail.width);
@@ -97,6 +99,59 @@ void main() {
     expect(b.left, 59);
     expect(b.right, phone.width - 59 - GlassShellLayout.railGutter);
     expect(seen, const EdgeInsets.only(bottom: 21));
+  });
+
+  testWidgets('island on the other side: the rail keeps only its margin '
+      'from the edge', (tester) async {
+    await pump(
+      tester,
+      size: phone,
+      insets: phoneInsets,
+      cutout: CutoutSide.left,
+    );
+    final r = rail(tester);
+    expect(r.width, GlassNavigationRail.width);
+    expect(r.right, phone.width - GlassShellLayout.margin);
+    final b = body(tester);
+    expect(b.left, 59);
+    expect(b.right, phone.width - GlassShellLayout.railGutter);
+
+    // The board too: its padding on the rail side is measured from the edge.
+    await pump(
+      tester,
+      size: phone,
+      insets: phoneInsets,
+      cutout: CutoutSide.left,
+      bleed: true,
+    );
+    expect(
+      seen,
+      const EdgeInsets.fromLTRB(59, 0, GlassShellLayout.railGutter, 21),
+    );
+
+    // Rail on the left with the island on the right: mirrored.
+    await pump(
+      tester,
+      size: phone,
+      insets: phoneInsets,
+      cutout: CutoutSide.right,
+      onRight: false,
+    );
+    expect(rail(tester).left, GlassShellLayout.margin);
+    expect(body(tester).left, GlassShellLayout.railGutter);
+  });
+
+  testWidgets('island on the rail side: the rail clears the inset', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      size: phone,
+      insets: phoneInsets,
+      cutout: CutoutSide.right,
+    );
+    expect(rail(tester).right, phone.width - 59 - GlassShellLayout.margin);
+    expect(body(tester).right, phone.width - 59 - GlassShellLayout.railGutter);
   });
 
   testWidgets('landscape rail on the left', (tester) async {

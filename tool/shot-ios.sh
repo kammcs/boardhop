@@ -8,10 +8,12 @@
 # to points from the device's own dimensions, so the same numbers work
 # for any simulator. Pick the simulator with DEVICE=iphone|ipad (default
 # iphone) or UDID=<udid>. When the device is rotated, set ROT=left (home
-# indicator on the right, status bar along the raw frame's left edge):
-# the thumbnail is then rotated to read normally and coordinates are
-# taken in that rotated space; simctl screenshots and idb taps both stay
-# in the raw portrait frame, which this script maps back. Output goes to
+# indicator on the right, Dynamic Island / status bar along the raw
+# frame's left edge, so the island shows on the right) or ROT=right (the
+# other way round, island on the left): the thumbnail is then rotated to
+# read normally and coordinates are taken in that rotated space; simctl
+# screenshots and idb taps both stay in the raw portrait frame, which
+# this script maps back. Output goes to
 # $SHOT_DIR (default: ./.shots, gitignored) as <name>.png (raw frame) and
 # <name>_s.png (thumbnail, rotated when ROT is set).
 #
@@ -50,6 +52,8 @@ conv() {
 x, y = $1 * $SCALE, $2 * $SCALE
 if '$ROT' == 'left':
     x, y = y, $H_PTS - x
+elif '$ROT' == 'right':
+    x, y = $W_PTS - y, x
 print(int(round(x)), int(round(y)))"
 }
 tap() { read -r x y < <(conv "$1" "$2"); "$IDB" ui tap --udid "$UDID" "$x" "$y"; }
@@ -77,6 +81,8 @@ w = int(sys.argv[3])
 im = im.resize((w, int(im.height * w / im.width)))
 if sys.argv[4] == 'left':
     im = im.rotate(-90, expand=True)
+elif sys.argv[4] == 'right':
+    im = im.rotate(90, expand=True)
 im.save(sys.argv[2])
 EOF
 echo "$SHOT_DIR/${name}_s.png"
