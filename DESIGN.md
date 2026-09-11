@@ -40,7 +40,7 @@ Locked 2026-09-10, before the feature screens. Everything visual flows from one 
 ## 6. Layout: phones first, tablets not an afterthought
 
 - `Breakpoint` in [lib/theme/layout.dart](lib/theme/layout.dart) follows Material window size classes: compact (< 600), medium (< 840), expanded. Read it with `context.breakpoint`.
-- Every screen works at compact width. On medium and expanded, wrap scrolling content in `ContentColumn` so rows do not stretch past 840 dp, and use the extra width for a second pane where it helps (list + detail for work items and PRs, `NavigationRail` instead of `NavigationBar`). That is the "responsive tablet layout" decision from research/00; multi-pane is a later milestone, but nothing built now may assume a phone.
+- Every screen works at compact width. On medium and expanded, wrap scrolling content in `ContentColumn`: it follows the window up to 1120 dp (840 alone left a third of an iPad in landscape empty), and pages with distinct sections put them in two columns with `SideBySide` from 960 dp of content width (Home, repo page, PR overview). Use the extra width for a second pane where it helps (list + detail for work items and PRs, `NavigationRail` instead of `NavigationBar`). That is the "responsive tablet layout" decision from research/00; multi-pane is a later milestone, but nothing built now may assume a phone.
 - Keep the primary action reachable with one thumb: bottom-anchored buttons and sheets on phones, not top-right only.
 
 ## 7. Components and patterns

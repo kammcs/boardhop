@@ -280,105 +280,115 @@ class _ProjectHomePageState extends State<ProjectHomePage> {
                       ],
                     ),
                   ),
-                  _Section(
-                    title: _reposArePins
-                        ? 'Pinned repositories'
-                        : 'Recent repositories',
-                    icon: Icons.source_outlined,
-                    error: _errors['repos'],
-                    loaded: _repos != null,
-                    empty: 'Star a repository to pin it here.',
-                    onSeeAll: () => context.go('$base/repos'),
-                    children: [
-                      for (final r in _repos ?? const <GitRepository>[])
-                        ListTile(
-                          leading: AdoTile(
-                            name: r.name,
-                            color: AdoTiles.serviceColor(r.name),
-                            initials: AdoTiles.serviceInitials(r.name),
-                            size: 32,
-                          ),
-                          title: Text(
-                            r.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: r.defaultBranchName == null
-                              ? null
-                              : Text(r.defaultBranchName!),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => context.push(
-                            '$base/repos/${Uri.encodeComponent(r.name)}',
-                          ),
-                        ),
-                    ],
-                  ),
-                  _Section(
-                    title: 'My pull requests',
-                    icon: Icons.call_merge,
-                    error: _errors['prs'],
-                    loaded: _prs != null,
-                    empty: 'Nothing to review and nothing of yours open.',
-                    onSeeAll: () => context.push('$base/pull-requests'),
-                    children: [
-                      for (final pr in _prs ?? const <PullRequest>[])
-                        ListTile(
-                          leading: IdentityAvatar(
-                            identity: pr.createdBy,
-                            radius: 16,
-                          ),
-                          title: Text(
-                            pr.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '${pr.repositoryName} · !${pr.id}'
-                            '${pr.isDraft ? ' · draft' : ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: Text(
-                            relativeTime(pr.creationDate),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                  // Two columns from tablet width: repositories and work
+                  // items on the left, pull requests and runs on the right.
+                  SideBySide(
+                    start: [
+                      _Section(
+                        title: _reposArePins
+                            ? 'Pinned repositories'
+                            : 'Recent repositories',
+                        icon: Icons.source_outlined,
+                        error: _errors['repos'],
+                        loaded: _repos != null,
+                        empty: 'Star a repository to pin it here.',
+                        onSeeAll: () => context.go('$base/repos'),
+                        children: [
+                          for (final r in _repos ?? const <GitRepository>[])
+                            ListTile(
+                              leading: AdoTile(
+                                name: r.name,
+                                color: AdoTiles.serviceColor(r.name),
+                                initials: AdoTiles.serviceInitials(r.name),
+                                size: 32,
+                              ),
+                              title: Text(
+                                r.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: r.defaultBranchName == null
+                                  ? null
+                                  : Text(r.defaultBranchName!),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => context.push(
+                                '$base/repos/${Uri.encodeComponent(r.name)}',
+                              ),
                             ),
-                          ),
-                          onTap: () => context.push(
-                            '${orgRoute(context, widget.org)}/pull-requests/${pr.id}',
-                          ),
-                        ),
+                        ],
+                      ),
+                      _Section(
+                        title: 'My work items',
+                        icon: Icons.assignment_outlined,
+                        error: _errors['items'],
+                        loaded: _items != null,
+                        empty: 'Nothing assigned to you here.',
+                        onSeeAll: () => context.go('$base/work-items'),
+                        children: [
+                          for (final w in _items ?? const <WorkItem>[])
+                            _WorkItemRow(
+                              item: w,
+                              onTap: () =>
+                                  context.push('$base/work-items/${w.id}'),
+                            ),
+                        ],
+                      ),
                     ],
-                  ),
-                  _Section(
-                    title: 'My work items',
-                    icon: Icons.assignment_outlined,
-                    error: _errors['items'],
-                    loaded: _items != null,
-                    empty: 'Nothing assigned to you here.',
-                    onSeeAll: () => context.go('$base/work-items'),
-                    children: [
-                      for (final w in _items ?? const <WorkItem>[])
-                        _WorkItemRow(
-                          item: w,
-                          onTap: () => context.push('$base/work-items/${w.id}'),
-                        ),
-                    ],
-                  ),
-                  _Section(
-                    title: 'Latest runs',
-                    icon: Icons.play_circle_outline,
-                    error: _errors['runs'],
-                    loaded: _runs != null,
-                    empty: 'No pipeline runs yet.',
-                    onSeeAll: () => context.go('$base/pipelines'),
-                    children: [
-                      for (final run in _runs ?? const <BuildRun>[])
-                        RunTile(
-                          run: run,
-                          onTap: () =>
-                              context.push('$base/pipelines/runs/${run.id}'),
-                        ),
+                    end: [
+                      _Section(
+                        title: 'My pull requests',
+                        icon: Icons.call_merge,
+                        error: _errors['prs'],
+                        loaded: _prs != null,
+                        empty: 'Nothing to review and nothing of yours open.',
+                        onSeeAll: () => context.push('$base/pull-requests'),
+                        children: [
+                          for (final pr in _prs ?? const <PullRequest>[])
+                            ListTile(
+                              leading: IdentityAvatar(
+                                identity: pr.createdBy,
+                                radius: 16,
+                              ),
+                              title: Text(
+                                pr.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${pr.repositoryName} · !${pr.id}'
+                                '${pr.isDraft ? ' · draft' : ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Text(
+                                relativeTime(pr.creationDate),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                              onTap: () => context.push(
+                                '${orgRoute(context, widget.org)}/pull-requests/${pr.id}',
+                              ),
+                            ),
+                        ],
+                      ),
+                      _Section(
+                        title: 'Latest runs',
+                        icon: Icons.play_circle_outline,
+                        error: _errors['runs'],
+                        loaded: _runs != null,
+                        empty: 'No pipeline runs yet.',
+                        onSeeAll: () => context.go('$base/pipelines'),
+                        children: [
+                          for (final run in _runs ?? const <BuildRun>[])
+                            RunTile(
+                              run: run,
+                              onTap: () => context.push(
+                                '$base/pipelines/runs/${run.id}',
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                   const Divider(height: 1),

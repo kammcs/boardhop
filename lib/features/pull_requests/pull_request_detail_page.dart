@@ -521,102 +521,112 @@ class _Overview extends StatelessWidget {
               ],
             ),
           ),
-          if (merge != null || checks.isNotEmpty) ...[
-            _SectionTitle(
-              'Checks${blocking > 0 ? ' · $blocking blocking' : ''}',
-            ),
-            if (merge != null)
-              ListTile(
-                dense: true,
-                leading: Icon(
-                  pr.mergeStatus == 'succeeded'
-                      ? Icons.check_circle
-                      : Icons.warning_amber,
-                  color: merge.$2,
-                ),
-                title: Text(merge.$1),
-              ),
-            for (final c in checks)
-              ListTile(
-                dense: true,
-                leading: Icon(
-                  checkIcon(c.state),
-                  color: checkColor(context, c.state),
-                ),
-                title: Text(c.name),
-                subtitle: c.detail == null || c.detail!.isEmpty
-                    ? null
-                    : Text(c.detail!),
-                trailing: c.isBlocking
+          // From tablet width the description sits beside the checks,
+          // reviewers and linked work items.
+          SideBySide(
+            startFlex: 3,
+            endFlex: 2,
+            start: [
+              _SectionTitle('Description'),
+              Padding(
+                padding: Spacing.pageHorizontal,
+                child: (pr.description ?? '').trim().isEmpty
                     ? Text(
-                        'required',
-                        style: theme.textTheme.labelSmall?.copyWith(
+                        'No description.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
                       )
-                    : null,
+                    : MarkdownBody(data: pr.description!, selectable: true),
               ),
-          ],
-          _SectionTitle('Description'),
-          Padding(
-            padding: Spacing.pageHorizontal,
-            child: (pr.description ?? '').trim().isEmpty
-                ? Text(
-                    'No description.',
+            ],
+            end: [
+              if (merge != null || checks.isNotEmpty) ...[
+                _SectionTitle(
+                  'Checks${blocking > 0 ? ' · $blocking blocking' : ''}',
+                ),
+                if (merge != null)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      pr.mergeStatus == 'succeeded'
+                          ? Icons.check_circle
+                          : Icons.warning_amber,
+                      color: merge.$2,
+                    ),
+                    title: Text(merge.$1),
+                  ),
+                for (final c in checks)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      checkIcon(c.state),
+                      color: checkColor(context, c.state),
+                    ),
+                    title: Text(c.name),
+                    subtitle: c.detail == null || c.detail!.isEmpty
+                        ? null
+                        : Text(c.detail!),
+                    trailing: c.isBlocking
+                        ? Text(
+                            'required',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          )
+                        : null,
+                  ),
+              ],
+              _SectionTitle('Reviewers (${pr.reviewers.length})'),
+              if (pr.reviewers.isEmpty)
+                Padding(
+                  padding: Spacing.pageHorizontal,
+                  child: Text(
+                    'No reviewers yet.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
-                  )
-                : MarkdownBody(data: pr.description!, selectable: true),
+                  ),
+                ),
+              for (final r in pr.reviewers)
+                ListTile(
+                  dense: true,
+                  leading: IdentityAvatar(identity: r.identity, radius: 14),
+                  title: Text(r.displayName),
+                  subtitle: Text(
+                    '${r.vote.label}${r.isRequired ? ' · required' : ''}'
+                    '${r.isContainer ? ' · group' : ''}',
+                  ),
+                  trailing: Icon(
+                    voteIcon(r.vote),
+                    color: voteColor(context, r.vote),
+                  ),
+                ),
+              _SectionTitle('Linked work items (${workItems.length})'),
+              if (workItems.isEmpty)
+                Padding(
+                  padding: Spacing.pageHorizontal,
+                  child: Text(
+                    'None.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              for (final w in workItems)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.link),
+                  title: Text(
+                    w.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text('${w.type} ${w.id} · ${w.state}'),
+                  onTap: () => onWorkItemTap(w),
+                ),
+            ],
           ),
-          _SectionTitle('Reviewers (${pr.reviewers.length})'),
-          if (pr.reviewers.isEmpty)
-            Padding(
-              padding: Spacing.pageHorizontal,
-              child: Text(
-                'No reviewers yet.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          for (final r in pr.reviewers)
-            ListTile(
-              dense: true,
-              leading: IdentityAvatar(identity: r.identity, radius: 14),
-              title: Text(r.displayName),
-              subtitle: Text(
-                '${r.vote.label}${r.isRequired ? ' · required' : ''}'
-                '${r.isContainer ? ' · group' : ''}',
-              ),
-              trailing: Icon(
-                voteIcon(r.vote),
-                color: voteColor(context, r.vote),
-              ),
-            ),
-          _SectionTitle('Linked work items (${workItems.length})'),
-          if (workItems.isEmpty)
-            Padding(
-              padding: Spacing.pageHorizontal,
-              child: Text(
-                'None.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          for (final w in workItems)
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.link),
-              title: Text(
-                w.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text('${w.type} ${w.id} · ${w.state}'),
-              onTap: () => onWorkItemTap(w),
-            ),
         ],
       ),
     );

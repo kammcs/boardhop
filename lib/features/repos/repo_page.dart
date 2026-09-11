@@ -296,91 +296,100 @@ class _RepoPageState extends State<RepoPage> {
                   ),
                 ),
               if (repo != null) ...[
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.call_merge),
-                  title: const Text('Pull requests'),
-                  subtitle: Text(
-                    _prCount == null
-                        ? 'Active pull requests'
-                        : _prCount == 0
-                        ? 'No active pull requests'
-                        : _prCount == 1
-                        ? '1 active pull request'
-                        : '${_prCount! >= 100 ? '100+' : _prCount} active pull requests',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(
-                    '${projectRoute(context, widget.org, widget.project)}'
-                    '/pull-requests?repoId=${Uri.encodeQueryComponent(repo.id)}'
-                    '&repo=${Uri.encodeQueryComponent(repo.name)}',
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.fork_right),
-                  title: Text(branch ?? 'No branches'),
-                  subtitle: branchSubtitle == null
-                      ? null
-                      : Text(branchSubtitle),
-                  trailing: branch == null
-                      ? null
-                      : const Icon(Icons.unfold_more),
-                  onTap: branch == null ? null : _pickBranch,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.code),
-                  title: const Text('Code'),
-                  subtitle: branch == null
-                      ? null
-                      : Text('Browse files on $branch'),
-                  trailing: const Icon(Icons.chevron_right),
-                  enabled: branch != null,
-                  onTap: () => context.push(
-                    '$_base/code?ref=${Uri.encodeQueryComponent(branch ?? '')}',
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.history),
-                  title: const Text('Commits'),
-                  subtitle: stats?.subject.isNotEmpty == true
-                      ? Text(
-                          stats!.subject,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : null,
-                  trailing: const Icon(Icons.chevron_right),
-                  enabled: branch != null,
-                  onTap: () => context.push(
-                    '$_base/commits?ref=${Uri.encodeQueryComponent(branch ?? '')}',
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.search),
-                  title: const Text('Search in this repository'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('$_base/search'),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding: Spacing.page,
-                  child: _readme == null
-                      ? Text(
-                          'Loading README…',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        )
-                      : _readme!.isEmpty
-                      ? _NoReadme(languages: _languages)
-                      : RepoMarkdown(
-                          data: _readme!,
-                          org: widget.org,
-                          project: widget.project,
-                          repo: repo,
-                          ref: branch ?? '',
-                          path: '/README.md',
-                        ),
+                // From tablet width the action rows sit beside the README.
+                SideBySide(
+                  startFlex: 2,
+                  endFlex: 3,
+                  start: [
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.call_merge),
+                      title: const Text('Pull requests'),
+                      subtitle: Text(
+                        _prCount == null
+                            ? 'Active pull requests'
+                            : _prCount == 0
+                            ? 'No active pull requests'
+                            : _prCount == 1
+                            ? '1 active pull request'
+                            : '${_prCount! >= 100 ? '100+' : _prCount} active pull requests',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push(
+                        '${projectRoute(context, widget.org, widget.project)}'
+                        '/pull-requests?repoId=${Uri.encodeQueryComponent(repo.id)}'
+                        '&repo=${Uri.encodeQueryComponent(repo.name)}',
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.fork_right),
+                      title: Text(branch ?? 'No branches'),
+                      subtitle: branchSubtitle == null
+                          ? null
+                          : Text(branchSubtitle),
+                      trailing: branch == null
+                          ? null
+                          : const Icon(Icons.unfold_more),
+                      onTap: branch == null ? null : _pickBranch,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.code),
+                      title: const Text('Code'),
+                      subtitle: branch == null
+                          ? null
+                          : Text('Browse files on $branch'),
+                      trailing: const Icon(Icons.chevron_right),
+                      enabled: branch != null,
+                      onTap: () => context.push(
+                        '$_base/code?ref=${Uri.encodeQueryComponent(branch ?? '')}',
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.history),
+                      title: const Text('Commits'),
+                      subtitle: stats?.subject.isNotEmpty == true
+                          ? Text(
+                              stats!.subject,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : null,
+                      trailing: const Icon(Icons.chevron_right),
+                      enabled: branch != null,
+                      onTap: () => context.push(
+                        '$_base/commits?ref=${Uri.encodeQueryComponent(branch ?? '')}',
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.search),
+                      title: const Text('Search in this repository'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('$_base/search'),
+                    ),
+                  ],
+                  end: [
+                    const Divider(height: 1),
+                    Padding(
+                      padding: Spacing.page,
+                      child: _readme == null
+                          ? Text(
+                              'Loading README…',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            )
+                          : _readme!.isEmpty
+                          ? _NoReadme(languages: _languages)
+                          : RepoMarkdown(
+                              data: _readme!,
+                              org: widget.org,
+                              project: widget.project,
+                              repo: repo,
+                              ref: branch ?? '',
+                              path: '/README.md',
+                            ),
+                    ),
+                  ],
                 ),
               ],
             ],
