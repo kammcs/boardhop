@@ -299,3 +299,239 @@ abstract final class RepoWebUrls {
     return base == null ? null : '$base/commit/$commitId';
   }
 }
+
+/// How a ref string maps to an Items/Commits `versionDescriptor`: a 40-hex
+/// string is a commit, `refs/tags/x` a tag, anything else a branch name.
+abstract final class GitVersion {
+  static final _sha = RegExp(r'^[0-9a-f]{40}$');
+
+  static Map<String, String> query(
+    String ref, {
+    String prefix = 'versionDescriptor',
+  }) {
+    if (_sha.hasMatch(ref)) {
+      return {'$prefix.version': ref, '$prefix.versionType': 'commit'};
+    }
+    if (ref.startsWith('refs/tags/')) {
+      return {
+        '$prefix.version': ref.substring('refs/tags/'.length),
+        '$prefix.versionType': 'tag',
+      };
+    }
+    return {'$prefix.version': ref, '$prefix.versionType': 'branch'};
+  }
+
+  static bool isCommit(String ref) => _sha.hasMatch(ref);
+
+  /// `main`, `v1.2` or `a1b2c3d` for display.
+  static String label(String ref) => isCommit(ref)
+      ? ref.substring(0, 7)
+      : (GitRepository.shortRef(ref) ?? ref);
+}
+
+/// One commit from the Commits API (list, single, batch).
+class GitCommit extends Equatable {
+  const GitCommit({
+    required this.id,
+    required this.comment,
+    this.commentTruncated = false,
+    this.authorName,
+    this.authorEmail,
+    this.authorDate,
+    this.committerName,
+    this.committerDate,
+    this.parents = const [],
+    this.added,
+    this.edited,
+    this.deleted,
+    this.workItemIds = const [],
+    this.remoteUrl,
+  });
+
+  factory GitCommit.fromJson(Map<String, dynamic> json) {
+    final author = json['author'];
+    final committer = json['committer'];
+    final counts = json['changeCounts'];
+    final work = json['workItems'];
+    return GitCommit(
+      id: json['commitId'] as String? ?? '',
+      comment: json['comment'] as String? ?? '',
+      commentTruncated: json['commentTruncated'] == true,
+      authorName: author is Map ? author['name'] as String? : null,
+      authorEmail: author is Map ? author['email'] as String? : null,
+      authorDate: author is Map
+          ? DateTime.tryParse(author['date'] as String? ?? '')
+          : null,
+      committerName: committer is Map ? committer['name'] as String? : null,
+      committerDate: committer is Map
+          ? DateTime.tryParse(committer['date'] as String? ?? '')
+          : null,
+      parents: [
+        for (final p in (json['parents'] as List?) ?? const []) p.toString(),
+      ],
+      added: counts is Map ? (counts['Add'] as num?)?.toInt() : null,
+      edited: counts is Map ? (counts['Edit'] as num?)?.toInt() : null,
+      deleted: counts is Map ? (counts['Delete'] as num?)?.toInt() : null,
+      workItemIds: [
+        for (final w in (work is List ? work : const []))
+          if (w is Map && int.tryParse('${w['id']}') != null)
+            int.parse('${w['id']}'),
+      ],
+      remoteUrl: json['remoteUrl'] as String?,
+    );
+  }
+
+  final String id;
+  final String comment;
+  final bool commentTruncated;
+  final String? authorName;
+  final String? authorEmail;
+  final DateTime? authorDate;
+  final String? committerName;
+  final DateTime? committerDate;
+  final List<String> parents;
+  final int? added;
+  final int? edited;
+  final int? deleted;
+  final List<int> workItemIds;
+  final String? remoteUrl;
+
+  String get shortId => id.length > 7 ? id.substring(0, 7) : id;
+
+  /// First line of the message.
+  String get subject {
+    final nl = comment.indexOf('\n');
+    return (nl < 0 ? comment : comment.substring(0, nl)).trim();
+  }
+
+  /// Everything after the first line, trimmed; empty for one-liners.
+  String get body {
+    final nl = comment.indexOf('\n');
+    return nl < 0 ? '' : comment.substring(nl + 1).trim();
+  }
+
+  bool get isMerge => parents.length > 1;
+
+  bool get hasCounts => added != null || edited != null || deleted != null;
+
+  @override
+  List<Object?> get props => [id];
+}
+
+/// One changed path of a commit or of a branch comparison.
+class GitChange extends Equatable {
+  const GitChange({
+    required this.path,
+    required this.changeType,
+    required this.isFolder,
+    this.originalPath,
+    this.objectId,
+    this.originalObjectId,
+  });
+
+  factory GitChange.fromJson(Map<String, dynamic> json) {
+    final item = json['item'];
+    final m = item is Map
+        ? item.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    return GitChange(
+      path: m['path'] as String? ?? '',
+      changeType: json['changeType'] as String? ?? 'edit',
+      isFolder: m['isFolder'] == true || m['gitObjectType'] == 'tree',
+      originalPath: json['sourceServerItem'] as String?,
+      objectId: m['objectId'] as String?,
+      originalObjectId: m['originalObjectId'] as String?,
+    );
+  }
+
+  final String path;
+
+  /// `add`, `edit`, `delete`, `rename`, `edit, rename`, …
+  final String changeType;
+  final bool isFolder;
+  final String? originalPath;
+  final String? objectId;
+  final String? originalObjectId;
+
+  bool get isAdd => changeType.contains('add');
+  bool get isDelete => changeType.contains('delete');
+  bool get isRename => changeType.contains('rename');
+
+  String get name {
+    final i = path.lastIndexOf('/');
+    return i < 0 ? path : path.substring(i + 1);
+  }
+
+  @override
+  List<Object?> get props => [path, changeType];
+}
+
+/// A tag with the commit it points at (annotated tags are peeled).
+class GitTag extends Equatable {
+  const GitTag({
+    required this.name,
+    required this.commitId,
+    this.creatorName,
+    this.isAnnotated = false,
+  });
+
+  factory GitTag.fromJson(Map<String, dynamic> json) {
+    final creator = json['creator'];
+    final peeled = json['peeledObjectId'] as String?;
+    return GitTag(
+      name: GitRepository.shortRef(json['name'] as String? ?? '') ?? '',
+      commitId: peeled ?? json['objectId'] as String? ?? '',
+      creatorName: creator is Map ? creator['displayName'] as String? : null,
+      isAnnotated: peeled != null,
+    );
+  }
+
+  final String name;
+  final String commitId;
+  final String? creatorName;
+  final bool isAnnotated;
+
+  String get ref => 'refs/tags/$name';
+
+  @override
+  List<Object?> get props => [name, commitId];
+}
+
+/// `diffs/commits` between two versions: standing plus the changed paths.
+class GitCompare extends Equatable {
+  const GitCompare({
+    required this.aheadCount,
+    required this.behindCount,
+    required this.commonCommit,
+    required this.baseCommit,
+    required this.targetCommit,
+    required this.changes,
+    required this.allChangesIncluded,
+  });
+
+  factory GitCompare.fromJson(Map<String, dynamic> json) => GitCompare(
+    aheadCount: (json['aheadCount'] as num?)?.toInt() ?? 0,
+    behindCount: (json['behindCount'] as num?)?.toInt() ?? 0,
+    commonCommit: json['commonCommit'] as String? ?? '',
+    baseCommit: json['baseCommit'] as String? ?? '',
+    targetCommit: json['targetCommit'] as String? ?? '',
+    changes: [
+      for (final c in (json['changes'] as List?) ?? const [])
+        if (c is Map) GitChange.fromJson(c.cast<String, dynamic>()),
+    ],
+    allChangesIncluded: json['allChangesIncluded'] != false,
+  );
+
+  final int aheadCount;
+  final int behindCount;
+  final String commonCommit;
+  final String baseCommit;
+  final String targetCommit;
+  final List<GitChange> changes;
+  final bool allChangesIncluded;
+
+  List<GitChange> get files => changes.where((c) => !c.isFolder).toList();
+
+  @override
+  List<Object?> get props => [commonCommit, targetCommit, changes.length];
+}

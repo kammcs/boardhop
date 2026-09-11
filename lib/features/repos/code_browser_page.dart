@@ -145,7 +145,7 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              _ref,
+              GitVersion.label(_ref),
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: scheme.onSurfaceVariant,

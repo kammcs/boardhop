@@ -126,3 +126,12 @@ Phase 5 (added): tags page, share links, file editing with `re_editor` and the p
 - Markdown links inside repository files resolve against the file folder (`RepoPaths.resolve`): a target with an extension opens the file viewer, one without opens the folder.
 - Deferred to later phases: jump-to-line from search (the `line` query is already honoured), History (phase 3 commits route with `path`), share sheet (phase 5).
 
+## 9. Phase 3 notes (2026-09-11)
+
+- Routes: `…/repos/{repo}/commits?ref=&path=`, `…/commits/{id}`, `…/diff?path=&old=&new=&change=&original=`, `…/compare?base=&ref=`. Tags live in the branch picker as a second segment (no separate page needed; a tag row opens its commit, the code icon browses files at the tag).
+- `GitVersion.query(ref)` turns any ref string into a `versionDescriptor` (40-hex → commit, `refs/tags/x` → tag, else branch), so `code`, `file`, `commits` and `diff` all accept a branch name, a tag ref or a commit id.
+- `POST commitsbatch` with `includeWorkItems` is the only read that returns linked work items for a known commit, but it omits `parents`; `GET commits/{id}` has the parents. The commit page needs both and merges them.
+- Merge commits from squash-merged PRs have one parent and per-file counts; true merge commits list no changes of their own.
+- Compare uses `diffs/commits` with the common ancestor as the old side of each file diff and the target commit as the new side; `allChangesIncluded=false` is shown as "(first N)".
+- Not built: commit list filters (author, date), blame (no REST API), share sheet (phase 5).
+

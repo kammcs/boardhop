@@ -349,10 +349,7 @@ class RepoRepository {
     return json is String ? json : null;
   }
 
-  Map<String, String> _version(String ref) => {
-    'versionDescriptor.version': ref,
-    'versionDescriptor.versionType': 'branch',
-  };
+  Map<String, String> _version(String ref) => GitVersion.query(ref);
 
   static List<GitItem> parseTree(List<Map<String, dynamic>> raw, String path) {
     final folder = RepoPaths.normalize(path);
@@ -527,4 +524,184 @@ class RepoRepository {
   /// cannot carry.
   static String decodeText(Uint8List bytes) =>
       utf8.decode(bytes, allowMalformed: true);
+
+  static String commitsKey(String repoId, String ref, String? path) =>
+      'repos:commits:$repoId:$ref:${path ?? ''}';
+
+  static const commitsPage = 50;
+
+  /// Commits reachable from [ref], newest first, optionally only those
+  /// touching [path] (file or folder history). One page of [commitsPage].
+  Future<List<GitCommit>> commits(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    String? path,
+    int skip = 0,
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/commits',
+      apiVersion: apiVersion,
+      query: {
+        ...GitVersion.query(ref, prefix: 'searchCriteria.itemVersion'),
+        if (path != null && RepoPaths.normalize(path) != '/')
+          'searchCriteria.itemPath': RepoPaths.normalize(path),
+        r'searchCriteria.$top': '$commitsPage',
+        r'searchCriteria.$skip': '$skip',
+      },
+    );
+    final raw = _value(json);
+    if (skip == 0) await _cache.put(commitsKey(repoId, ref, path), raw);
+    return raw.map(GitCommit.fromJson).toList();
+  }
+
+  Future<List<GitCommit>?> cachedCommits(
+    String repoId, {
+    required String ref,
+    String? path,
+  }) async {
+    final cached = await _cache.get(commitsKey(repoId, ref, path));
+    final json = cached?.json;
+    return json is List
+        ? _value({'value': json}).map(GitCommit.fromJson).toList()
+        : null;
+  }
+
+  /// One commit. The single read carries the parents; the batch read is
+  /// the only one that returns linked work items, so both run and merge.
+  Future<GitCommit?> commit(
+    String org,
+    String project,
+    String repoId,
+    String commitId,
+  ) async {
+    final Map<String, dynamic> json;
+    try {
+      json = await _client.getJson(
+        org: org,
+        project: project,
+        path: '_apis/git/repositories/$repoId/commits/$commitId',
+        apiVersion: apiVersion,
+      );
+    } on AdoNotFoundException {
+      return null;
+    }
+    try {
+      final batch = await _client.send(
+        method: 'POST',
+        org: org,
+        project: project,
+        path: '_apis/git/repositories/$repoId/commitsbatch',
+        apiVersion: apiVersion,
+        body: {
+          'ids': [commitId],
+          'includeWorkItems': true,
+        },
+      );
+      final list = _value(batch);
+      if (list.isNotEmpty && list.first['workItems'] is List) {
+        json['workItems'] = list.first['workItems'];
+      }
+    } on AdoException catch (e) {
+      debugPrint('commitsbatch: ${e.message}');
+    }
+    return GitCommit.fromJson(json);
+  }
+
+  /// Paths a commit changed (files only), in path order.
+  Future<List<GitChange>> commitChanges(
+    String org,
+    String project,
+    String repoId,
+    String commitId, {
+    int top = 1000,
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/commits/$commitId/changes',
+      apiVersion: apiVersion,
+      query: {'top': '$top'},
+    );
+    final out = <GitChange>[];
+    for (final c in (json['changes'] as List?) ?? const []) {
+      if (c is! Map) continue;
+      final change = GitChange.fromJson(c.cast<String, dynamic>());
+      if (!change.isFolder) out.add(change);
+    }
+    out.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+    return out;
+  }
+
+  /// Tags, annotated ones peeled to their commit, newest-looking name first.
+  Future<List<GitTag>> tags(String org, String project, String repoId) async {
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/refs',
+      apiVersion: apiVersion,
+      query: {'filter': 'tags/', 'peelTags': 'true'},
+    );
+    return _value(json).map(GitTag.fromJson).toList()
+      ..sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+  }
+
+  /// Standing of [target] against [base] with the changed paths between
+  /// their common ancestor and [target].
+  Future<GitCompare> compare(
+    String org,
+    String project,
+    String repoId, {
+    required String base,
+    required String target,
+    int top = 1000,
+  }) async {
+    final b = GitVersion.query(base, prefix: 'base');
+    final t = GitVersion.query(target, prefix: 'target');
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/repositories/$repoId/diffs/commits',
+      apiVersion: apiVersion,
+      query: {
+        'baseVersion': b['base.version']!,
+        'baseVersionType': b['base.versionType']!,
+        'targetVersion': t['target.version']!,
+        'targetVersionType': t['target.versionType']!,
+        r'$top': '$top',
+      },
+    );
+    return GitCompare.fromJson(json);
+  }
+
+  /// Text of a file at any ref, uncached (diff sides). Empty when the path
+  /// does not exist there.
+  Future<String> fileAt(
+    String org,
+    String project,
+    String repoId, {
+    required String ref,
+    required String path,
+  }) async {
+    try {
+      final json = await _client.getJson(
+        org: org,
+        project: project,
+        path: '_apis/git/repositories/$repoId/items',
+        apiVersion: apiVersion,
+        query: {
+          'path': RepoPaths.normalize(path),
+          'includeContent': 'true',
+          r'$format': 'json',
+          ..._version(ref),
+        },
+      );
+      return json['content'] as String? ?? '';
+    } on AdoNotFoundException {
+      return '';
+    }
+  }
 }

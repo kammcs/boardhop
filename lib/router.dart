@@ -27,6 +27,10 @@ import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/repos/branch_picker_page.dart';
 import 'features/repos/code_browser_page.dart';
+import 'features/repos/commit_page.dart';
+import 'features/repos/commits_page.dart';
+import 'features/repos/compare_page.dart';
+import 'features/repos/file_diff_page.dart';
 import 'features/repos/file_page.dart';
 import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
@@ -211,11 +215,70 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                               ),
                               GoRoute(
                                 path: 'commits',
-                                builder: (_, state) =>
-                                    const FeaturePlaceholderPage(
-                                      title: 'Commits',
-                                      plannedIn: 'phase 3 of the repos plan',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => CommitsPage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    ref: _refOf(state, repo),
+                                    path: state.uri.queryParameters['path'],
+                                  ),
+                                ),
+                                routes: [
+                                  GoRoute(
+                                    path: ':id',
+                                    builder: (_, state) => _RepoRoute(
+                                      state: state,
+                                      builder: (repo) => CommitPage(
+                                        org: state.pathParameters['org']!,
+                                        project:
+                                            state.pathParameters['project']!,
+                                        repo: repo,
+                                        commitId: state.pathParameters['id']!,
+                                      ),
                                     ),
+                                  ),
+                                ],
+                              ),
+                              GoRoute(
+                                path: 'diff',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => FileDiffPage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    path:
+                                        state.uri.queryParameters['path'] ??
+                                        '/',
+                                    oldRef:
+                                        state.uri.queryParameters['old'] ?? '',
+                                    newRef:
+                                        state.uri.queryParameters['new'] ?? '',
+                                    changeType:
+                                        state.uri.queryParameters['change'] ??
+                                        'edit',
+                                    originalPath:
+                                        state.uri.queryParameters['original'],
+                                  ),
+                                ),
+                              ),
+                              GoRoute(
+                                path: 'compare',
+                                builder: (_, state) => _RepoRoute(
+                                  state: state,
+                                  builder: (repo) => ComparePage(
+                                    org: state.pathParameters['org']!,
+                                    project: state.pathParameters['project']!,
+                                    repo: repo,
+                                    base:
+                                        state.uri.queryParameters['base'] ??
+                                        repo.defaultBranchName ??
+                                        '',
+                                    target: _refOf(state, repo),
+                                  ),
+                                ),
                               ),
                               GoRoute(
                                 path: 'search',

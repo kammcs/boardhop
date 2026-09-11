@@ -265,7 +265,7 @@ class _FilePageState extends State<FilePage> {
           children: [
             Text(_name, overflow: TextOverflow.ellipsis),
             Text(
-              '${widget.ref}${_size == null ? '' : ' · ${formatBytes(_size)}'}',
+              '${GitVersion.label(widget.ref)}${_size == null ? '' : ' · ${formatBytes(_size)}'}',
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
