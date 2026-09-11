@@ -93,6 +93,11 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
             builder: (_, state) =>
                 ProjectListPage(org: state.pathParameters['org']!),
             routes: [
+              // Every branch route carries :account/:org/:project, which
+              // go_router's debug checks reject as a branch default. The
+              // placeholder initialLocations satisfy the checks and are
+              // never navigated to: ProjectShell always goes to concrete
+              // paths (also when re-tapping the current tab).
               StatefulShellRoute.indexedStack(
                 builder: (context, state, shell) => ProjectShell(
                   shell: shell,
@@ -101,6 +106,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                 ),
                 branches: [
                   StatefulShellBranch(
+                    initialLocation: '$_branchPlaceholder/home',
                     routes: [
                       GoRoute(
                         path: ':project/home',
@@ -112,6 +118,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                     ],
                   ),
                   StatefulShellBranch(
+                    initialLocation: '$_branchPlaceholder/work-items',
                     routes: [
                       GoRoute(
                         path: ':project/work-items',
@@ -150,6 +157,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                     ],
                   ),
                   StatefulShellBranch(
+                    initialLocation: '$_branchPlaceholder/repos',
                     routes: [
                       GoRoute(
                         path: ':project/code-search',
@@ -321,6 +329,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                     ],
                   ),
                   StatefulShellBranch(
+                    initialLocation: '$_branchPlaceholder/pipelines',
                     routes: [
                       GoRoute(
                         path: ':project/pipelines',
@@ -407,6 +416,10 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
     ],
   );
 }
+
+/// Placeholder project path for the tab shell's `initialLocation`s; see the
+/// comment on the `StatefulShellRoute` in `buildRouter`.
+const _branchPlaceholder = '/a/-/orgs/-/projects/-';
 
 /// Branch the query names, else the repository's default branch.
 String _refOf(GoRouterState state, GitRepository repo) {

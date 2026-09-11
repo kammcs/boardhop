@@ -293,12 +293,15 @@ public class MsalAuthPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDeleg
         tokenParams.loginHint = loginHint
 
         if let claims {
-            do {
-                tokenParams.claimsRequest = try MSALClaimsRequest(jsonString: claims)
-            } catch let error as NSError {
-                setMsalError(error: error, result: result)
+            // MSAL declares this initializer with a non-nullable return, so
+            // Swift imports it with an explicit error pointer instead of `throws`.
+            var claimsError: NSError?
+            let claimsRequest = MSALClaimsRequest(jsonString: claims, error: &claimsError)
+            if let claimsError {
+                setMsalError(error: claimsError, result: result)
                 return
             }
+            tokenParams.claimsRequest = claimsRequest
         }
         
         if let authority = authority {
@@ -532,12 +535,15 @@ extension MsalAuthPlugin {
         silentParams.forceRefresh = forceRefresh
 
         if let claims {
-            do {
-                silentParams.claimsRequest = try MSALClaimsRequest(jsonString: claims)
-            } catch let error as NSError {
-                setMsalError(error: error, result: result)
+            // MSAL declares this initializer with a non-nullable return, so
+            // Swift imports it with an explicit error pointer instead of `throws`.
+            var claimsError: NSError?
+            let claimsRequest = MSALClaimsRequest(jsonString: claims, error: &claimsError)
+            if let claimsError {
+                setMsalError(error: claimsError, result: result)
                 return
             }
+            silentParams.claimsRequest = claimsRequest
         }
 
         if let authority {

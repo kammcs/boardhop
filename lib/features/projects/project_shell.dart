@@ -87,12 +87,10 @@ class _ProjectShellState extends State<ProjectShell>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
 
   void _select(BuildContext context, int index) {
-    if (index == shell.currentIndex) {
-      shell.goBranch(index, initialLocation: true);
-      return;
-    }
     // Branch routes carry path parameters, so navigate to the concrete
-    // location instead of relying on a branch default.
+    // location instead of relying on a branch default (`goBranch` would
+    // use the placeholder initialLocation from the router). Going to the
+    // root of the current branch pops it back to that root.
     context.go(projectPath(context, _destinations[index].path));
   }
 

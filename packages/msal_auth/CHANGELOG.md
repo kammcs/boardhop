@@ -1,6 +1,7 @@
 ## 3.5.3+boardhop.1
 - Added `claims` to `acquireToken` and `acquireTokenSilent`, and `forceRefresh` to `acquireTokenSilent` (Android: `withClaims` / `forceRefresh` on the parameter builders; iOS: `MSALClaimsRequest` and `forceRefresh` on the token parameters). Needed to answer Continuous Access Evaluation claims challenges.
 - Added `AppleConfig.clientCapabilities`, mapped to `MSALPublicClientApplicationConfig.clientApplicationCapabilities`.
+- iOS: `MSALClaimsRequest(jsonString:error:)` takes an explicit error pointer (MSAL declares the initializer with a non-nullable return, so Swift does not import it as `throws`). First compiled against MSAL 2.14.1 with Xcode 26.6.
 
 ## 3.5.3
 - Pin the Swift MSAL library to `2.14.1` and prevent updates beyond this version to avoid native min deployment target breaking changes. [#issue/151](https://github.com/nayanAubie/msal_auth/issues/151)
