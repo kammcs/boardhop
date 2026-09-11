@@ -488,6 +488,28 @@ class $ProjectsTable extends Projects
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _defaultTeamIdMeta = const VerificationMeta(
+    'defaultTeamId',
+  );
+  @override
+  late final GeneratedColumn<String> defaultTeamId = GeneratedColumn<String>(
+    'default_team_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _defaultTeamDescriptorMeta =
+      const VerificationMeta('defaultTeamDescriptor');
+  @override
+  late final GeneratedColumn<String> defaultTeamDescriptor =
+      GeneratedColumn<String>(
+        'default_team_descriptor',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _fetchedAtMeta = const VerificationMeta(
     'fetchedAt',
   );
@@ -507,6 +529,8 @@ class $ProjectsTable extends Projects
     description,
     state,
     lastUpdateTime,
+    defaultTeamId,
+    defaultTeamDescriptor,
     fetchedAt,
   ];
   @override
@@ -566,6 +590,24 @@ class $ProjectsTable extends Projects
         ),
       );
     }
+    if (data.containsKey('default_team_id')) {
+      context.handle(
+        _defaultTeamIdMeta,
+        defaultTeamId.isAcceptableOrUnknown(
+          data['default_team_id']!,
+          _defaultTeamIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_team_descriptor')) {
+      context.handle(
+        _defaultTeamDescriptorMeta,
+        defaultTeamDescriptor.isAcceptableOrUnknown(
+          data['default_team_descriptor']!,
+          _defaultTeamDescriptorMeta,
+        ),
+      );
+    }
     if (data.containsKey('fetched_at')) {
       context.handle(
         _fetchedAtMeta,
@@ -607,6 +649,14 @@ class $ProjectsTable extends Projects
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_update_time'],
       ),
+      defaultTeamId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_team_id'],
+      ),
+      defaultTeamDescriptor: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_team_descriptor'],
+      ),
       fetchedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}fetched_at'],
@@ -627,6 +677,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
   final String? description;
   final String? state;
   final DateTime? lastUpdateTime;
+  final String? defaultTeamId;
+  final String? defaultTeamDescriptor;
   final DateTime fetchedAt;
   const ProjectRow({
     required this.id,
@@ -635,6 +687,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     this.description,
     this.state,
     this.lastUpdateTime,
+    this.defaultTeamId,
+    this.defaultTeamDescriptor,
     required this.fetchedAt,
   });
   @override
@@ -651,6 +705,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     }
     if (!nullToAbsent || lastUpdateTime != null) {
       map['last_update_time'] = Variable<DateTime>(lastUpdateTime);
+    }
+    if (!nullToAbsent || defaultTeamId != null) {
+      map['default_team_id'] = Variable<String>(defaultTeamId);
+    }
+    if (!nullToAbsent || defaultTeamDescriptor != null) {
+      map['default_team_descriptor'] = Variable<String>(defaultTeamDescriptor);
     }
     map['fetched_at'] = Variable<DateTime>(fetchedAt);
     return map;
@@ -670,6 +730,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       lastUpdateTime: lastUpdateTime == null && nullToAbsent
           ? const Value.absent()
           : Value(lastUpdateTime),
+      defaultTeamId: defaultTeamId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultTeamId),
+      defaultTeamDescriptor: defaultTeamDescriptor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultTeamDescriptor),
       fetchedAt: Value(fetchedAt),
     );
   }
@@ -686,6 +752,10 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       description: serializer.fromJson<String?>(json['description']),
       state: serializer.fromJson<String?>(json['state']),
       lastUpdateTime: serializer.fromJson<DateTime?>(json['lastUpdateTime']),
+      defaultTeamId: serializer.fromJson<String?>(json['defaultTeamId']),
+      defaultTeamDescriptor: serializer.fromJson<String?>(
+        json['defaultTeamDescriptor'],
+      ),
       fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
     );
   }
@@ -699,6 +769,10 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       'description': serializer.toJson<String?>(description),
       'state': serializer.toJson<String?>(state),
       'lastUpdateTime': serializer.toJson<DateTime?>(lastUpdateTime),
+      'defaultTeamId': serializer.toJson<String?>(defaultTeamId),
+      'defaultTeamDescriptor': serializer.toJson<String?>(
+        defaultTeamDescriptor,
+      ),
       'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
     };
   }
@@ -710,6 +784,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     Value<String?> description = const Value.absent(),
     Value<String?> state = const Value.absent(),
     Value<DateTime?> lastUpdateTime = const Value.absent(),
+    Value<String?> defaultTeamId = const Value.absent(),
+    Value<String?> defaultTeamDescriptor = const Value.absent(),
     DateTime? fetchedAt,
   }) => ProjectRow(
     id: id ?? this.id,
@@ -720,6 +796,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     lastUpdateTime: lastUpdateTime.present
         ? lastUpdateTime.value
         : this.lastUpdateTime,
+    defaultTeamId: defaultTeamId.present
+        ? defaultTeamId.value
+        : this.defaultTeamId,
+    defaultTeamDescriptor: defaultTeamDescriptor.present
+        ? defaultTeamDescriptor.value
+        : this.defaultTeamDescriptor,
     fetchedAt: fetchedAt ?? this.fetchedAt,
   );
   ProjectRow copyWithCompanion(ProjectsCompanion data) {
@@ -734,6 +816,12 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       lastUpdateTime: data.lastUpdateTime.present
           ? data.lastUpdateTime.value
           : this.lastUpdateTime,
+      defaultTeamId: data.defaultTeamId.present
+          ? data.defaultTeamId.value
+          : this.defaultTeamId,
+      defaultTeamDescriptor: data.defaultTeamDescriptor.present
+          ? data.defaultTeamDescriptor.value
+          : this.defaultTeamDescriptor,
       fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
     );
   }
@@ -747,6 +835,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           ..write('description: $description, ')
           ..write('state: $state, ')
           ..write('lastUpdateTime: $lastUpdateTime, ')
+          ..write('defaultTeamId: $defaultTeamId, ')
+          ..write('defaultTeamDescriptor: $defaultTeamDescriptor, ')
           ..write('fetchedAt: $fetchedAt')
           ..write(')'))
         .toString();
@@ -760,6 +850,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     description,
     state,
     lastUpdateTime,
+    defaultTeamId,
+    defaultTeamDescriptor,
     fetchedAt,
   );
   @override
@@ -772,6 +864,8 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           other.description == this.description &&
           other.state == this.state &&
           other.lastUpdateTime == this.lastUpdateTime &&
+          other.defaultTeamId == this.defaultTeamId &&
+          other.defaultTeamDescriptor == this.defaultTeamDescriptor &&
           other.fetchedAt == this.fetchedAt);
 }
 
@@ -782,6 +876,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
   final Value<String?> description;
   final Value<String?> state;
   final Value<DateTime?> lastUpdateTime;
+  final Value<String?> defaultTeamId;
+  final Value<String?> defaultTeamDescriptor;
   final Value<DateTime> fetchedAt;
   final Value<int> rowid;
   const ProjectsCompanion({
@@ -791,6 +887,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     this.description = const Value.absent(),
     this.state = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
+    this.defaultTeamId = const Value.absent(),
+    this.defaultTeamDescriptor = const Value.absent(),
     this.fetchedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -801,6 +899,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     this.description = const Value.absent(),
     this.state = const Value.absent(),
     this.lastUpdateTime = const Value.absent(),
+    this.defaultTeamId = const Value.absent(),
+    this.defaultTeamDescriptor = const Value.absent(),
     required DateTime fetchedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -814,6 +914,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     Expression<String>? description,
     Expression<String>? state,
     Expression<DateTime>? lastUpdateTime,
+    Expression<String>? defaultTeamId,
+    Expression<String>? defaultTeamDescriptor,
     Expression<DateTime>? fetchedAt,
     Expression<int>? rowid,
   }) {
@@ -824,6 +926,9 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
       if (description != null) 'description': description,
       if (state != null) 'state': state,
       if (lastUpdateTime != null) 'last_update_time': lastUpdateTime,
+      if (defaultTeamId != null) 'default_team_id': defaultTeamId,
+      if (defaultTeamDescriptor != null)
+        'default_team_descriptor': defaultTeamDescriptor,
       if (fetchedAt != null) 'fetched_at': fetchedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -836,6 +941,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     Value<String?>? description,
     Value<String?>? state,
     Value<DateTime?>? lastUpdateTime,
+    Value<String?>? defaultTeamId,
+    Value<String?>? defaultTeamDescriptor,
     Value<DateTime>? fetchedAt,
     Value<int>? rowid,
   }) {
@@ -846,6 +953,9 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
       description: description ?? this.description,
       state: state ?? this.state,
       lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
+      defaultTeamId: defaultTeamId ?? this.defaultTeamId,
+      defaultTeamDescriptor:
+          defaultTeamDescriptor ?? this.defaultTeamDescriptor,
       fetchedAt: fetchedAt ?? this.fetchedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -872,6 +982,14 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     if (lastUpdateTime.present) {
       map['last_update_time'] = Variable<DateTime>(lastUpdateTime.value);
     }
+    if (defaultTeamId.present) {
+      map['default_team_id'] = Variable<String>(defaultTeamId.value);
+    }
+    if (defaultTeamDescriptor.present) {
+      map['default_team_descriptor'] = Variable<String>(
+        defaultTeamDescriptor.value,
+      );
+    }
     if (fetchedAt.present) {
       map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
     }
@@ -890,6 +1008,8 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
           ..write('description: $description, ')
           ..write('state: $state, ')
           ..write('lastUpdateTime: $lastUpdateTime, ')
+          ..write('defaultTeamId: $defaultTeamId, ')
+          ..write('defaultTeamDescriptor: $defaultTeamDescriptor, ')
           ..write('fetchedAt: $fetchedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2752,6 +2872,8 @@ typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
   Value<String?> description,
   Value<String?> state,
   Value<DateTime?> lastUpdateTime,
+  Value<String?> defaultTeamId,
+  Value<String?> defaultTeamDescriptor,
   required DateTime fetchedAt,
   Value<int> rowid,
 });
@@ -2762,6 +2884,8 @@ typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
   Value<String?> description,
   Value<String?> state,
   Value<DateTime?> lastUpdateTime,
+  Value<String?> defaultTeamId,
+  Value<String?> defaultTeamDescriptor,
   Value<DateTime> fetchedAt,
   Value<int> rowid,
 });
@@ -2802,6 +2926,16 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdateTime => $composableBuilder(
     column: $table.lastUpdateTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultTeamId => $composableBuilder(
+    column: $table.defaultTeamId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultTeamDescriptor => $composableBuilder(
+    column: $table.defaultTeamDescriptor,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2850,6 +2984,16 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get defaultTeamId => $composableBuilder(
+    column: $table.defaultTeamId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultTeamDescriptor => $composableBuilder(
+    column: $table.defaultTeamDescriptor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get fetchedAt => $composableBuilder(
     column: $table.fetchedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2884,6 +3028,16 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastUpdateTime => $composableBuilder(
     column: $table.lastUpdateTime,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultTeamId => $composableBuilder(
+    column: $table.defaultTeamId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultTeamDescriptor => $composableBuilder(
+    column: $table.defaultTeamDescriptor,
     builder: (column) => column,
   );
 
@@ -2928,6 +3082,8 @@ class $$ProjectsTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String?> state = const Value.absent(),
                 Value<DateTime?> lastUpdateTime = const Value.absent(),
+                Value<String?> defaultTeamId = const Value.absent(),
+                Value<String?> defaultTeamDescriptor = const Value.absent(),
                 Value<DateTime> fetchedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion(
@@ -2937,6 +3093,8 @@ class $$ProjectsTableTableManager
                 description: description,
                 state: state,
                 lastUpdateTime: lastUpdateTime,
+                defaultTeamId: defaultTeamId,
+                defaultTeamDescriptor: defaultTeamDescriptor,
                 fetchedAt: fetchedAt,
                 rowid: rowid,
               ),
@@ -2948,6 +3106,8 @@ class $$ProjectsTableTableManager
                 Value<String?> description = const Value.absent(),
                 Value<String?> state = const Value.absent(),
                 Value<DateTime?> lastUpdateTime = const Value.absent(),
+                Value<String?> defaultTeamId = const Value.absent(),
+                Value<String?> defaultTeamDescriptor = const Value.absent(),
                 required DateTime fetchedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion.insert(
@@ -2957,6 +3117,8 @@ class $$ProjectsTableTableManager
                 description: description,
                 state: state,
                 lastUpdateTime: lastUpdateTime,
+                defaultTeamId: defaultTeamId,
+                defaultTeamDescriptor: defaultTeamDescriptor,
                 fetchedAt: fetchedAt,
                 rowid: rowid,
               ),

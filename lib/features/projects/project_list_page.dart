@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/util/ado_tiles.dart';
 import '../../data/models/project.dart';
 import '../../data/repositories/project_repository.dart';
+import '../shared/widgets/ado_tile.dart';
 
 class ProjectListPage extends StatefulWidget {
   const ProjectListPage({super.key, required this.org});
@@ -90,7 +92,12 @@ class _ProjectListPageState extends State<ProjectListPage> {
                   ),
                 for (final p in projects)
                   ListTile(
-                    leading: const Icon(Icons.folder_outlined),
+                    leading: AdoTile(
+                      name: p.name,
+                      color: AdoTiles.serviceColor(p.name),
+                      initials: AdoTiles.serviceInitials(p.name),
+                      source: p.tileSource(widget.org),
+                    ),
                     title: Text(p.name),
                     subtitle: p.description == null || p.description!.isEmpty
                         ? null

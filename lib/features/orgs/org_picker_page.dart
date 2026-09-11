@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/util/ado_tiles.dart';
 import '../../data/models/organization.dart';
 import '../../data/repositories/account_repository.dart';
 import '../../data/repositories/org_repository.dart';
 import '../../theme/theme.dart';
+import '../shared/widgets/ado_tile.dart';
 import 'widgets/account_header.dart';
 
 class OrgPickerPage extends StatefulWidget {
@@ -142,7 +144,11 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
                   ),
                 for (final org in orgs)
                   ListTile(
-                    leading: const Icon(Icons.business_outlined),
+                    leading: AdoTile(
+                      name: org.name,
+                      color: AdoTiles.coinColor(org.name),
+                      initials: AdoTiles.coinInitials(org.name),
+                    ),
                     title: Text(org.name),
                     subtitle: Text(org.baseUrl),
                     onTap: () {

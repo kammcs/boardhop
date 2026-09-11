@@ -36,6 +36,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `s11_workitem_type_fields.py` | Type, state and field metadata for dynamic forms; `validateOnly` dry runs. |
 | `s12_tenant_id.py` | Entra tenant ID behind the org, from Graph users' `domain`. |
 | `s13_html_samples.py` | Collects real HTML description samples tagged by construct for spike F3 (writes gitignored `results/f3-samples.json`). |
+| `s16_project_org_avatars.py` | Where the web's organization and project tiles come from, and the hash and initials rules behind the generated ones (`SPIKE_OUT` saves sample PNGs to a scratch folder). |
 
 ## Write spikes (scratch project "DevOps Mobile App" only)
 
@@ -50,6 +51,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `w05_board_config.py` | Give the scratch Stories board a split column and a swimlane for the app's board tests. | Blocked: the PAT user is not a team administrator (TF401504 / VS402634); idempotent, rerun once that is fixed |
 | `s14_rank_check.py` | Read-only: StackRank / BacklogPriority of the scratch stories and the WIQL order the app uses. | Used while verifying the app's reorder write |
 | `s15_pr_checks_shape.py` | Read-only: payload shapes for policy evaluations, PR statuses, thread comment ids/dates and iteration metadata (`PR_ID` env selects the PR). | Done 2026-09-10; drives the PR detail Checks section and thread replies |
+| `w10_scratch_project_avatar.py` | Set a picture on the scratch project so the app's project tile can be checked with a real image. | Blocked 2026-09-11: 400 "No permission to change picture" for the PAT user (needs team administrator, same as w05) |
 | `w04_service_hook_payloads.py` | Capture "Minimal" webhook payload shapes for the five event types in document 06. | Not written: needs an HTTPS receiver and project-admin rights |
 
 ## App spikes (Flutter, on device or emulator)

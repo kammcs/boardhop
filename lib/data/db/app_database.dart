@@ -25,6 +25,8 @@ class Projects extends Table {
   TextColumn get description => text().nullable()();
   TextColumn get state => text().nullable()();
   DateTimeColumn get lastUpdateTime => dateTime().nullable()();
+  TextColumn get defaultTeamId => text().nullable()();
+  TextColumn get defaultTeamDescriptor => text().nullable()();
   DateTimeColumn get fetchedAt => dateTime()();
 
   @override
@@ -100,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'boardhop'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -112,6 +114,12 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await m.createTable(cacheEntries);
+      }
+      if (from < 4) {
+        await m.addColumn(projects, projects.defaultTeamId);
+      }
+      if (from < 5) {
+        await m.addColumn(projects, projects.defaultTeamDescriptor);
       }
     },
   );

@@ -308,7 +308,10 @@ class AdoClient {
           url: uri,
         );
       case 401:
-        final challenge = headers.value('www-authenticate') ?? '';
+        // Services may send several challenges (Bearer, Basic); Dio's
+        // `value()` throws on that, so join them.
+        final challenge = (headers['www-authenticate'] ?? const <String>[])
+            .join(', ');
         final claims = parseClaimsChallenge(challenge);
         if (claims != null) {
           return ClaimsChallengeException(
@@ -347,7 +350,9 @@ class AdoClient {
         );
       case 429:
       case 503:
-        final retryAfter = double.tryParse(headers.value('retry-after') ?? '');
+        final retryAfter = double.tryParse(
+          headers['retry-after']?.firstOrNull ?? '',
+        );
         return AdoRateLimitedException(
           message,
           retryAfter: Duration(seconds: retryAfter?.round() ?? 30),

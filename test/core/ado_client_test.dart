@@ -180,6 +180,28 @@ void main() {
       );
     });
 
+    test('401 with several WWW-Authenticate values is an ordinary auth '
+        'error, not a crash', () async {
+      final adapter = _FakeAdapter(
+        (_) => _json(
+          401,
+          {'message': 'TF400813: not authorized'},
+          headers: {
+            'www-authenticate': [
+              'Bearer authorization_uri=x',
+              'Basic realm="y"',
+            ],
+          },
+        ),
+      );
+      final client = _client(adapter);
+      expect(
+        () =>
+            client.getJson(org: 'o', path: '_apis/projects', apiVersion: '7.1'),
+        throwsA(isA<AdoAuthException>()),
+      );
+    });
+
     test('maps 400 RuleValidationErrors to AdoValidationException', () async {
       final adapter = _FakeAdapter(
         (_) => _json(400, {

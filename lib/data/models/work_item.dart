@@ -15,17 +15,23 @@ class AvatarSource extends Equatable {
     this.descriptor,
     this.url,
     this.size = AvatarSize.medium,
+    this.picturesOnly = false,
   });
 
+  /// With [picturesOnly] the service's auto-generated initials avatar
+  /// counts as "no image", for tiles the app draws itself.
   factory AvatarSource.graph({
     required String org,
     required String descriptor,
     AvatarSize size = AvatarSize.medium,
+    bool picturesOnly = false,
   }) => AvatarSource._(
-    key: 'graph:$org:$descriptor:${size.name}',
+    key:
+        'graph:$org:$descriptor:${size.name}${picturesOnly ? ':pictures' : ''}',
     org: org,
     descriptor: descriptor,
     size: size,
+    picturesOnly: picturesOnly,
   );
 
   factory AvatarSource.url(String url) =>
@@ -36,6 +42,7 @@ class AvatarSource extends Equatable {
   final String? descriptor;
   final String? url;
   final AvatarSize size;
+  final bool picturesOnly;
 
   bool get isGraph => descriptor != null;
 
