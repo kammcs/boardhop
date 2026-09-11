@@ -36,6 +36,7 @@ Results and the consolidated findings are in [results/README.md](results/README.
 | `s11_workitem_type_fields.py` | Type, state and field metadata for dynamic forms; `validateOnly` dry runs. |
 | `s12_tenant_id.py` | Entra tenant ID behind the org, from Graph users' `domain`. |
 | `s13_html_samples.py` | Collects real HTML description samples tagged by construct for spike F3 (writes gitignored `results/f3-samples.json`). |
+| `s17_repo_browsing_shapes.py` | Everything a Repos tab needs: repository fields, per-repo language metrics, favorites, branches with statuses and ahead/behind stats, tags, commits and changes, folder listing, README content routes, binary metadata, file history, branch diffs, code search (`SPIKE_PROJECT` env selects the project). |
 | `s16_project_org_avatars.py` | Where the web's organization and project tiles come from, and the hash and initials rules behind the generated ones (`SPIKE_OUT` saves sample PNGs to a scratch folder). |
 
 ## Write spikes (scratch project "DevOps Mobile App" only)
