@@ -440,8 +440,47 @@ class PullRequestRepository {
   }
 
   /// Conversation entries: non-system, non-file threads, oldest first.
-  static List<PrThread> conversation(List<Map<String, dynamic>> raw) => [
-    for (final t in raw)
-      if (t['threadContext'] == null) ?PrThread.fromJson(t),
-  ];
+  /// Every thread a person wrote, file-anchored ones included, oldest
+  /// first. Most reviews live entirely in the files (spike s22: 52 of 52
+  /// threads on ServiceDelivery !8261), so the Conversation tab shows them
+  /// all; system threads (votes, pushes) and deleted ones drop out in
+  /// [PrThread.fromJson].
+  static List<PrThread> conversation(List<Map<String, dynamic>> raw) {
+    final threads = [for (final t in raw) ?PrThread.fromJson(t)];
+    threads.sort((a, b) {
+      final ta = a.startedAt?.millisecondsSinceEpoch ?? 0;
+      final tb = b.startedAt?.millisecondsSinceEpoch ?? 0;
+      if (ta != tb) return ta.compareTo(tb);
+      return a.id.compareTo(b.id);
+    });
+    return threads;
+  }
+
+  /// The conversation narrowed to [filter].
+  static List<PrThread> filterConversation(
+    List<PrThread> threads,
+    PrConversationFilter filter,
+  ) => switch (filter) {
+    PrConversationFilter.all => threads,
+    PrConversationFilter.active => [
+      for (final t in threads)
+        if (!t.isResolved) t,
+    ],
+    PrConversationFilter.resolved => [
+      for (final t in threads)
+        if (t.isResolved) t,
+    ],
+  };
+}
+
+/// Conversation tab filter: everything, the threads still open, or the
+/// ones settled (resolved, won't fix, closed, by design).
+enum PrConversationFilter {
+  all('All'),
+  active('Active'),
+  resolved('Resolved');
+
+  const PrConversationFilter(this.label);
+
+  final String label;
 }

@@ -195,6 +195,10 @@ class PrThread {
   final int? trackedFromLine;
 
   bool get isResolved => PrThreadStatus.isResolved(status);
+
+  /// Date of the first comment, which is when the thread was started.
+  DateTime? get startedAt =>
+      comments.isEmpty ? null : comments.first.publishedDate;
   bool get isFileThread => filePath != null;
   DateTime? get lastActivity => comments.isEmpty
       ? null

@@ -43,6 +43,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
   List<PrFileChange> _changes = const [];
   int? _iteration;
   List<PrThread> _conversation = const [];
+  PrConversationFilter _threadFilter = PrConversationFilter.all;
   String? _error;
   bool _loading = false;
   bool _changesLoading = false;
@@ -300,6 +301,21 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     );
   }
 
+  /// Opens the file a thread is anchored to, at the iteration being
+  /// viewed, so the comment can be read in context.
+  void _openThread(PrThread thread) {
+    final path = thread.filePath;
+    final it = _iteration;
+    if (path == null || it == null) return;
+    context.push(
+      Uri(
+        path:
+            '${orgRoute(context, widget.org)}/pull-requests/${widget.id}/diff',
+        queryParameters: {'path': path, 'iteration': '$it'},
+      ).toString(),
+    );
+  }
+
   void _openWorkItem(WorkItem item) {
     final pr = _pr;
     if (pr == null) return;
@@ -383,7 +399,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
               ),
               Tab(
                 text:
-                    'Conversation${_conversation.isEmpty ? '' : ' (${_conversation.length})'}',
+                    'Comments${_conversation.isEmpty ? '' : ' (${_conversation.length})'}',
               ),
             ],
           ),
@@ -425,10 +441,13 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                         ),
                         _Conversation(
                           threads: _conversation,
+                          filter: _threadFilter,
+                          onFilter: (f) => setState(() => _threadFilter = f),
                           canAct: pr.isActive,
                           busy: _acting,
                           onReply: _reply,
                           onSetStatus: _setThreadStatus,
+                          onOpenThread: _openThread,
                         ),
                       ],
                     ),
@@ -834,17 +853,23 @@ class _Files extends StatelessWidget {
 class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.threads,
+    required this.filter,
+    required this.onFilter,
     required this.canAct,
     required this.busy,
     required this.onReply,
     required this.onSetStatus,
+    required this.onOpenThread,
   });
 
   final List<PrThread> threads;
+  final PrConversationFilter filter;
+  final ValueChanged<PrConversationFilter> onFilter;
   final bool canAct;
   final bool busy;
   final Future<void> Function(PrThread thread, String text) onReply;
   final Future<void> Function(PrThread thread, String status) onSetStatus;
+  final ValueChanged<PrThread> onOpenThread;
 
   @override
   Widget build(BuildContext context) {
@@ -860,28 +885,138 @@ class _Conversation extends StatelessWidget {
         ),
       );
     }
+    final shown = PullRequestRepository.filterConversation(threads, filter);
+    final counts = {
+      for (final f in PrConversationFilter.values)
+        f: PullRequestRepository.filterConversation(threads, f).length,
+    };
     return ContentColumn(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          Spacing.lg,
-          Spacing.sm,
-          Spacing.lg,
-          Spacing.xxl,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final t in threads)
-            Padding(
-              key: ValueKey(t.id),
-              padding: const EdgeInsets.only(bottom: Spacing.md),
-              child: ThreadCard(
-                thread: t,
-                canAct: canAct,
-                busy: busy,
-                onReply: (text) => onReply(t, text),
-                onSetStatus: (status) => onSetStatus(t, status),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(
+              Spacing.lg,
+              Spacing.sm,
+              Spacing.lg,
+              0,
+            ),
+            child: Row(
+              children: [
+                for (final f in PrConversationFilter.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: Spacing.sm),
+                    child: ChoiceChip(
+                      label: Text('${f.label} (${counts[f]})'),
+                      selected: filter == f,
+                      onSelected: (_) => onFilter(f),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: shown.isEmpty
+                ? Center(
+                    child: Text(
+                      switch (filter) {
+                        PrConversationFilter.active =>
+                          'Every comment has been resolved.',
+                        PrConversationFilter.resolved =>
+                          'No comment has been resolved yet.',
+                        PrConversationFilter.all => 'No comments yet.',
+                      },
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      Spacing.lg,
+                      Spacing.sm,
+                      Spacing.lg,
+                      Spacing.xxl,
+                    ),
+                    children: [
+                      for (final t in shown)
+                        Padding(
+                          key: ValueKey(t.id),
+                          padding: const EdgeInsets.only(bottom: Spacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (t.isFileThread)
+                                _ThreadFileHeader(
+                                  thread: t,
+                                  onTap: () => onOpenThread(t),
+                                ),
+                              ThreadCard(
+                                thread: t,
+                                canAct: canAct,
+                                busy: busy,
+                                onReply: (text) => onReply(t, text),
+                                onSetStatus: (status) => onSetStatus(t, status),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Above a file-anchored thread: which file and line it hangs on, tapping
+/// opens the diff there.
+class _ThreadFileHeader extends StatelessWidget {
+  const _ThreadFileHeader({required this.thread, required this.onTap});
+
+  final PrThread thread;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final path = thread.filePath ?? '';
+    final name = path.substring(path.lastIndexOf('/') + 1);
+    final line = thread.rightLine ?? thread.leftLine;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: Radii.card,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Spacing.sm,
+          Spacing.xs,
+          Spacing.sm,
+          Spacing.xs,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.insert_drive_file_outlined,
+              size: 14,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: Spacing.xs),
+            Expanded(
+              child: Text(
+                line == null ? name : '$name:$line',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.primary,
+                ),
               ),
             ),
-        ],
+            Icon(Icons.chevron_right, size: 16, color: scheme.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }

@@ -67,7 +67,7 @@ void main() {
     });
   });
 
-  test('conversation drops system, deleted and file threads', () {
+  test('conversation drops system and deleted, keeps file threads', () {
     final threads = PullRequestRepository.conversation([
       {
         'id': 1,
@@ -101,8 +101,10 @@ void main() {
         ],
       },
     ]);
-    expect(threads.map((t) => t.id), [3]);
-    expect(threads.single.comments.single.author, 'B');
-    expect(threads.single.status, 'fixed');
+    // The file thread stays: most reviews happen on lines (spike s22).
+    expect(threads.map((t) => t.id), [2, 3]);
+    expect(threads.last.comments.single.author, 'B');
+    expect(threads.last.status, 'fixed');
+    expect(threads.first.isFileThread, isTrue);
   });
 }
