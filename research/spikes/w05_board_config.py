@@ -32,7 +32,7 @@ else:
 s, h, rows = get(f'{ORG_URL}/{P}/_apis/work/boards/{bid}/rows?{API}')
 out.append(f'rows before: {[(r.get("id"), r.get("name")) for r in rows["value"]]}')
 if not any(r.get('name') == 'Expedite' for r in rows['value']):
-    body = rows['value'] + [{'name': 'Expedite', 'color': 'FDE9B0'}]
+    body = rows['value'] + [{'name': 'Expedite', 'color': '#FDE9B0'}]
     s, h, r = call('PUT', f'{ORG_URL}/{P}/_apis/work/boards/{bid}/rows?{API}', body)
     got = r.get('value') if isinstance(r, dict) else r
     out.append(f'PUT rows → HTTP {s}: {[(x.get("id"), x.get("name")) for x in got] if isinstance(got, list) else str(r)[:600]}')
