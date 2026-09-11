@@ -87,6 +87,12 @@ class _ProjectShellState extends State<ProjectShell>
   /// Share of the shell height the glass rail spans on Apple tablets.
   static const _railHeightFactor = 0.8;
 
+  /// Room on each side of the rail for its shadow to fade out (its blur
+  /// radius), and the body inset that follows from it.
+  static const _railMargin = Spacing.xl;
+  static const _railGutter =
+      _railMargin + GlassNavigationRail.width + _railMargin;
+
   String projectPath(BuildContext context, String tail) =>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
 
@@ -129,13 +135,25 @@ class _ProjectShellState extends State<ProjectShell>
       // Apple tablets get a floating glass rail over the page background
       // (no rail column, no divider), so the scaffold color runs edge to
       // edge and the page app bar is not cut into on the left.
+      // The rail is layered above the body (a later Stack child), so its
+      // shadow falls over the page edge instead of being painted over, and
+      // the gutter leaves the shadow room to fade before the screen edge.
       return Scaffold(
-        body: Row(
+        body: Stack(
           children: [
-            SafeArea(
-              right: false,
+            Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.only(left: Spacing.md),
+                padding: const EdgeInsets.only(left: _railGutter),
+                child: body,
+              ),
+            ),
+            Positioned(
+              left: _railMargin,
+              top: 0,
+              bottom: 0,
+              width: GlassNavigationRail.width,
+              child: SafeArea(
+                right: false,
                 // Centered, four fifths of the height, destinations spread
                 // along it (Kelly's iPad feedback).
                 child: Center(
@@ -158,7 +176,6 @@ class _ProjectShellState extends State<ProjectShell>
                 ),
               ),
             ),
-            Expanded(child: body),
           ],
         ),
       );
