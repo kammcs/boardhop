@@ -80,6 +80,21 @@ void main() {
   });
 
   group('SettingsPage', () {
+    test(
+      'rail side defaults to right, persists in memory and notifies',
+      () async {
+        final controller = ThemeController.inMemory();
+        expect(controller.railSide, RailSide.right);
+        var notified = 0;
+        controller.addListener(() => notified++);
+        await controller.setRailSide(RailSide.left);
+        expect(controller.railSide, RailSide.left);
+        expect(notified, 1);
+        await controller.setRailSide(RailSide.left);
+        expect(notified, 1, reason: 'no notification without a change');
+      },
+    );
+
     testWidgets('renders under ThemeScope and switches the mode', (
       tester,
     ) async {

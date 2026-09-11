@@ -333,7 +333,7 @@ class _BoardsPageState extends State<BoardsPage> {
                 padding: EdgeInsets.fromLTRB(
                   Spacing.lg + MediaQuery.paddingOf(context).left,
                   Spacing.xs,
-                  Spacing.lg,
+                  Spacing.lg + MediaQuery.paddingOf(context).right,
                   Spacing.xs,
                 ),
                 children: [

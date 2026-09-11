@@ -60,6 +60,17 @@ class SettingsPage extends StatelessWidget {
                 ],
               ),
             ),
+            if (!context.breakpoint.isCompact && _hasGlassRail(context))
+              SwitchListTile(
+                value: controller.railSide == RailSide.right,
+                onChanged: (v) =>
+                    controller.setRailSide(v ? RailSide.right : RailSide.left),
+                title: const Text('Tab rail on the right'),
+                subtitle: const Text(
+                  'In landscape. Portrait keeps the rail along the bottom.',
+                ),
+                secondary: const Icon(Icons.view_sidebar_outlined),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 Spacing.lg,
@@ -91,4 +102,10 @@ class SettingsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The floating glass rail exists on Apple tablets only (see ProjectShell).
+bool _hasGlassRail(BuildContext context) {
+  final platform = Theme.of(context).platform;
+  return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
 }

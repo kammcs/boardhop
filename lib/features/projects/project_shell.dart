@@ -205,17 +205,28 @@ class _ProjectShellState extends State<ProjectShell>
           ),
         );
       }
+      // Landscape: the rail floats on the side chosen in Settings >
+      // Appearance (right by default).
+      final onRight = ThemeScope.of(context).railSide == RailSide.right;
       final page = _bleedsUnderRail(widget.location)
           ? MediaQuery(
               data: mq.copyWith(
                 padding: mq.padding.copyWith(
-                  left: mq.padding.left + _railGutter,
+                  left: onRight
+                      ? mq.padding.left
+                      : mq.padding.left + _railGutter,
+                  right: onRight
+                      ? mq.padding.right + _railGutter
+                      : mq.padding.right,
                 ),
               ),
               child: body,
             )
           : Padding(
-              padding: const EdgeInsets.only(left: _railGutter),
+              padding: EdgeInsets.only(
+                left: onRight ? 0 : _railGutter,
+                right: onRight ? _railGutter : 0,
+              ),
               child: body,
             );
       return Scaffold(
@@ -223,12 +234,14 @@ class _ProjectShellState extends State<ProjectShell>
           children: [
             Positioned.fill(child: page),
             Positioned(
-              left: _railMargin,
+              left: onRight ? null : _railMargin,
+              right: onRight ? _railMargin : null,
               top: 0,
               bottom: 0,
               width: GlassNavigationRail.width,
               child: SafeArea(
-                right: false,
+                left: !onRight,
+                right: onRight,
                 // Centered, four fifths of the height, destinations spread
                 // along it (Kelly's iPad feedback).
                 child: Center(
