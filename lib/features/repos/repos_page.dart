@@ -257,6 +257,15 @@ class _ReposPageState extends State<ReposPage> {
           onPressed: () =>
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Search code',
+            icon: const Icon(Icons.manage_search),
+            onPressed: () => context.push(
+              '${projectRoute(context, widget.org, widget.project)}/code-search',
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,

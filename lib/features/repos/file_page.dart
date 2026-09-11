@@ -29,6 +29,8 @@ class FilePage extends StatefulWidget {
     required this.ref,
     required this.path,
     this.line,
+    this.find,
+    this.embedded = false,
   });
 
   final String org;
@@ -39,6 +41,13 @@ class FilePage extends StatefulWidget {
 
   /// 1-based line to scroll to and tint.
   final int? line;
+
+  /// Term to locate: the first line containing it (case-insensitive) is
+  /// scrolled to and tinted. Code search results carry no line numbers.
+  final String? find;
+
+  /// Shown beside a folder list on wide screens: no back button.
+  final bool embedded;
 
   @override
   State<FilePage> createState() => _FilePageState();
@@ -64,6 +73,7 @@ class _FilePageState extends State<FilePage> {
   String? _error;
   Brightness? _highlightedFor;
   int _highlightGeneration = 0;
+  late int? _line = widget.line;
 
   RepoRepository get _repos => context.read<RepoRepository>();
 
@@ -210,6 +220,25 @@ class _FilePageState extends State<FilePage> {
   /// seconds and the result would hold millions of spans.
   static const _highlightLimit = 300 * 1024;
 
+  /// 1-based number of the first line containing [term], or null.
+  static int? _findLine(String content, String? term) {
+    final t = term?.trim().toLowerCase();
+    if (t == null || t.isEmpty) return null;
+    final needle = t.replaceAll('"', '');
+    var line = 1;
+    var start = 0;
+    final lower = content.toLowerCase();
+    while (start <= lower.length) {
+      final end = lower.indexOf('\n', start);
+      final segment = lower.substring(start, end < 0 ? lower.length : end);
+      if (segment.contains(needle)) return line;
+      if (end < 0) break;
+      start = end + 1;
+      line++;
+    }
+    return null;
+  }
+
   Future<void> _highlight() async {
     final content = _content;
     if (content == null) return;
@@ -223,7 +252,10 @@ class _FilePageState extends State<FilePage> {
       brightness,
     );
     if (!mounted || generation != _highlightGeneration) return;
-    setState(() => _lines = plain);
+    setState(() {
+      _lines = plain;
+      _line ??= _findLine(content, widget.find);
+    });
     final language = content.length > _highlightLimit
         ? null
         : CodeHighlighter.languageFor(_path);
@@ -260,6 +292,7 @@ class _FilePageState extends State<FilePage> {
     final showPreview = _isMarkdown && _preview;
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: !widget.embedded,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -448,7 +481,7 @@ class _FilePageState extends State<FilePage> {
           lines: lines,
           wrap: _wrap,
           fontSize: _sizes[_sizeIndex],
-          highlightLine: widget.line,
+          highlightLine: _line,
         );
     }
   }

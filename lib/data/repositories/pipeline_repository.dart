@@ -67,6 +67,7 @@ class PipelineRepository {
     String project, {
     int? definitionId,
     int top = 50,
+    bool cache = true,
   }) async {
     final json = await _client.getJson(
       org: org,
@@ -80,7 +81,9 @@ class PipelineRepository {
       },
     );
     final raw = _value(json);
-    if (definitionId == null) await _cache.put(runsKey(org, project), raw);
+    if (definitionId == null && cache) {
+      await _cache.put(runsKey(org, project), raw);
+    }
     return raw.map(BuildRun.fromJson).toList();
   }
 

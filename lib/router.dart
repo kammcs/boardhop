@@ -27,6 +27,7 @@ import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/repos/branch_picker_page.dart';
 import 'features/repos/code_browser_page.dart';
+import 'features/repos/code_search_page.dart';
 import 'features/repos/commit_page.dart';
 import 'features/repos/commits_page.dart';
 import 'features/repos/compare_page.dart';
@@ -36,7 +37,6 @@ import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
-import 'features/shared/feature_placeholder_page.dart';
 import 'features/shared/splash_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_item_edit_page.dart';
@@ -151,6 +151,14 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   StatefulShellBranch(
                     routes: [
                       GoRoute(
+                        path: ':project/code-search',
+                        builder: (_, state) => CodeSearchPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                          initialQuery: state.uri.queryParameters['q'],
+                        ),
+                      ),
+                      GoRoute(
                         path: ':project/repos',
                         builder: (_, state) => ReposPage(
                           org: state.pathParameters['org']!,
@@ -210,6 +218,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                                     line: int.tryParse(
                                       state.uri.queryParameters['line'] ?? '',
                                     ),
+                                    find: state.uri.queryParameters['find'],
                                   ),
                                 ),
                               ),
@@ -282,11 +291,12 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                               ),
                               GoRoute(
                                 path: 'search',
-                                builder: (_, state) =>
-                                    const FeaturePlaceholderPage(
-                                      title: 'Code search',
-                                      plannedIn: 'phase 4 of the repos plan',
-                                    ),
+                                builder: (_, state) => CodeSearchPage(
+                                  org: state.pathParameters['org']!,
+                                  project: state.pathParameters['project']!,
+                                  repoName: state.pathParameters['repo']!,
+                                  initialQuery: state.uri.queryParameters['q'],
+                                ),
                               ),
                             ],
                           ),

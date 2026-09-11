@@ -535,3 +535,93 @@ class GitCompare extends Equatable {
   @override
   List<Object?> get props => [commonCommit, targetCommit, changes.length];
 }
+
+/// One hit of the code search service. The service returns no snippets
+/// (spike s17), only where the term occurs and how many times.
+class CodeSearchHit extends Equatable {
+  const CodeSearchHit({
+    required this.fileName,
+    required this.path,
+    required this.repositoryName,
+    required this.repositoryId,
+    required this.projectName,
+    this.branch,
+    this.contentMatches = 0,
+    this.fileNameMatches = 0,
+  });
+
+  factory CodeSearchHit.fromJson(Map<String, dynamic> json) {
+    final repo = json['repository'];
+    final project = json['project'];
+    final versions = json['versions'];
+    final matches = json['matches'];
+    int count(Object? v) => v is List ? v.length : (v as num?)?.toInt() ?? 0;
+    String? branch;
+    if (versions is List && versions.isNotEmpty && versions.first is Map) {
+      branch = (versions.first as Map)['branchName'] as String?;
+    }
+    return CodeSearchHit(
+      fileName: json['fileName'] as String? ?? '',
+      path: json['path'] as String? ?? '',
+      repositoryName: repo is Map ? repo['name'] as String? ?? '' : '',
+      repositoryId: repo is Map ? repo['id'] as String? ?? '' : '',
+      projectName: project is Map ? project['name'] as String? ?? '' : '',
+      branch: branch,
+      contentMatches: matches is Map ? count(matches['content']) : 0,
+      fileNameMatches: matches is Map ? count(matches['fileName']) : 0,
+    );
+  }
+
+  final String fileName;
+  final String path;
+  final String repositoryName;
+  final String repositoryId;
+  final String projectName;
+  final String? branch;
+  final int contentMatches;
+  final int fileNameMatches;
+
+  /// Folder of the hit without the file name.
+  String get folder => RepoPaths.parent(path);
+
+  @override
+  List<Object?> get props => [repositoryId, path, branch];
+}
+
+/// A page of code search results with the service's status code.
+class CodeSearchResults extends Equatable {
+  const CodeSearchResults({
+    required this.count,
+    required this.hits,
+    required this.infoCode,
+  });
+
+  factory CodeSearchResults.fromJson(Map<String, dynamic> json) => CodeSearchResults(
+    count: (json['count'] as num?)?.toInt() ?? 0,
+    hits: [
+      for (final r in (json['results'] as List?) ?? const [])
+        if (r is Map) CodeSearchHit.fromJson(r.cast<String, dynamic>()),
+    ],
+    infoCode: (json['infoCode'] as num?)?.toInt() ?? 0,
+  );
+
+  final int count;
+  final List<CodeSearchHit> hits;
+  final int infoCode;
+
+  /// Plain-language reason when the service could not run the search.
+  String? get problem => switch (infoCode) {
+    0 => null,
+    1 || 6 || 7 || 12 =>
+      'The code index for this organization is still being built. '
+          'Try again in a while.',
+    2 => 'Code search has not started indexing this organization yet.',
+    3 => 'That query is not valid for code search.',
+    4 => 'A wildcard cannot start a term.',
+    5 => 'Multiple words are not supported with a code facet.',
+    _ => 'Code search returned status $infoCode.',
+  };
+
+  @override
+  List<Object?> get props => [count, hits, infoCode];
+}

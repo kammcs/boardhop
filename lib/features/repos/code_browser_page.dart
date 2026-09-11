@@ -8,6 +8,7 @@ import '../../data/models/git_repository.dart';
 import '../../data/repositories/repo_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'file_page.dart';
 import 'widgets/item_actions.dart';
 
 /// One folder of a repository on one branch: breadcrumb, folders first,
@@ -40,6 +41,9 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
   List<GitItem>? _items;
   String? _error;
   bool _loading = true;
+
+  /// File shown in the right pane on wide screens.
+  String? _openFile;
 
   RepoRepository get _repos => context.read<RepoRepository>();
 
@@ -116,6 +120,10 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
   }
 
   void _open(GitItem item) {
+    if (!item.isFolder && context.breakpoint.isAtLeastMedium) {
+      setState(() => _openFile = item.path);
+      return;
+    }
     context.push(_route(item.isFolder ? 'code' : 'file', item.path));
   }
 
@@ -166,78 +174,153 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
           ),
         ],
       ),
-      body: ContentColumn(
-        child: Column(
-          children: [
-            _Breadcrumb(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = context.breakpoint.isAtLeastMedium;
+          final list = _FolderPane(
+            breadcrumb: _Breadcrumb(
               repoName: widget.repo.name,
               segments: segments,
               onTap: (count) =>
                   context.push(_route('code', RepoPaths.prefix(_path, count))),
             ),
-            const Divider(height: 1),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _load,
-                child: ListView.builder(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: items.length + 2,
-                  itemBuilder: (context, i) {
-                    if (i == 0) {
-                      return _loading
-                          ? const LinearProgressIndicator()
-                          : const SizedBox.shrink();
-                    }
-                    if (i == 1) {
-                      if (_error != null) {
-                        return ListTile(
-                          leading: Icon(
-                            Icons.error_outline,
-                            color: scheme.error,
-                          ),
-                          title: Text(_error!),
-                        );
-                      }
-                      if (_items != null && items.isEmpty && !_loading) {
-                        return Padding(
-                          padding: const EdgeInsets.all(Spacing.xl),
-                          child: Text(
-                            'This folder is empty.',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    }
-                    final item = items[i - 2];
-                    return ListTile(
-                      leading: Icon(
-                        itemIcon(item),
-                        color: item.isFolder
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                      ),
-                      title: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: item.isFolder
-                          ? const Icon(Icons.chevron_right)
-                          : null,
-                      onTap: () => _open(item),
-                      onLongPress: () => _actions(item),
-                    );
-                  },
-                ),
+            onRefresh: _load,
+            loading: _loading,
+            error: _error,
+            items: items,
+            loaded: _items != null,
+            selectedPath: wide ? _openFile : null,
+            onOpen: _open,
+            onActions: _actions,
+          );
+          if (!wide) return ContentColumn(child: list);
+          final file = _openFile;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: (constraints.maxWidth * 0.38).clamp(300, 420),
+                child: list,
               ),
-            ),
-          ],
-        ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: file == null
+                    ? Center(
+                        child: Text(
+                          'Select a file',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      )
+                    : FilePage(
+                        key: ValueKey('$_ref:$file'),
+                        org: widget.org,
+                        project: widget.project,
+                        repo: widget.repo,
+                        ref: _ref,
+                        path: file,
+                        embedded: true,
+                      ),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+}
+
+/// Breadcrumb plus the folder rows, with pull-to-refresh.
+class _FolderPane extends StatelessWidget {
+  const _FolderPane({
+    required this.breadcrumb,
+    required this.onRefresh,
+    required this.loading,
+    required this.error,
+    required this.items,
+    required this.loaded,
+    required this.selectedPath,
+    required this.onOpen,
+    required this.onActions,
+  });
+
+  final Widget breadcrumb;
+  final Future<void> Function() onRefresh;
+  final bool loading;
+  final String? error;
+  final List<GitItem> items;
+  final bool loaded;
+  final String? selectedPath;
+  final ValueChanged<GitItem> onOpen;
+  final ValueChanged<GitItem?> onActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      children: [
+        breadcrumb,
+        const Divider(height: 1),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: onRefresh,
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: items.length + 2,
+              itemBuilder: (context, i) {
+                if (i == 0) {
+                  return loading
+                      ? const LinearProgressIndicator()
+                      : const SizedBox.shrink();
+                }
+                if (i == 1) {
+                  if (error != null) {
+                    return ListTile(
+                      leading: Icon(Icons.error_outline, color: scheme.error),
+                      title: Text(error!),
+                    );
+                  }
+                  if (loaded && items.isEmpty && !loading) {
+                    return Padding(
+                      padding: const EdgeInsets.all(Spacing.xl),
+                      child: Text(
+                        'This folder is empty.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                }
+                final item = items[i - 2];
+                return ListTile(
+                  selected: selectedPath == item.path,
+                  leading: Icon(
+                    itemIcon(item),
+                    color: item.isFolder
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
+                  ),
+                  title: Text(
+                    item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: item.isFolder
+                      ? const Icon(Icons.chevron_right)
+                      : null,
+                  onTap: () => onOpen(item),
+                  onLongPress: () => onActions(item),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

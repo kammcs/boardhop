@@ -135,3 +135,10 @@ Phase 5 (added): tags page, share links, file editing with `re_editor` and the p
 - Compare uses `diffs/commits` with the common ancestor as the old side of each file diff and the target commit as the new side; `allChangesIncluded=false` is shown as "(first N)".
 - Not built: commit list filters (author, date), blame (no REST API), share sheet (phase 5).
 
+## 10. Phase 4 notes (2026-09-11)
+
+- Code search request: `POST almsearch.dev.azure.com/{org}/{project}/_apis/search/codesearchresults?api-version=7.1` with `{searchText, $skip, $top, filters: {Project: [project], Repository?: [name]}, includeFacets: false}`. `matches.content` may be a list of offsets or a count; both are read as a count. No snippets and no line numbers, so the viewer locates the first line containing the term client-side.
+- Routes: `…/projects/{project}/code-search?q=` (project) and `…/repos/{repo}/search?q=` (repository). `code-search` sits beside `repos` rather than under it because `repos/search` would collide with a repository named "search".
+- Home tab reads the five latest runs with `cache: false` so the Pipelines tab keeps its 50-run cached list; PR lists reuse the project-scoped cache keys the PR page uses.
+- Two-pane: `CodeBrowserPage` at medium/expanded width keeps the folder list at 38% of the width (300–420 px) and shows `FilePage(embedded: true)` on the right; folders still push a new browser page so the back gesture keeps working.
+

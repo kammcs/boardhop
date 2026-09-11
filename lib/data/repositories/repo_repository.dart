@@ -704,4 +704,38 @@ class RepoRepository {
       return '';
     }
   }
+
+  static const searchApiVersion = '7.1';
+  static const searchPage = 50;
+
+  /// Code search across the project, or one repository of it. Needs the
+  /// Code Search extension on the organization (404 otherwise). A
+  /// repository filter must come with the project filter (spike s17).
+  Future<CodeSearchResults> searchCode(
+    String org,
+    String project,
+    String text, {
+    String? repositoryName,
+    int skip = 0,
+  }) async {
+    final json = await _client.send(
+      method: 'POST',
+      host: AdoHost.search,
+      org: org,
+      project: project,
+      path: '_apis/search/codesearchresults',
+      apiVersion: searchApiVersion,
+      body: {
+        'searchText': text,
+        r'$skip': skip,
+        r'$top': searchPage,
+        'filters': {
+          'Project': [project],
+          if (repositoryName != null) 'Repository': [repositoryName],
+        },
+        'includeFacets': false,
+      },
+    );
+    return CodeSearchResults.fromJson(json);
+  }
 }
