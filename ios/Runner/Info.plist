@@ -40,6 +40,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Boardhop does not use the camera. The rich text editor component references it, and Apple requires this notice; you will never be asked for camera access.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Boardhop does not read your photo library. The rich text editor component references it, and Apple requires this notice; you will never be asked for photo access.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Boardhop does not use your location. The web view component references it, and Apple requires this notice; you will never be asked for location access.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
