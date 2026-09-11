@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:super_sliver_list/super_sliver_list.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
@@ -38,6 +41,16 @@ class _ReposPageState extends State<ReposPage> {
   bool _loadedOnce = false;
   String _query = '';
   final _search = TextEditingController();
+  final _scroll = ScrollController();
+  final _list = ListController();
+
+  /// Row index of each repository in the list as last built, for the
+  /// "Show" action of the favorites toast.
+  Map<String, int> _rowOf = const {};
+
+  /// Repository whose row is tinted after a scroll-to, briefly.
+  String? _flashId;
+  Timer? _flashTimer;
 
   RepoRepository get _repo => context.read<RepoRepository>();
 
@@ -50,6 +63,9 @@ class _ReposPageState extends State<ReposPage> {
   @override
   void dispose() {
     _search.dispose();
+    _scroll.dispose();
+    _list.dispose();
+    _flashTimer?.cancel();
     super.dispose();
   }
 
@@ -146,6 +162,20 @@ class _ReposPageState extends State<ReposPage> {
           ? (_favorites.toSet()..remove(r.id))
           : {..._favorites, r.id};
     });
+    // The row has just moved to another section, usually off screen: the
+    // toast says where it went and "Show" scrolls there.
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          wasFavorite
+              ? '${r.name} removed from favorites'
+              : '${r.name} added to favorites',
+        ),
+        action: SnackBarAction(label: 'Show', onPressed: () => _reveal(r.id)),
+        duration: const Duration(seconds: 6),
+      ),
+    );
     try {
       await _repo.setFavorite(org: widget.org, repo: r, favorite: !wasFavorite);
     } on AdoException catch (e) {
@@ -155,10 +185,31 @@ class _ReposPageState extends State<ReposPage> {
             ? {..._favorites, r.id}
             : (_favorites.toSet()..remove(r.id));
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(ReposPageErrors.favoriteError(e))));
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(ReposPageErrors.favoriteError(e))),
+        );
     }
+  }
+
+  /// Scrolls the repository's row into view and tints it for a moment.
+  void _reveal(String repoId) {
+    final index = _rowOf[repoId];
+    if (index == null || !mounted || !_scroll.hasClients) return;
+    _list.animateToItem(
+      index: index,
+      scrollController: _scroll,
+      alignment: 0.25,
+      duration: (distance) =>
+          Duration(milliseconds: (distance / 3).clamp(250, 700).round()),
+      curve: (_) => Curves.easeOutCubic,
+    );
+    _flashTimer?.cancel();
+    setState(() => _flashId = repoId);
+    _flashTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _flashId = null);
+    });
   }
 
   void _open(GitRepository r) {
@@ -185,6 +236,7 @@ class _ReposPageState extends State<ReposPage> {
       recentIds: _recents,
       query: _query,
     );
+    final rows = _rows(context, sections);
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -209,85 +261,98 @@ class _ReposPageState extends State<ReposPage> {
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ContentColumn(
-          child: ListView(
+          child: SuperListView.builder(
+            controller: _scroll,
+            listController: _list,
             physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              if (_loading) const LinearProgressIndicator(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.lg,
-                  Spacing.sm,
-                  Spacing.lg,
-                  Spacing.xs,
-                ),
-                child: TextField(
-                  controller: _search,
-                  onChanged: (v) => setState(() => _query = v),
-                  decoration: InputDecoration(
-                    hintText: 'Filter repositories',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _query.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _search.clear();
-                              setState(() => _query = '');
-                            },
-                          ),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              if (_error != null)
-                ListTile(
-                  leading: Icon(Icons.error_outline, color: scheme.error),
-                  title: Text(_error!),
-                  subtitle: _shownAt == null || _repos.isEmpty
-                      ? null
-                      : Text(
-                          'Showing the list from ${relativeTime(_shownAt)}.',
-                        ),
-                ),
-              if (sections.isEmpty && _loadedOnce && !_loading)
-                Padding(
-                  padding: const EdgeInsets.all(Spacing.xl),
-                  child: Text(
-                    _query.isEmpty
-                        ? 'This project has no repositories.'
-                        : 'No repository matches "$_query".',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              if (sections.favorites.isNotEmpty) ...[
-                const _SectionLabel('Favorites'),
-                for (final r in sections.favorites) _tile(r),
-              ],
-              if (sections.recents.isNotEmpty) ...[
-                const _SectionLabel('Recent'),
-                for (final r in sections.recents) _tile(r),
-              ],
-              if (sections.all.isNotEmpty) ...[
-                if (sections.favorites.isNotEmpty ||
-                    sections.recents.isNotEmpty)
-                  const _SectionLabel('All repositories'),
-                for (final r in sections.all) _tile(r),
-              ],
-              if (sections.inactive.isNotEmpty) ...[
-                const _SectionLabel('Disabled'),
-                for (final r in sections.inactive) _tile(r),
-              ],
-            ],
+            itemCount: rows.length,
+            itemBuilder: (context, i) => rows[i],
           ),
         ),
       ),
     );
   }
 
+  /// Every row of the list in order; fills [_rowOf] so a repository's row
+  /// can be scrolled to by index even while it is not built.
+  List<Widget> _rows(BuildContext context, RepoSections sections) {
+    final scheme = Theme.of(context).colorScheme;
+    final rowOf = <String, int>{};
+    final rows = <Widget>[
+      if (_loading) const LinearProgressIndicator(),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Spacing.lg,
+          Spacing.sm,
+          Spacing.lg,
+          Spacing.xs,
+        ),
+        child: TextField(
+          controller: _search,
+          onChanged: (v) => setState(() => _query = v),
+          decoration: InputDecoration(
+            hintText: 'Filter repositories',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _search.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+            isDense: true,
+          ),
+        ),
+      ),
+      if (_error != null)
+        ListTile(
+          leading: Icon(Icons.error_outline, color: scheme.error),
+          title: Text(_error!),
+          subtitle: _shownAt == null || _repos.isEmpty
+              ? null
+              : Text('Showing the list from ${relativeTime(_shownAt)}.'),
+        ),
+      if (sections.isEmpty && _loadedOnce && !_loading)
+        Padding(
+          padding: const EdgeInsets.all(Spacing.xl),
+          child: Text(
+            _query.isEmpty
+                ? 'This project has no repositories.'
+                : 'No repository matches "$_query".',
+            textAlign: TextAlign.center,
+          ),
+        ),
+    ];
+    void section(String? label, List<GitRepository> repos) {
+      if (repos.isEmpty) return;
+      if (label != null) rows.add(_SectionLabel(label));
+      for (final r in repos) {
+        rowOf[r.id] = rows.length;
+        rows.add(_tile(r));
+      }
+    }
+
+    section('Favorites', sections.favorites);
+    section('Recent', sections.recents);
+    section(
+      sections.favorites.isNotEmpty || sections.recents.isNotEmpty
+          ? 'All repositories'
+          : null,
+      sections.all,
+    );
+    section('Disabled', sections.inactive);
+    _rowOf = rowOf;
+    return rows;
+  }
+
   Widget _tile(GitRepository r) => RepoTile(
+    key: ValueKey(r.id),
     repo: r,
     languages: _languages[r.name] ?? const [],
     favorite: _favorites.contains(r.id),
+    flash: _flashId == r.id,
     onFavorite: r.isActive ? () => _toggleFavorite(r) : null,
     onTap: r.isActive ? () => _open(r) : null,
   );
@@ -331,6 +396,7 @@ class RepoTile extends StatelessWidget {
     required this.repo,
     required this.languages,
     required this.favorite,
+    this.flash = false,
     this.onFavorite,
     this.onTap,
   });
@@ -338,6 +404,9 @@ class RepoTile extends StatelessWidget {
   final GitRepository repo;
   final List<RepoLanguage> languages;
   final bool favorite;
+
+  /// Tints the row briefly after a scroll-to.
+  final bool flash;
   final VoidCallback? onFavorite;
   final VoidCallback? onTap;
 
@@ -358,48 +427,56 @@ class RepoTile extends StatelessWidget {
         : repo.isEmpty
         ? 'Empty'
         : null;
-    return ListTile(
-      enabled: onTap != null,
-      leading: AdoTile(
-        name: repo.name,
-        color: AdoTiles.serviceColor(repo.name),
-        initials: AdoTiles.serviceInitials(repo.name),
-      ),
-      title: Text(repo.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Row(
-        children: [
-          if (language != null) ...[
-            LanguageDot(language: language),
-            const SizedBox(width: 6),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 360),
+      color: flash
+          ? scheme.primary.withValues(alpha: 0.18)
+          : Colors.transparent,
+      child: ListTile(
+        enabled: onTap != null,
+        leading: AdoTile(
+          name: repo.name,
+          color: AdoTiles.serviceColor(repo.name),
+          initials: AdoTiles.serviceInitials(repo.name),
+        ),
+        title: Text(repo.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Row(
+          children: [
+            if (language != null) ...[
+              LanguageDot(language: language),
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Text(
+                [
+                  if (parts.isNotEmpty) parts.join(' · '),
+                  if (repo.isFork && repo.parentRepositoryName != null)
+                    'forked from ${repo.parentRepositoryName}',
+                  ?badge,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           ],
-          Expanded(
-            child: Text(
-              [
-                if (parts.isNotEmpty) parts.join(' · '),
-                if (repo.isFork && repo.parentRepositoryName != null)
-                  'forked from ${repo.parentRepositoryName}',
-                ?badge,
-              ].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+        ),
+        trailing: onFavorite == null
+            ? null
+            : IconButton(
+                tooltip: favorite
+                    ? 'Remove from favorites'
+                    : 'Add to favorites',
+                icon: Icon(
+                  favorite ? Icons.star : Icons.star_border,
+                  color: favorite ? scheme.tertiary : scheme.onSurfaceVariant,
+                ),
+                onPressed: onFavorite,
               ),
-            ),
-          ),
-        ],
+        onTap: onTap,
       ),
-      trailing: onFavorite == null
-          ? null
-          : IconButton(
-              tooltip: favorite ? 'Remove from favorites' : 'Add to favorites',
-              icon: Icon(
-                favorite ? Icons.star : Icons.star_border,
-                color: favorite ? scheme.tertiary : scheme.onSurfaceVariant,
-              ),
-              onPressed: onFavorite,
-            ),
-      onTap: onTap,
     );
   }
 }
