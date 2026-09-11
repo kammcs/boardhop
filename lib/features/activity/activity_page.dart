@@ -160,13 +160,7 @@ class _ActivityPageState extends State<ActivityPage>
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
-        ],
+        actions: [],
       ),
       body: RefreshIndicator(
         onRefresh: _load,

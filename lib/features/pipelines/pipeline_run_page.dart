@@ -268,11 +268,6 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
                   PopupMenuItem(value: s, child: Text('Retry stage ${s.name}')),
               ],
             ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
         ],
       ),
       body: Column(

@@ -155,13 +155,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
               ? context.pop()
               : context.go('${orgRoute(context, widget.org)}/projects'),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _refresh,
-          ),
-        ],
+        actions: [],
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,

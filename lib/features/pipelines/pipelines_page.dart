@@ -292,13 +292,7 @@ class _PipelinesPageState extends State<PipelinesPage> {
             onPressed: () =>
                 context.go('${orgRoute(context, widget.org)}/projects'),
           ),
-          actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              icon: const Icon(Icons.refresh),
-              onPressed: _loading ? null : _load,
-            ),
-          ],
+          actions: [],
           bottom: TabBar(
             tabs: [
               const Tab(text: 'Runs'),
