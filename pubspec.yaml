@@ -119,14 +119,15 @@ dependency_overrides:
   flutter_keyboard_visibility: ^7.0.1
 
 # `dart run flutter_launcher_icons` regenerates the launcher icons from the
-# brand images: the logo as the flat icon, and the splash artwork (whose
-# picture sits in the middle third) as the adaptive foreground so no mask
-# shape crops it.
+# brand images: the logo as the flat icon, and icon_foreground.png (the logo
+# padded so the board fills about 80% of the visible circle) as the adaptive
+# foreground, with no extra inset.
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/brand/logo.png
   adaptive_icon_background: "#1d2739"
-  adaptive_icon_foreground: assets/brand/splash.png
+  adaptive_icon_foreground: assets/brand/icon_foreground.png
+  adaptive_icon_foreground_inset: 0
   min_sdk_android: 24
   remove_alpha_ios: true
