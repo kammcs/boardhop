@@ -11,7 +11,8 @@ import 'repositories/activity_repository.dart';
 import 'repositories/org_repository.dart';
 import 'repositories/pull_request_repository.dart';
 
-/// Polls the activity feed of the last-opened organization while the app
+/// One per signed-in account. Polls the activity feed of that account's
+/// last-opened organization while the app
 /// is in the foreground and posts a local notification for each item that
 /// is new since the user last looked at the feed, was not already announced,
 /// and was not caused by the user. Paused while the Activity page is open
@@ -23,12 +24,13 @@ class ActivitySync with WidgetsBindingObserver {
     required PullRequestRepository pullRequests,
     required NotificationService notifications,
     AppDatabase? db,
+    String? userId,
     this.interval = const Duration(minutes: 3),
   }) : _activity = activity, // ignore: prefer_initializing_formals
        _orgs = orgs, // ignore: prefer_initializing_formals
        _pullRequests = pullRequests, // ignore: prefer_initializing_formals
        _notifications = notifications, // ignore: prefer_initializing_formals
-       _cache = JsonCache(db);
+       _cache = JsonCache(db, namespace: userId);
 
   final ActivityRepository _activity;
   final OrgRepository _orgs;

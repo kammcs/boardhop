@@ -6,15 +6,17 @@ import '../db/app_database.dart';
 import '../models/organization.dart';
 import '../models/profile.dart';
 
-/// Organization discovery through the cross-org Accounts API, cached in drift.
+/// Organization discovery through the cross-org Accounts API for one
+/// signed-in account ([userId]), cached in drift.
 ///
 /// Both endpoints live on `app.vssps.visualstudio.com` and accept only Entra
 /// tokens (spike s02); that is one reason the launch is Entra-only.
 class OrgRepository {
-  OrgRepository(this._client, this._db);
+  OrgRepository(this._client, this._db, {required this.userId});
 
   final AdoClient _client;
   final AppDatabase _db;
+  final String userId;
 
   static const _apiVersion = '7.1';
 
@@ -50,12 +52,13 @@ class OrgRepository {
       final keep = orgs.map((o) => o.name).toList();
       await (_db.delete(
         _db.organizations,
-      )..where((t) => t.name.isNotIn(keep))).go();
+      )..where((t) => t.userId.equals(userId) & t.name.isNotIn(keep))).go();
       for (final org in orgs) {
         await _db
             .into(_db.organizations)
             .insert(
               OrganizationsCompanion.insert(
+                userId: userId,
                 name: org.name,
                 uri: org.uri,
                 accountId: org.accountId,
@@ -77,10 +80,12 @@ class OrgRepository {
   }
 
   Stream<List<Organization>> watch() =>
-      (_db.select(_db.organizations)..orderBy([
-            (t) => OrderingTerm.desc(t.lastOpenedAt),
-            (t) => OrderingTerm.asc(t.name),
-          ]))
+      (_db.select(_db.organizations)
+            ..where((t) => t.userId.equals(userId))
+            ..orderBy([
+              (t) => OrderingTerm.desc(t.lastOpenedAt),
+              (t) => OrderingTerm.asc(t.name),
+            ]))
           .watch()
           .map(
             (rows) => rows
@@ -99,7 +104,9 @@ class OrgRepository {
   Future<String?> lastOpened() async {
     final row =
         await (_db.select(_db.organizations)
-              ..where((t) => t.lastOpenedAt.isNotNull())
+              ..where(
+                (t) => t.userId.equals(userId) & t.lastOpenedAt.isNotNull(),
+              )
               ..orderBy([(t) => OrderingTerm.desc(t.lastOpenedAt)])
               ..limit(1))
             .getSingleOrNull();
@@ -107,7 +114,7 @@ class OrgRepository {
   }
 
   Future<void> markOpened(String name) =>
-      (_db.update(_db.organizations)..where((t) => t.name.equals(name))).write(
-        OrganizationsCompanion(lastOpenedAt: Value(DateTime.now())),
-      );
+      (_db.update(_db.organizations)
+            ..where((t) => t.userId.equals(userId) & t.name.equals(name)))
+          .write(OrganizationsCompanion(lastOpenedAt: Value(DateTime.now())));
 }

@@ -9,6 +9,15 @@ class $OrganizationsTable extends Organizations
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $OrganizationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
@@ -73,6 +82,7 @@ class $OrganizationsTable extends Organizations
   );
   @override
   List<GeneratedColumn> get $columns => [
+    userId,
     name,
     uri,
     accountId,
@@ -92,6 +102,14 @@ class $OrganizationsTable extends Organizations
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
     if (data.containsKey('name')) {
       context.handle(
         _nameMeta,
@@ -143,11 +161,15 @@ class $OrganizationsTable extends Organizations
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {name};
+  Set<GeneratedColumn> get $primaryKey => {userId, name};
   @override
   OrgRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return OrgRow(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
       name: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}name'],
@@ -182,6 +204,7 @@ class $OrganizationsTable extends Organizations
 }
 
 class OrgRow extends DataClass implements Insertable<OrgRow> {
+  final String userId;
   final String name;
   final String uri;
   final String accountId;
@@ -189,6 +212,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   final DateTime? lastOpenedAt;
   final DateTime fetchedAt;
   const OrgRow({
+    required this.userId,
     required this.name,
     required this.uri,
     required this.accountId,
@@ -199,6 +223,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
     map['name'] = Variable<String>(name);
     map['uri'] = Variable<String>(uri);
     map['account_id'] = Variable<String>(accountId);
@@ -214,6 +239,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
 
   OrganizationsCompanion toCompanion(bool nullToAbsent) {
     return OrganizationsCompanion(
+      userId: Value(userId),
       name: Value(name),
       uri: Value(uri),
       accountId: Value(accountId),
@@ -233,6 +259,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return OrgRow(
+      userId: serializer.fromJson<String>(json['userId']),
       name: serializer.fromJson<String>(json['name']),
       uri: serializer.fromJson<String>(json['uri']),
       accountId: serializer.fromJson<String>(json['accountId']),
@@ -245,6 +272,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
       'name': serializer.toJson<String>(name),
       'uri': serializer.toJson<String>(uri),
       'accountId': serializer.toJson<String>(accountId),
@@ -255,6 +283,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   }
 
   OrgRow copyWith({
+    String? userId,
     String? name,
     String? uri,
     String? accountId,
@@ -262,6 +291,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
     Value<DateTime?> lastOpenedAt = const Value.absent(),
     DateTime? fetchedAt,
   }) => OrgRow(
+    userId: userId ?? this.userId,
     name: name ?? this.name,
     uri: uri ?? this.uri,
     accountId: accountId ?? this.accountId,
@@ -271,6 +301,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   );
   OrgRow copyWithCompanion(OrganizationsCompanion data) {
     return OrgRow(
+      userId: data.userId.present ? data.userId.value : this.userId,
       name: data.name.present ? data.name.value : this.name,
       uri: data.uri.present ? data.uri.value : this.uri,
       accountId: data.accountId.present ? data.accountId.value : this.accountId,
@@ -285,6 +316,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   @override
   String toString() {
     return (StringBuffer('OrgRow(')
+          ..write('userId: $userId, ')
           ..write('name: $name, ')
           ..write('uri: $uri, ')
           ..write('accountId: $accountId, ')
@@ -296,12 +328,20 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(name, uri, accountId, tenantId, lastOpenedAt, fetchedAt);
+  int get hashCode => Object.hash(
+    userId,
+    name,
+    uri,
+    accountId,
+    tenantId,
+    lastOpenedAt,
+    fetchedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is OrgRow &&
+          other.userId == this.userId &&
           other.name == this.name &&
           other.uri == this.uri &&
           other.accountId == this.accountId &&
@@ -311,6 +351,7 @@ class OrgRow extends DataClass implements Insertable<OrgRow> {
 }
 
 class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
+  final Value<String> userId;
   final Value<String> name;
   final Value<String> uri;
   final Value<String> accountId;
@@ -319,6 +360,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
   final Value<DateTime> fetchedAt;
   final Value<int> rowid;
   const OrganizationsCompanion({
+    this.userId = const Value.absent(),
     this.name = const Value.absent(),
     this.uri = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -328,6 +370,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
     this.rowid = const Value.absent(),
   });
   OrganizationsCompanion.insert({
+    required String userId,
     required String name,
     required String uri,
     required String accountId,
@@ -335,11 +378,13 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
     this.lastOpenedAt = const Value.absent(),
     required DateTime fetchedAt,
     this.rowid = const Value.absent(),
-  }) : name = Value(name),
+  }) : userId = Value(userId),
+       name = Value(name),
        uri = Value(uri),
        accountId = Value(accountId),
        fetchedAt = Value(fetchedAt);
   static Insertable<OrgRow> custom({
+    Expression<String>? userId,
     Expression<String>? name,
     Expression<String>? uri,
     Expression<String>? accountId,
@@ -349,6 +394,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
       if (name != null) 'name': name,
       if (uri != null) 'uri': uri,
       if (accountId != null) 'account_id': accountId,
@@ -360,6 +406,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
   }
 
   OrganizationsCompanion copyWith({
+    Value<String>? userId,
     Value<String>? name,
     Value<String>? uri,
     Value<String>? accountId,
@@ -369,6 +416,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
     Value<int>? rowid,
   }) {
     return OrganizationsCompanion(
+      userId: userId ?? this.userId,
       name: name ?? this.name,
       uri: uri ?? this.uri,
       accountId: accountId ?? this.accountId,
@@ -382,6 +430,9 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
@@ -409,6 +460,7 @@ class OrganizationsCompanion extends UpdateCompanion<OrgRow> {
   @override
   String toString() {
     return (StringBuffer('OrganizationsCompanion(')
+          ..write('userId: $userId, ')
           ..write('name: $name, ')
           ..write('uri: $uri, ')
           ..write('accountId: $accountId, ')
@@ -1884,6 +1936,15 @@ class $PendingWritesTable extends PendingWrites
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _orgNameMeta = const VerificationMeta(
     'orgName',
   );
@@ -1955,6 +2016,7 @@ class $PendingWritesTable extends PendingWrites
   List<GeneratedColumn> get $columns => [
     id,
     kind,
+    userId,
     orgName,
     targetId,
     payload,
@@ -1984,6 +2046,12 @@ class $PendingWritesTable extends PendingWrites
       );
     } else if (isInserting) {
       context.missing(_kindMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
     }
     if (data.containsKey('org_name')) {
       context.handle(
@@ -2046,6 +2114,10 @@ class $PendingWritesTable extends PendingWrites
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
       )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      ),
       orgName: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}org_name'],
@@ -2082,6 +2154,10 @@ class $PendingWritesTable extends PendingWrites
 class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   final int id;
   final String kind;
+
+  /// The account whose token replays the write (null on rows queued before
+  /// accounts existed; those replay as the first signed-in account).
+  final String? userId;
   final String orgName;
   final String targetId;
   final String payload;
@@ -2091,6 +2167,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   const PendingWriteRow({
     required this.id,
     required this.kind,
+    this.userId,
     required this.orgName,
     required this.targetId,
     required this.payload,
@@ -2103,6 +2180,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<String>(userId);
+    }
     map['org_name'] = Variable<String>(orgName);
     map['target_id'] = Variable<String>(targetId);
     map['payload'] = Variable<String>(payload);
@@ -2118,6 +2198,9 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     return PendingWritesCompanion(
       id: Value(id),
       kind: Value(kind),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
       orgName: Value(orgName),
       targetId: Value(targetId),
       payload: Value(payload),
@@ -2137,6 +2220,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     return PendingWriteRow(
       id: serializer.fromJson<int>(json['id']),
       kind: serializer.fromJson<String>(json['kind']),
+      userId: serializer.fromJson<String?>(json['userId']),
       orgName: serializer.fromJson<String>(json['orgName']),
       targetId: serializer.fromJson<String>(json['targetId']),
       payload: serializer.fromJson<String>(json['payload']),
@@ -2151,6 +2235,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'kind': serializer.toJson<String>(kind),
+      'userId': serializer.toJson<String?>(userId),
       'orgName': serializer.toJson<String>(orgName),
       'targetId': serializer.toJson<String>(targetId),
       'payload': serializer.toJson<String>(payload),
@@ -2163,6 +2248,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   PendingWriteRow copyWith({
     int? id,
     String? kind,
+    Value<String?> userId = const Value.absent(),
     String? orgName,
     String? targetId,
     String? payload,
@@ -2172,6 +2258,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   }) => PendingWriteRow(
     id: id ?? this.id,
     kind: kind ?? this.kind,
+    userId: userId.present ? userId.value : this.userId,
     orgName: orgName ?? this.orgName,
     targetId: targetId ?? this.targetId,
     payload: payload ?? this.payload,
@@ -2183,6 +2270,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     return PendingWriteRow(
       id: data.id.present ? data.id.value : this.id,
       kind: data.kind.present ? data.kind.value : this.kind,
+      userId: data.userId.present ? data.userId.value : this.userId,
       orgName: data.orgName.present ? data.orgName.value : this.orgName,
       targetId: data.targetId.present ? data.targetId.value : this.targetId,
       payload: data.payload.present ? data.payload.value : this.payload,
@@ -2197,6 +2285,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
     return (StringBuffer('PendingWriteRow(')
           ..write('id: $id, ')
           ..write('kind: $kind, ')
+          ..write('userId: $userId, ')
           ..write('orgName: $orgName, ')
           ..write('targetId: $targetId, ')
           ..write('payload: $payload, ')
@@ -2211,6 +2300,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
   int get hashCode => Object.hash(
     id,
     kind,
+    userId,
     orgName,
     targetId,
     payload,
@@ -2224,6 +2314,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
       (other is PendingWriteRow &&
           other.id == this.id &&
           other.kind == this.kind &&
+          other.userId == this.userId &&
           other.orgName == this.orgName &&
           other.targetId == this.targetId &&
           other.payload == this.payload &&
@@ -2235,6 +2326,7 @@ class PendingWriteRow extends DataClass implements Insertable<PendingWriteRow> {
 class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   final Value<int> id;
   final Value<String> kind;
+  final Value<String?> userId;
   final Value<String> orgName;
   final Value<String> targetId;
   final Value<String> payload;
@@ -2244,6 +2336,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   const PendingWritesCompanion({
     this.id = const Value.absent(),
     this.kind = const Value.absent(),
+    this.userId = const Value.absent(),
     this.orgName = const Value.absent(),
     this.targetId = const Value.absent(),
     this.payload = const Value.absent(),
@@ -2254,6 +2347,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   PendingWritesCompanion.insert({
     this.id = const Value.absent(),
     required String kind,
+    this.userId = const Value.absent(),
     required String orgName,
     required String targetId,
     required String payload,
@@ -2268,6 +2362,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   static Insertable<PendingWriteRow> custom({
     Expression<int>? id,
     Expression<String>? kind,
+    Expression<String>? userId,
     Expression<String>? orgName,
     Expression<String>? targetId,
     Expression<String>? payload,
@@ -2278,6 +2373,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (kind != null) 'kind': kind,
+      if (userId != null) 'user_id': userId,
       if (orgName != null) 'org_name': orgName,
       if (targetId != null) 'target_id': targetId,
       if (payload != null) 'payload': payload,
@@ -2290,6 +2386,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
   PendingWritesCompanion copyWith({
     Value<int>? id,
     Value<String>? kind,
+    Value<String?>? userId,
     Value<String>? orgName,
     Value<String>? targetId,
     Value<String>? payload,
@@ -2300,6 +2397,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     return PendingWritesCompanion(
       id: id ?? this.id,
       kind: kind ?? this.kind,
+      userId: userId ?? this.userId,
       orgName: orgName ?? this.orgName,
       targetId: targetId ?? this.targetId,
       payload: payload ?? this.payload,
@@ -2317,6 +2415,9 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
     }
     if (orgName.present) {
       map['org_name'] = Variable<String>(orgName.value);
@@ -2344,6 +2445,7 @@ class PendingWritesCompanion extends UpdateCompanion<PendingWriteRow> {
     return (StringBuffer('PendingWritesCompanion(')
           ..write('id: $id, ')
           ..write('kind: $kind, ')
+          ..write('userId: $userId, ')
           ..write('orgName: $orgName, ')
           ..write('targetId: $targetId, ')
           ..write('payload: $payload, ')
@@ -2643,6 +2745,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
 
 typedef $$OrganizationsTableCreateCompanionBuilder =
     OrganizationsCompanion Function({
+      required String userId,
       required String name,
       required String uri,
       required String accountId,
@@ -2653,6 +2756,7 @@ typedef $$OrganizationsTableCreateCompanionBuilder =
     });
 typedef $$OrganizationsTableUpdateCompanionBuilder =
     OrganizationsCompanion Function({
+      Value<String> userId,
       Value<String> name,
       Value<String> uri,
       Value<String> accountId,
@@ -2671,6 +2775,11 @@ class $$OrganizationsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
     builder: (column) => ColumnFilters(column),
@@ -2711,6 +2820,11 @@ class $$OrganizationsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get name => $composableBuilder(
     column: $table.name,
     builder: (column) => ColumnOrderings(column),
@@ -2751,6 +2865,9 @@ class $$OrganizationsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
@@ -2800,6 +2917,7 @@ class $$OrganizationsTableTableManager
               $$OrganizationsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<String> userId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> uri = const Value.absent(),
                 Value<String> accountId = const Value.absent(),
@@ -2808,6 +2926,7 @@ class $$OrganizationsTableTableManager
                 Value<DateTime> fetchedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrganizationsCompanion(
+                userId: userId,
                 name: name,
                 uri: uri,
                 accountId: accountId,
@@ -2818,6 +2937,7 @@ class $$OrganizationsTableTableManager
               ),
           createCompanionCallback:
               ({
+                required String userId,
                 required String name,
                 required String uri,
                 required String accountId,
@@ -2826,6 +2946,7 @@ class $$OrganizationsTableTableManager
                 required DateTime fetchedAt,
                 Value<int> rowid = const Value.absent(),
               }) => OrganizationsCompanion.insert(
+                userId: userId,
                 name: name,
                 uri: uri,
                 accountId: accountId,
@@ -3633,6 +3754,7 @@ typedef $$PendingWritesTableCreateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> id,
       required String kind,
+      Value<String?> userId,
       required String orgName,
       required String targetId,
       required String payload,
@@ -3644,6 +3766,7 @@ typedef $$PendingWritesTableUpdateCompanionBuilder =
     PendingWritesCompanion Function({
       Value<int> id,
       Value<String> kind,
+      Value<String?> userId,
       Value<String> orgName,
       Value<String> targetId,
       Value<String> payload,
@@ -3668,6 +3791,11 @@ class $$PendingWritesTableFilterComposer
 
   ColumnFilters<String> get kind => $composableBuilder(
     column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3721,6 +3849,11 @@ class $$PendingWritesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get orgName => $composableBuilder(
     column: $table.orgName,
     builder: (column) => ColumnOrderings(column),
@@ -3766,6 +3899,9 @@ class $$PendingWritesTableAnnotationComposer
 
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
 
   GeneratedColumn<String> get orgName =>
       $composableBuilder(column: $table.orgName, builder: (column) => column);
@@ -3819,6 +3955,7 @@ class $$PendingWritesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> userId = const Value.absent(),
                 Value<String> orgName = const Value.absent(),
                 Value<String> targetId = const Value.absent(),
                 Value<String> payload = const Value.absent(),
@@ -3828,6 +3965,7 @@ class $$PendingWritesTableTableManager
               }) => PendingWritesCompanion(
                 id: id,
                 kind: kind,
+                userId: userId,
                 orgName: orgName,
                 targetId: targetId,
                 payload: payload,
@@ -3839,6 +3977,7 @@ class $$PendingWritesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String kind,
+                Value<String?> userId = const Value.absent(),
                 required String orgName,
                 required String targetId,
                 required String payload,
@@ -3848,6 +3987,7 @@ class $$PendingWritesTableTableManager
               }) => PendingWritesCompanion.insert(
                 id: id,
                 kind: kind,
+                userId: userId,
                 orgName: orgName,
                 targetId: targetId,
                 payload: payload,

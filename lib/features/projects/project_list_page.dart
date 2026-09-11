@@ -8,6 +8,7 @@ import '../../core/util/ado_tiles.dart';
 import '../../data/models/project.dart';
 import '../../data/repositories/project_repository.dart';
 import '../shared/widgets/ado_tile.dart';
+import '../shared/account_scope.dart';
 
 class ProjectListPage extends StatefulWidget {
   const ProjectListPage({super.key, required this.org});
@@ -37,7 +38,12 @@ class _ProjectListPageState extends State<ProjectListPage> {
       await context.read<ProjectRepository>().refresh(widget.org);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       setState(() => _error = e.message);
@@ -59,16 +65,14 @@ class _ProjectListPageState extends State<ProjectListPage> {
           IconButton(
             tooltip: 'Activity',
             icon: const Icon(Icons.notifications_outlined),
-            onPressed: () => context.push(
-              '/orgs/${Uri.encodeComponent(widget.org)}/activity',
-            ),
+            onPressed: () =>
+                context.push('${orgRoute(context, widget.org)}/activity'),
           ),
           IconButton(
             tooltip: 'Pull requests to review',
             icon: const Icon(Icons.call_merge),
-            onPressed: () => context.push(
-              '/orgs/${Uri.encodeComponent(widget.org)}/pull-requests',
-            ),
+            onPressed: () =>
+                context.push('${orgRoute(context, widget.org)}/pull-requests'),
           ),
         ],
       ),
@@ -107,7 +111,7 @@ class _ProjectListPageState extends State<ProjectListPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                     onTap: () => context.go(
-                      '/orgs/${Uri.encodeComponent(widget.org)}'
+                      '${orgRoute(context, widget.org)}'
                       '/projects/${Uri.encodeComponent(p.name)}/work-items',
                     ),
                   ),

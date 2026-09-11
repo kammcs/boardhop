@@ -23,8 +23,10 @@ class ActivityItem extends Equatable {
     this.actorId,
   });
 
+  /// [orgPath] is the account-scoped org route (`Routes.org`), so a tap on
+  /// the notification lands in the right account.
   factory ActivityItem.fromPullRequest(
-    String org,
+    String orgPath,
     PullRequest pr, {
     required bool mine,
   }) => ActivityItem(
@@ -34,7 +36,7 @@ class ActivityItem extends Equatable {
     subtitle:
         '${pr.projectName} / ${pr.repositoryName} · !${pr.id} · '
         '${mine ? pr.overallVote.label : pr.createdBy.displayName}',
-    route: '/orgs/${Uri.encodeComponent(org)}/pull-requests/${pr.id}',
+    route: '$orgPath/pull-requests/${pr.id}',
     time: pr.creationDate,
     project: pr.projectName,
     status: pr.isDraft ? 'draft' : pr.status,
@@ -43,7 +45,10 @@ class ActivityItem extends Equatable {
     actorId: pr.createdBy.id,
   );
 
-  factory ActivityItem.fromWorkItem(String org, WorkItem item) => ActivityItem(
+  factory ActivityItem.fromWorkItem(
+    String orgPath,
+    WorkItem item,
+  ) => ActivityItem(
     kind: ActivityKind.workItem,
     key: 'wi:${item.id}',
     title: item.title,
@@ -51,7 +56,7 @@ class ActivityItem extends Equatable {
         '${item.type} ${item.id} · ${item.state}'
         '${item.changedBy == null ? '' : ' · ${item.changedBy!.displayName}'}',
     route:
-        '/orgs/${Uri.encodeComponent(org)}/projects/'
+        '$orgPath/projects/'
         '${Uri.encodeComponent(item.teamProject)}/work-items/${item.id}',
     time: item.changedDate,
     project: item.teamProject,
@@ -61,7 +66,7 @@ class ActivityItem extends Equatable {
     actorId: item.changedBy?.id,
   );
 
-  factory ActivityItem.fromBuild(String org, BuildRun run) => ActivityItem(
+  factory ActivityItem.fromBuild(String orgPath, BuildRun run) => ActivityItem(
     kind: ActivityKind.build,
     key: 'build:${run.id}',
     title: '${run.definitionName} · ${run.buildNumber}',
@@ -69,7 +74,7 @@ class ActivityItem extends Equatable {
         '${run.projectName ?? ''} · ${run.branch}'
         '${run.requestedFor == null ? '' : ' · ${run.requestedFor!.displayName}'}',
     route:
-        '/orgs/${Uri.encodeComponent(org)}/projects/'
+        '$orgPath/projects/'
         '${Uri.encodeComponent(run.projectName ?? '')}/pipelines/runs/${run.id}',
     time: run.finishTime ?? run.startTime ?? run.queueTime,
     project: run.projectName,

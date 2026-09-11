@@ -12,6 +12,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
+import '../shared/account_scope.dart';
 import 'widgets/kanban_board.dart';
 
 /// The team's Kanban board. Columns become drop slots (a split column is two
@@ -80,7 +81,12 @@ class _BoardsPageState extends State<BoardsPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -170,7 +176,12 @@ class _BoardsPageState extends State<BoardsPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoNetworkException {
       // Offline: keep the move on screen, queue the column write (the rank
@@ -227,7 +238,7 @@ class _BoardsPageState extends State<BoardsPage> {
   }
 
   void _open(WorkItem item) => context.push(
-    '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+    '${orgRoute(context, widget.org)}/projects/'
     '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
   );
 
@@ -263,7 +274,7 @@ class _BoardsPageState extends State<BoardsPage> {
           tooltip: 'Projects',
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
-              context.go('/orgs/${Uri.encodeComponent(widget.org)}/projects'),
+              context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
           if (_boards.length > 1)

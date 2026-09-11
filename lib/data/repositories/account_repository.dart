@@ -65,20 +65,23 @@ class AccountRepository {
     this._auth,
     this._orgs,
     this._avatars, {
+    required String userId,
     AppDatabase? db,
     Dio? dio,
-  }) : _cache = JsonCache(db),
+  }) : _userId = userId,
+       _cache = JsonCache(db, namespace: userId),
        _dio = dio ?? Dio();
 
   final AuthService _auth;
   final OrgRepository _orgs;
   final AvatarStore _avatars;
+  final String _userId;
   final JsonCache _cache;
   final Dio _dio;
 
   static const graphBase = 'https://graph.microsoft.com/v1.0';
   static const headerKey = 'account:header';
-  static const photoKey = 'account:photo';
+  String get photoKey => 'account:photo:$_userId';
 
   Future<AccountHeader?> cached() async {
     final hit = await _cache.get(headerKey);
@@ -109,7 +112,7 @@ class AccountRepository {
   /// Fresh header: Graph when a token can be had without interaction,
   /// otherwise the Azure DevOps profile (no company name).
   Future<AccountHeader> refresh() async {
-    final token = await _auth.graphAccessToken();
+    final token = await _auth.graphAccessToken(_userId);
     AccountHeader? header;
     if (token != null) {
       final me = await _graph(
@@ -147,7 +150,7 @@ class AccountRepository {
   /// The person's photo from Graph (`/me/photos/120x120`), through the
   /// avatar cache; null without a Graph token or a photo.
   Future<Uint8List?> photo() => _avatars.loadWith(photoKey, () async {
-    final token = await _auth.graphAccessToken();
+    final token = await _auth.graphAccessToken(_userId);
     if (token == null) return null;
     try {
       final response = await _dio.get<List<int>>(

@@ -8,6 +8,7 @@ import '../../core/util/format.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
+import '../shared/account_scope.dart';
 import 'widgets/query_picker.dart';
 import 'work_item_detail_page.dart';
 import 'widgets/work_item_visuals.dart';
@@ -64,7 +65,12 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
       }
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -120,7 +126,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
       return;
     }
     context.push(
-      '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+      '${orgRoute(context, widget.org)}/projects/'
       '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
     );
   }
@@ -148,7 +154,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           tooltip: 'Projects',
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
-              context.go('/orgs/${Uri.encodeComponent(widget.org)}/projects'),
+              context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
           IconButton(

@@ -3,9 +3,12 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 part 'app_database.g.dart';
 
-/// Organizations the signed-in user can reach, from the Accounts API.
+/// Organizations each signed-in account can reach, from the Accounts API.
+/// [userId] is the MSAL account identifier; [accountId] the Azure DevOps
+/// organization id. The same organization may appear under two accounts.
 @DataClassName('OrgRow')
 class Organizations extends Table {
+  TextColumn get userId => text()();
   TextColumn get name => text()();
   TextColumn get uri => text()();
   TextColumn get accountId => text()();
@@ -14,7 +17,7 @@ class Organizations extends Table {
   DateTimeColumn get fetchedAt => dateTime()();
 
   @override
-  Set<Column<Object>> get primaryKey => {name};
+  Set<Column<Object>> get primaryKey => {userId, name};
 }
 
 @DataClassName('ProjectRow')
@@ -67,6 +70,10 @@ class WorkItemListEntries extends Table {
 class PendingWrites extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get kind => text()();
+
+  /// The account whose token replays the write (null on rows queued before
+  /// accounts existed; those replay as the first signed-in account).
+  TextColumn get userId => text().nullable()();
   TextColumn get orgName => text()();
   TextColumn get targetId => text()();
   TextColumn get payload => text()();
@@ -102,7 +109,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'boardhop'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -120,6 +127,13 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5) {
         await m.addColumn(projects, projects.defaultTeamDescriptor);
+      }
+      if (from < 6) {
+        // Organizations are now keyed by account; the list is re-read on
+        // the next open, so recreating the table loses nothing lasting.
+        await m.deleteTable('organizations');
+        await m.createTable(organizations);
+        await m.addColumn(pendingWrites, pendingWrites.userId);
       }
     },
   );

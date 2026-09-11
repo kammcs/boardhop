@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../db/app_database.dart';
+import '../db/json_cache.dart';
 import '../models/pr_check.dart';
 import '../models/pull_request.dart';
 import 'pr_diff_source.dart';
@@ -21,10 +20,11 @@ typedef PrListResult = ({
 /// verified by spike S4 (undocumented) and falls back to the project-level
 /// one; each list is cached as one JSON blob so the inbox opens offline.
 class PullRequestRepository {
-  PullRequestRepository(this._client, [this._db]);
+  PullRequestRepository(this._client, [AppDatabase? db, String? userId])
+    : _cache = JsonCache(db, namespace: userId);
 
   final AdoClient _client;
-  final AppDatabase? _db;
+  final JsonCache _cache;
 
   static const apiVersion = '7.1';
   static const policyApiVersion = '7.1-preview.1';
@@ -91,38 +91,20 @@ class PullRequestRepository {
     String? project,
     PrListFilter filter = PrListFilter.toReview,
   }) async {
-    final db = _db;
-    if (db == null) return null;
-    final row =
-        await (db.select(db.cacheEntries)
-              ..where((t) => t.key.equals(listKey(org, project, filter))))
-            .getSingleOrNull();
-    if (row == null) return null;
-    final decoded = jsonDecode(row.json);
-    if (decoded is! List) return null;
+    final hit = await _cache.get(listKey(org, project, filter));
+    final decoded = hit?.json;
+    if (hit == null || decoded is! List) return null;
     return (
       items: decoded
           .whereType<Map>()
           .map((m) => PullRequest.fromJson(m.cast<String, dynamic>()))
           .toList(),
-      fetchedAt: row.fetchedAt,
+      fetchedAt: hit.fetchedAt,
       fromCache: true,
     );
   }
 
-  Future<void> _store(String key, Object json) async {
-    final db = _db;
-    if (db == null) return;
-    await db
-        .into(db.cacheEntries)
-        .insertOnConflictUpdate(
-          CacheEntriesCompanion.insert(
-            key: key,
-            json: jsonEncode(json),
-            fetchedAt: DateTime.now(),
-          ),
-        );
-  }
+  Future<void> _store(String key, Object json) => _cache.put(key, json);
 
   Future<PullRequest> get(String org, int id) async {
     final json = await _client.getJson(

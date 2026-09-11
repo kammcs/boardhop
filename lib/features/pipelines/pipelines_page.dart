@@ -9,6 +9,7 @@ import '../../data/models/pipeline.dart';
 import '../../data/repositories/pipeline_repository.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
+import '../shared/account_scope.dart';
 import 'widgets/pipeline_visuals.dart';
 
 /// Milestone 3: recent runs (optionally one pipeline), the pipeline list
@@ -80,7 +81,12 @@ class _PipelinesPageState extends State<PipelinesPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
       return;
     } on AdoException catch (e) {
@@ -120,7 +126,12 @@ class _PipelinesPageState extends State<PipelinesPage> {
       await _load();
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -169,7 +180,7 @@ class _PipelinesPageState extends State<PipelinesPage> {
   }
 
   String _runPath(BuildRun run) =>
-      '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+      '${orgRoute(context, widget.org)}/projects/'
       '${Uri.encodeComponent(widget.project)}/pipelines/runs/${run.id}';
 
   Future<void> _queue(PipelineDefinition d) async {
@@ -279,7 +290,7 @@ class _PipelinesPageState extends State<PipelinesPage> {
             tooltip: 'Projects',
             icon: const Icon(Icons.arrow_back),
             onPressed: () =>
-                context.go('/orgs/${Uri.encodeComponent(widget.org)}/projects'),
+                context.go('${orgRoute(context, widget.org)}/projects'),
           ),
           actions: [
             IconButton(
@@ -349,7 +360,7 @@ class _PipelinesPageState extends State<PipelinesPage> {
                     onOpenRun: (a) => a.runId == null
                         ? null
                         : context.push(
-                            '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+                            '${orgRoute(context, widget.org)}/projects/'
                             '${Uri.encodeComponent(widget.project)}/pipelines/runs/${a.runId}',
                           ),
                   ),

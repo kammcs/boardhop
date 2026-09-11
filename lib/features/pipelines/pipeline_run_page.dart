@@ -11,6 +11,7 @@ import '../../data/models/pipeline.dart';
 import '../../data/repositories/pipeline_repository.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
+import '../shared/account_scope.dart';
 import 'widgets/pipeline_visuals.dart';
 
 /// One run: header, then the timeline as stages → jobs → tasks with issues
@@ -77,7 +78,12 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
       _schedulePoll(run);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted && !quiet) setState(() => _error = e.message);
@@ -104,7 +110,12 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
       await _load();
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -168,7 +179,7 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
     });
     if (queued != null && mounted) {
       context.pushReplacement(
-        '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+        '${orgRoute(context, widget.org)}/projects/'
         '${Uri.encodeComponent(widget.project)}/pipelines/runs/${queued!.id}',
       );
     }
@@ -200,7 +211,7 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
     context.push(
       Uri(
         path:
-            '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+            '${orgRoute(context, widget.org)}/projects/'
             '${Uri.encodeComponent(widget.project)}/pipelines/runs/${widget.id}/logs/$logId',
         queryParameters: {'name': record.name},
       ).toString(),

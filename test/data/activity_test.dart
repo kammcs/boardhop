@@ -1,3 +1,4 @@
+import 'package:boardhop/core/routes.dart';
 import 'package:boardhop/data/activity_sync.dart';
 import 'package:boardhop/data/models/activity.dart';
 import 'package:boardhop/data/models/pipeline.dart';
@@ -49,25 +50,26 @@ void main() {
   });
 
   test('items flatten their sources with routes and times', () {
-    final review = ActivityItem.fromPullRequest('puremedia', pr, mine: false);
+    final org = Routes.org('u1', 'puremedia');
+    final review = ActivityItem.fromPullRequest(org, pr, mine: false);
     expect(review.kind, ActivityKind.prReview);
-    expect(review.route, '/orgs/puremedia/pull-requests/8319');
+    expect(review.route, '/a/u1/orgs/puremedia/pull-requests/8319');
     expect(review.time, DateTime.utc(2026, 9, 10, 10));
-    final mine = ActivityItem.fromPullRequest('puremedia', pr, mine: true);
+    final mine = ActivityItem.fromPullRequest(org, pr, mine: true);
     expect(mine.result, 'approvedWithSuggestions');
     expect(mine.subtitle, contains('Approved with suggestions'));
 
-    final wi = ActivityItem.fromWorkItem('puremedia', workItem);
+    final wi = ActivityItem.fromWorkItem(org, workItem);
     expect(
       wi.route,
-      '/orgs/puremedia/projects/DevOps%20Mobile%20App/work-items/15503',
+      '/a/u1/orgs/puremedia/projects/DevOps%20Mobile%20App/work-items/15503',
     );
     expect(wi.subtitle, 'Task 15503 · New · Kelly Kamm');
 
-    final b = ActivityItem.fromBuild('puremedia', build);
+    final b = ActivityItem.fromBuild(org, build);
     expect(
       b.route,
-      '/orgs/puremedia/projects/CloudCover%202.0/pipelines/runs/4242',
+      '/a/u1/orgs/puremedia/projects/CloudCover%202.0/pipelines/runs/4242',
     );
     expect(b.time, DateTime.utc(2026, 9, 10, 11, 30));
     expect(b.status, 'completed');
@@ -75,7 +77,7 @@ void main() {
   });
 
   test('json round trip keeps every field', () {
-    final b = ActivityItem.fromBuild('puremedia', build);
+    final b = ActivityItem.fromBuild(Routes.org('u1', 'puremedia'), build);
     final back = ActivityItem.fromJson(b.toJson());
     expect(back, b);
     expect(back.subtitle, b.subtitle);

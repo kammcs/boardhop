@@ -10,7 +10,8 @@ typedef CachedList<T> = ({List<T> items, DateTime fetchedAt});
 /// through the Build API, the timeline tree and logs of one run, queue /
 /// cancel / retry, and YAML environment approvals (research/01 §5).
 class PipelineRepository {
-  PipelineRepository(this._client, [AppDatabase? db]) : _cache = JsonCache(db);
+  PipelineRepository(this._client, [AppDatabase? db, String? userId])
+    : _cache = JsonCache(db, namespace: userId);
 
   final AdoClient _client;
   final JsonCache _cache;

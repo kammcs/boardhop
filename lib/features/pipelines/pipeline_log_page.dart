@@ -6,6 +6,7 @@ import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../data/repositories/pipeline_repository.dart';
 import '../../theme/theme.dart';
+import '../shared/account_scope.dart';
 import 'widgets/pipeline_visuals.dart';
 
 /// One timeline record's log, wrapped monospace lines with the service's
@@ -66,7 +67,12 @@ class _PipelineLogPageState extends State<PipelineLogPage> {
       if (mounted) setState(() => _lines = lines);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);

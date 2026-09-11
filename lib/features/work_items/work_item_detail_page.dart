@@ -10,6 +10,7 @@ import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
+import '../shared/account_scope.dart';
 import 'widgets/rich_text_view.dart';
 import 'widgets/work_item_actions.dart';
 import 'widgets/work_item_visuals.dart';
@@ -68,10 +69,11 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     });
     final repo = context.read<WorkItemRepository>();
     final auth = context.read<AuthService>();
+    final accountId = AccountScope.of(context);
     try {
-      final token = await auth.accessToken();
+      final token = await auth.accessToken(accountId: accountId);
       _headers = {'Authorization': 'Bearer $token'};
-      _me ??= (await auth.currentAccount())?.username;
+      _me ??= auth.accountById(accountId)?.username;
       final types = await repo.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
       await repo.refreshItem(widget.org, widget.project, widget.id);
@@ -83,7 +85,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (mounted) setState(() => _comments = comments);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -109,7 +116,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       await repo.updateFields(widget.org, widget.project, item, values);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoNetworkException {
       await queue.enqueuePatch(
@@ -177,7 +189,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       return true;
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
       return false;
     } on AdoNetworkException {
@@ -234,7 +251,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                 ? null
                 : () async {
                     await context.push(
-                      '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+                      '${orgRoute(context, widget.org)}/projects/'
                       '${Uri.encodeComponent(widget.project)}/work-items/'
                       '${widget.id}/edit',
                     );

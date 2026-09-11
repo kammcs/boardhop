@@ -80,14 +80,23 @@ class DrainResult {
 }
 
 class WriteQueue {
-  WriteQueue(this._db, this._workItems);
+  WriteQueue(this._db, this._workItems, {this.userId});
 
   final AppDatabase _db;
   final WorkItemRepository _workItems;
+
+  /// Writes queued by this account replay with its token; null (tests, or
+  /// rows from before accounts existed) means every row.
+  final String? userId;
   bool _draining = false;
 
+  Expression<bool> _mine($PendingWritesTable t) =>
+      userId == null ? const Constant(true) : t.userId.equalsNullable(userId);
+
   Stream<List<PendingWrite>> watch() =>
-      (_db.select(_db.pendingWrites)..orderBy([(t) => OrderingTerm.asc(t.id)]))
+      (_db.select(_db.pendingWrites)
+            ..where(_mine)
+            ..orderBy([(t) => OrderingTerm.asc(t.id)]))
           .watch()
           .map((rows) => rows.map(PendingWrite.fromRow).toList());
 
@@ -102,6 +111,7 @@ class WriteQueue {
       .insert(
         PendingWritesCompanion.insert(
           kind: PendingWrite.kindPatch,
+          userId: Value(userId),
           orgName: org,
           targetId: '${item.id}',
           payload: jsonEncode({
@@ -125,6 +135,7 @@ class WriteQueue {
       .insert(
         PendingWritesCompanion.insert(
           kind: PendingWrite.kindComment,
+          userId: Value(userId),
           orgName: org,
           targetId: '$id',
           payload: jsonEncode({
@@ -150,9 +161,11 @@ class WriteQueue {
     var synced = 0;
     var conflicts = 0;
     try {
-      final rows = await (_db.select(
-        _db.pendingWrites,
-      )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+      final rows =
+          await (_db.select(_db.pendingWrites)
+                ..where(_mine)
+                ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+              .get();
       for (final row in rows) {
         final w = PendingWrite.fromRow(row);
         if (w.isConflict) {

@@ -8,8 +8,12 @@ import 'ado_exceptions.dart';
 import 'ado_host.dart';
 import 'rate_limit.dart';
 
-/// Supplies a bearer token for the given tenant (null = home tenant).
-typedef TokenProvider = Future<String> Function({String? tenantId});
+/// Supplies a bearer token for the given account (null = the first signed
+/// in) and tenant (null = home tenant).
+typedef TokenProvider = Future<String> Function({
+  String? tenantId,
+  String? accountId,
+});
 
 /// Called once when a request comes back 401. [claims] is the decoded
 /// `WWW-Authenticate` claims challenge for Continuous Access Evaluation, or
@@ -17,6 +21,7 @@ typedef TokenProvider = Future<String> Function({String? tenantId});
 /// an [AdoAuthException] to give up.
 typedef AuthChallengeHandler = Future<String> Function({
   String? tenantId,
+  String? accountId,
   String? claims,
 });
 
@@ -35,6 +40,7 @@ class AdoClient {
     AuthChallengeHandler? onUnauthorized,
     RateLimitTracker? rateLimits,
     Dio? dio,
+    this.accountId,
   }) : _tokenProvider = tokenProvider, // ignore: prefer_initializing_formals
        _onUnauthorized = onUnauthorized, // ignore: prefer_initializing_formals
        rateLimits = rateLimits ?? RateLimitTracker(),
@@ -49,10 +55,22 @@ class AdoClient {
     options.headers['X-TFS-FedAuthRedirect'] = 'Suppress';
   }
 
+  AdoClient._bound(AdoClient base, this.accountId)
+    : _tokenProvider = base._tokenProvider,
+      _onUnauthorized = base._onUnauthorized,
+      _dio = base._dio,
+      rateLimits = base.rateLimits;
+
   final TokenProvider _tokenProvider;
   final AuthChallengeHandler? _onUnauthorized;
   final Dio _dio;
   final RateLimitTracker rateLimits;
+
+  /// The signed-in account every request acts as; null for the default.
+  final String? accountId;
+
+  /// The same transport and rate-limit log, acting as [accountId].
+  AdoClient bound(String accountId) => AdoClient._bound(this, accountId);
 
   static const jsonPatchContentType = 'application/json-patch+json';
 
@@ -192,7 +210,7 @@ class AdoClient {
   }) async {
     final String token;
     try {
-      token = await _tokenProvider(tenantId: tenantId);
+      token = await _tokenProvider(tenantId: tenantId, accountId: accountId);
     } on AdoException {
       rethrow;
     } catch (e) {
@@ -217,7 +235,11 @@ class AdoClient {
     // One retry: CAE claims challenge or a token the service no longer
     // accepts. The handler either returns a new token or throws.
     final claims = error is ClaimsChallengeException ? error.claims : null;
-    final fresh = await handler(tenantId: tenantId, claims: claims);
+    final fresh = await handler(
+      tenantId: tenantId,
+      accountId: accountId,
+      claims: claims,
+    );
     final second = await _dispatch(
       method: method,
       uri: uri,

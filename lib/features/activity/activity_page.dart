@@ -15,6 +15,7 @@ import '../../data/repositories/activity_repository.dart';
 import '../../theme/theme.dart';
 import '../pipelines/widgets/pipeline_visuals.dart';
 import '../pull_requests/widgets/pr_visuals.dart';
+import '../shared/account_scope.dart';
 
 /// Foreground activity feed for one organization: refreshes on open, on
 /// pull, and every minute while visible (≈0.013 TSTU per cycle, spike s09).
@@ -107,7 +108,12 @@ class _ActivityPageState extends State<ActivityPage>
       await repo.markSeen(widget.org);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted && !quiet) setState(() => _error = e.message);

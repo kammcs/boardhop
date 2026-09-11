@@ -9,6 +9,7 @@ import '../../data/models/pull_request.dart';
 import '../../data/repositories/pull_request_repository.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
+import '../shared/account_scope.dart';
 import 'widgets/pr_visuals.dart';
 
 /// Pull request inbox: to review, created by me, or all active, across the
@@ -78,7 +79,12 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
       }
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -103,9 +109,8 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
     _refresh();
   }
 
-  void _open(PullRequest pr) => context.push(
-    '/orgs/${Uri.encodeComponent(widget.org)}/pull-requests/${pr.id}',
-  );
+  void _open(PullRequest pr) =>
+      context.push('${orgRoute(context, widget.org)}/pull-requests/${pr.id}');
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +135,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
           tooltip: inProject ? 'Projects' : 'Back',
           icon: const Icon(Icons.arrow_back),
           onPressed: () => inProject
-              ? context.go('/orgs/${Uri.encodeComponent(widget.org)}/projects')
+              ? context.go('${orgRoute(context, widget.org)}/projects')
               : context.pop(),
         ),
         actions: [

@@ -16,6 +16,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
+import '../shared/account_scope.dart';
 import 'widgets/pr_visuals.dart';
 import 'widgets/thread_card.dart';
 
@@ -97,7 +98,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -120,7 +126,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
       if (mounted) setState(() => _changes = changes);
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -150,7 +161,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
       }
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -278,7 +294,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     context.push(
       Uri(
         path:
-            '/orgs/${Uri.encodeComponent(widget.org)}/pull-requests/${widget.id}/diff',
+            '${orgRoute(context, widget.org)}/pull-requests/${widget.id}/diff',
         queryParameters: {'path': change.path, 'iteration': '$it'},
       ).toString(),
     );
@@ -288,7 +304,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     final pr = _pr;
     if (pr == null) return;
     context.push(
-      '/orgs/${Uri.encodeComponent(widget.org)}/projects/'
+      '${orgRoute(context, widget.org)}/projects/'
       '${Uri.encodeComponent(pr.projectName)}/work-items/${item.id}',
     );
   }

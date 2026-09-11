@@ -1,6 +1,5 @@
-import 'package:drift/drift.dart';
-
 import '../../core/http/ado_client.dart';
+import '../../core/routes.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../db/app_database.dart';
 import '../db/json_cache.dart';
@@ -20,13 +19,16 @@ class ActivityRepository {
     this._client,
     AppDatabase? db,
     this._pullRequests,
-    this._pipelines,
-  ) : _db = db,
-      _cache = JsonCache(db);
+    this._pipelines, {
+    String? userId,
+  }) : _cache = JsonCache(db, namespace: userId),
+       _userId = userId ?? '';
 
   final AdoClient _client;
-  final AppDatabase? _db;
   final JsonCache _cache;
+
+  /// Account the routes on the items point back into.
+  final String _userId;
   final PullRequestRepository _pullRequests;
   final PipelineRepository _pipelines;
 
@@ -72,18 +74,8 @@ class ActivityRepository {
 
   /// Projects whose Pipelines tab has been opened (their run lists are
   /// cached), capped so the poll stays cheap.
-  Future<List<String>> pinnedProjects(String org) async {
-    final db = _db;
-    if (db == null) return const [];
-    final prefix = 'pipelines:runs:$org:';
-    final rows =
-        await (db.select(db.cacheEntries)
-              ..where((t) => t.key.like('$prefix%'))
-              ..orderBy([(t) => OrderingTerm.desc(t.fetchedAt)])
-              ..limit(maxPinnedProjects))
-            .get();
-    return [for (final r in rows) r.key.substring(prefix.length)];
-  }
+  Future<List<String>> pinnedProjects(String org) =>
+      _cache.keysWithPrefix('pipelines:runs:$org:', limit: maxPinnedProjects);
 
   Future<List<WorkItem>> _changedWorkItems(String org) async {
     final query = await _client.send(
@@ -136,16 +128,28 @@ class ActivityRepository {
           filter: PrListFilter.toReview,
         );
         return prs.map(
-          (p) => ActivityItem.fromPullRequest(org, p, mine: false),
+          (p) => ActivityItem.fromPullRequest(
+            Routes.org(_userId, org),
+            p,
+            mine: false,
+          ),
         );
       }),
       guard(() async {
         final prs = await _pullRequests.list(org, filter: PrListFilter.mine);
-        return prs.map((p) => ActivityItem.fromPullRequest(org, p, mine: true));
+        return prs.map(
+          (p) => ActivityItem.fromPullRequest(
+            Routes.org(_userId, org),
+            p,
+            mine: true,
+          ),
+        );
       }),
       guard(() async {
         final wis = await _changedWorkItems(org);
-        return wis.map((w) => ActivityItem.fromWorkItem(org, w));
+        return wis.map(
+          (w) => ActivityItem.fromWorkItem(Routes.org(_userId, org), w),
+        );
       }),
       for (final project in pinned)
         guard(() async {
@@ -154,7 +158,7 @@ class ActivityRepository {
           return [
             for (final r in runs)
               if (r.queueTime == null || r.queueTime!.isAfter(cutoff))
-                ActivityItem.fromBuild(org, r),
+                ActivityItem.fromBuild(Routes.org(_userId, org), r),
           ];
         }),
     ]);

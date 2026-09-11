@@ -110,15 +110,19 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     });
 
     String? profileId;
+    String? accountId;
     await step(1, () async {
-      final account = await auth.currentAccount();
-      if (account == null) throw const AdoAuthException('no cached account');
-      return 'id=${account.id} username=${account.username} name=${account.name}';
+      final accounts = await auth.accounts();
+      if (accounts.isEmpty) throw const AdoAuthException('no cached account');
+      final account = accounts.first;
+      accountId = account.id;
+      return '${accounts.length} account(s); first: id=${account.id} '
+          'username=${account.username} name=${account.name}';
     });
 
     String? baselineFp;
     await step(2, () async {
-      final r = await auth.acquireSilent();
+      final r = await auth.acquireSilent(accountId: accountId!);
       baselineFp = _fingerprint(r.accessToken);
       return '${_describe(r)}, scheme=${r.authenticationScheme}, '
           'scopes=${r.scopes.map((s) => s.split('/').last).join(' ')}, '
@@ -126,7 +130,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     });
 
     await step(3, () async {
-      final r = await auth.acquireSilent(forceRefresh: true);
+      final r = await auth.acquireSilent(
+        accountId: accountId!,
+        forceRefresh: true,
+      );
       final fp = _fingerprint(r.accessToken);
       final changed = fp != baselineFp;
       return '${_describe(r)} '
@@ -134,7 +141,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     });
 
     await step(4, () async {
-      final r = await auth.acquireSilent(claims: _probeClaims);
+      final r = await auth.acquireSilent(
+        accountId: accountId!,
+        claims: _probeClaims,
+      );
       return '${_describe(r)} claims request accepted by token endpoint';
     });
 

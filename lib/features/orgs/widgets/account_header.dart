@@ -15,9 +15,13 @@ class AccountHeaderBar extends StatelessWidget {
     required this.header,
     this.fallbackEmail,
     this.photo,
+    this.trailing,
   });
 
   final AccountHeader? header;
+
+  /// Right-aligned action (sign out).
+  final Widget? trailing;
 
   /// The MSAL username, shown until the header has loaded.
   final String? fallbackEmail;
@@ -83,6 +87,10 @@ class AccountHeaderBar extends StatelessWidget {
                 ],
               ),
             ),
+            if (trailing != null) ...[
+              const SizedBox(width: Spacing.sm),
+              trailing!,
+            ],
           ],
         ),
       ),

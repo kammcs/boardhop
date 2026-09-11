@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/pending_writes_banner.dart';
+import '../shared/account_scope.dart';
 
 /// Bottom navigation (phones) or a rail (wider) across a project's areas.
 /// Each branch keeps its own navigator and scroll state. Also the place
@@ -82,8 +83,8 @@ class _ProjectShellState extends State<ProjectShell>
         ),
       ];
 
-  String projectPath(String tail) =>
-      '/orgs/${Uri.encodeComponent(org)}/projects/${Uri.encodeComponent(project)}/$tail';
+  String projectPath(BuildContext context, String tail) =>
+      '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
 
   void _select(BuildContext context, int index) {
     if (index == shell.currentIndex) {
@@ -92,7 +93,7 @@ class _ProjectShellState extends State<ProjectShell>
     }
     // Branch routes carry path parameters, so navigate to the concrete
     // location instead of relying on a branch default.
-    context.go(projectPath(_destinations[index].path));
+    context.go(projectPath(context, _destinations[index].path));
   }
 
   @override

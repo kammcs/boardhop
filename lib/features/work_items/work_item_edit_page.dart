@@ -12,6 +12,7 @@ import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
+import '../shared/account_scope.dart';
 
 /// Edit the title and the description of a work item. HTML descriptions go
 /// through `html_editor_enhanced` (spike F3: content is injected through
@@ -114,7 +115,12 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
       _pushHtmlWhenReady();
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) {
@@ -197,7 +203,12 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
       if (mounted) context.pop();
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoNetworkException {
       await queue.enqueuePatch(

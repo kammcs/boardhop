@@ -8,6 +8,7 @@ import '../../core/http/ado_exceptions.dart';
 import '../../data/models/pull_request.dart';
 import '../../data/repositories/pr_diff_source.dart';
 import '../../data/repositories/pull_request_repository.dart';
+import '../shared/account_scope.dart';
 import 'diff/diff_model.dart';
 import 'diff/diff_view.dart';
 import 'diff/highlighter.dart';
@@ -131,7 +132,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -175,7 +181,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
-        context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
       }
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);

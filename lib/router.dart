@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import 'app.dart';
 import 'auth/auth_bloc.dart';
 import 'features/activity/activity_page.dart';
 import 'features/auth/sign_in_page.dart';
@@ -21,11 +23,15 @@ import 'features/pull_requests/pr_file_diff_page.dart';
 import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
+import 'features/shared/account_scope.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_item_edit_page.dart';
 import 'features/work_items/work_items_page.dart';
 
-GoRouter buildRouter(AuthBloc auth) {
+/// `/orgs` lists every signed-in account with its organizations; everything
+/// below an organization lives under `/a/{account}/orgs/{org}` so the pages
+/// act as that account (see `Routes`).
+GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
   return GoRouter(
     initialLocation: '/',
     refreshListenable: _StreamListenable(auth.stream),
@@ -61,12 +67,18 @@ GoRouter buildRouter(AuthBloc auth) {
         path: '/diagnostics/diff',
         builder: (_, _) => const DiffProbePage(),
       ),
-      GoRoute(
-        path: '/orgs',
-        builder: (_, _) => const OrgPickerPage(),
+      GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),
+      ShellRoute(
+        builder: (context, state, child) {
+          final accountId = state.pathParameters['account']!;
+          return MultiRepositoryProvider(
+            providers: deps.forAccount(accountId).providers,
+            child: AccountScope(accountId: accountId, child: child),
+          );
+        },
         routes: [
           GoRoute(
-            path: ':org/projects',
+            path: '/a/:account/orgs/:org/projects',
             builder: (_, state) =>
                 ProjectListPage(org: state.pathParameters['org']!),
             routes: [
@@ -172,7 +184,7 @@ GoRouter buildRouter(AuthBloc auth) {
             ],
           ),
           GoRoute(
-            path: ':org/pull-requests',
+            path: '/a/:account/orgs/:org/pull-requests',
             builder: (_, state) =>
                 PullRequestsPage(org: state.pathParameters['org']!),
             routes: [
@@ -199,7 +211,7 @@ GoRouter buildRouter(AuthBloc auth) {
             ],
           ),
           GoRoute(
-            path: ':org/activity',
+            path: '/a/:account/orgs/:org/activity',
             builder: (_, state) =>
                 ActivityPage(org: state.pathParameters['org']!),
           ),

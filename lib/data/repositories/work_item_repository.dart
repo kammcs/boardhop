@@ -10,10 +10,17 @@ import '../models/work_item.dart';
 /// Patch guarded by `test /rev`). Lists are cached in drift under a key so
 /// screens render from the cache and refresh behind a progress bar.
 class WorkItemRepository {
-  WorkItemRepository(this._client, this._db);
+  WorkItemRepository(this._client, this._db, {String? userId})
+    : _listPrefix = userId == null ? '' : listPrefixFor(userId);
 
   final AdoClient _client;
   final AppDatabase _db;
+
+  /// Lists are personal ("assigned to me") or permission-dependent, so
+  /// their keys are prefixed with the account they were read as.
+  final String _listPrefix;
+
+  static String listPrefixFor(String userId) => '$userId/';
 
   static const apiVersion = '7.1';
   static const commentsApiVersion = '7.1-preview.4';
@@ -194,12 +201,13 @@ class WorkItemRepository {
     List<WorkItem> items,
   ) async {
     final now = DateTime.now();
+    final key = _listPrefix + listKey;
     await _db.transaction(() async {
       await (_db.delete(_db.workItemListEntries)..where(
             (t) =>
                 t.orgName.equals(org) &
                 t.project.equals(project) &
-                t.listKey.equals(listKey),
+                t.listKey.equals(key),
           ))
           .go();
       for (var i = 0; i < items.length; i++) {
@@ -210,7 +218,7 @@ class WorkItemRepository {
               WorkItemListEntriesCompanion.insert(
                 orgName: org,
                 project: project,
-                listKey: listKey,
+                listKey: key,
                 workItemId: items[i].id,
                 position: i,
               ),
@@ -264,12 +272,13 @@ class WorkItemRepository {
   Stream<List<WorkItem>> watchList(String org, String project, String listKey) {
     final entries = _db.workItemListEntries;
     final items = _db.workItems;
+    final key = _listPrefix + listKey;
     final query =
         (_db.select(entries)..where(
               (t) =>
                   t.orgName.equals(org) &
                   t.project.equals(project) &
-                  t.listKey.equals(listKey),
+                  t.listKey.equals(key),
             ))
             .join([
               innerJoin(

@@ -48,7 +48,8 @@ AdoClient _client(
 }) {
   final dio = Dio()..httpClientAdapter = adapter;
   return AdoClient(
-    tokenProvider: ({String? tenantId}) async => 'tok-${tenantId ?? 'home'}',
+    tokenProvider: ({String? tenantId, String? accountId}) async =>
+        'tok-${tenantId ?? 'home'}',
     onUnauthorized: onUnauthorized,
     dio: dio,
   );
@@ -289,11 +290,12 @@ void main() {
         String? seenTenant;
         final client = _client(
           adapter,
-          onUnauthorized: ({String? tenantId, String? claims}) async {
-            seenClaims = claims;
-            seenTenant = tenantId;
-            return 'tok-fresh';
-          },
+          onUnauthorized:
+              ({String? tenantId, String? accountId, String? claims}) async {
+                seenClaims = claims;
+                seenTenant = tenantId;
+                return 'tok-fresh';
+              },
         );
         final json = await client.getJson(
           org: 'o',
@@ -320,11 +322,12 @@ void main() {
       String? seenClaims = 'unset';
       final client = _client(
         adapter,
-        onUnauthorized: ({String? tenantId, String? claims}) async {
-          handlerCalls++;
-          seenClaims = claims;
-          return 'tok-fresh';
-        },
+        onUnauthorized:
+            ({String? tenantId, String? accountId, String? claims}) async {
+              handlerCalls++;
+              seenClaims = claims;
+              return 'tok-fresh';
+            },
       );
       final json = await client.getJson(
         org: 'o',
@@ -345,10 +348,11 @@ void main() {
       var handlerCalls = 0;
       final client = _client(
         adapter,
-        onUnauthorized: ({String? tenantId, String? claims}) async {
-          handlerCalls++;
-          return 'tok-fresh';
-        },
+        onUnauthorized:
+            ({String? tenantId, String? accountId, String? claims}) async {
+              handlerCalls++;
+              return 'tok-fresh';
+            },
       );
       await expectLater(
         () => client.getJson(org: 'o', path: '_apis/x', apiVersion: '7.1'),
@@ -362,8 +366,9 @@ void main() {
       final adapter = _FakeAdapter((_) => _json(401, {'message': 'nope'}));
       final client = _client(
         adapter,
-        onUnauthorized: ({String? tenantId, String? claims}) async =>
-            throw const AuthInteractionRequiredException('user cancelled'),
+        onUnauthorized:
+            ({String? tenantId, String? accountId, String? claims}) async =>
+                throw const AuthInteractionRequiredException('user cancelled'),
       );
       await expectLater(
         () => client.getJson(org: 'o', path: '_apis/x', apiVersion: '7.1'),
@@ -377,10 +382,11 @@ void main() {
       var handlerCalls = 0;
       final client = _client(
         adapter,
-        onUnauthorized: ({String? tenantId, String? claims}) async {
-          handlerCalls++;
-          return 'tok-fresh';
-        },
+        onUnauthorized:
+            ({String? tenantId, String? accountId, String? claims}) async {
+              handlerCalls++;
+              return 'tok-fresh';
+            },
       );
       await expectLater(
         () => client.getJson(org: 'o', path: '_apis/x', apiVersion: '7.1'),
