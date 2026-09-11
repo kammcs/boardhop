@@ -104,11 +104,15 @@ Each phase ends with emulator screenshots and a push; phases 1 to 3 are the ones
 - Code search `infoCode` values: the puremedia org has the extension; note the response shape and test the disabled case only if another org is available.
 - A large-file probe (`items` on a 5 MB blob) for timing.
 
-## 7. Decisions for Kelly
+## 7. Decisions (interview with Kelly, 2026-09-11)
 
-1. **Home tab content**: the overview described in §3, or something lighter (just pinned repos and links)?
-2. **"Short description"**: language line only, or read the README's first paragraph as the description (one extra cached call per repo)?
-3. **Pull requests placement**: keep the org-level inbox on the project list app bar and make the repo page's link open it filtered by repo, or give Repos its own PR list per repo (the same widget either way).
-4. **Favorites**: write the Azure DevOps favorite (syncs with the web star, per account) rather than a local-only pin. Recommended.
-5. **Disabled / maintenance repos**: show with a badge at the bottom, or hide.
-6. Anything from the GitHub app you want that is not here: file editing on mobile (Azure DevOps pushes API makes it possible; risky), releases/tags page (tags only, no releases concept), blame (no API).
+1. **Home tab** = project overview: pinned repos, my PRs and PRs to review in this project, work items assigned to me, latest pipeline runs, project description.
+2. **Repo row second line** = language · default branch · size. No README scraping.
+3. **Pull requests**: the repo page opens the existing PR list filtered by repository; the org-level inbox stays on the project list app bar; the project-level PR tab goes away (its route stays for deep links).
+4. **Favorites** are written to Azure DevOps (sync with the web star, per signed-in account). Spike w11 first.
+5. **Disabled / in-maintenance repos** are shown at the bottom with a badge.
+6. **Branch row** starts on the default branch and then remembers the last pick per repository on the device.
+7. **Extras in scope**: a tags page (tags with their commit; no releases concept in Azure DevOps), share / copy link for files, folders and commits (web URL through the share sheet), and **editing a file from the phone**: a highlighted editor (`re_editor`, same author and grammars as the `re_highlight` package the diff view uses; verify in a spike, fall back to a monospace field), text files under 200 KB only, the commit lands on a new branch named from the user's alias and the file, and a sheet then offers to open a PR against the branch that was being viewed. That works with branch policies and never pushes to a protected branch directly.
+8. **Order**: shell first (phase 0), then repositories.
+
+Phase 5 (added): tags page, share links, file editing with `re_editor` and the pushes API already used for suggestion apply — about 1.5 days.
