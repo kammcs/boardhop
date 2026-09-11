@@ -129,7 +129,13 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     }
   }
 
-  Future<void> _act(Future<void> Function() action) async {
+  /// Runs a write, then reloads. Completing a pull request is asynchronous
+  /// on the service (the merge is queued), so [settle] keeps reloading for
+  /// a few seconds until the status leaves `active`.
+  Future<void> _act(
+    Future<void> Function() action, {
+    bool settle = false,
+  }) async {
     setState(() {
       _acting = true;
       _error = null;
@@ -137,6 +143,11 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     try {
       await action();
       await _load();
+      for (var i = 0; settle && i < 6 && _pr?.isActive == true; i++) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+        await _load();
+      }
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(AuthInteractionRequired(e.message));
@@ -206,6 +217,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
         deleteSourceBranch: deleteSource,
         squash: squash,
       ),
+      settle: true,
     );
   }
 
@@ -231,7 +243,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     );
     if (ok != true || !mounted) return;
     final repo = context.read<PullRequestRepository>();
-    await _act(() => repo.setStatus(widget.org, pr, 'abandoned'));
+    await _act(() => repo.setStatus(widget.org, pr, 'abandoned'), settle: true);
   }
 
   Future<bool> _comment(String text) async {
