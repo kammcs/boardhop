@@ -45,6 +45,7 @@ Locked 2026-09-10, before the feature screens. Everything visual flows from one 
 
 ## 7. Components and patterns
 
+- Tablet navigation: on iOS and macOS the project shell uses `GlassNavigationRail` (a floating, blurred, translucent pill only as tall as its destinations, over the page background, `Radii.xl` corners); elsewhere the Material `NavigationRail`. Phones keep the bottom `NavigationBar` everywhere.
 - Lists: `ListTile` inside `ListView` for navigation lists; `Card` only when an item has several lines of mixed content (work item cards on a board, PR summaries).
 - Primary action: `FilledButton`. Secondary: `OutlinedButton` or `TextButton`. Never two filled buttons side by side.
 - Loading: `LinearProgressIndicator` under the app bar for refreshes that keep stale content visible; `CircularProgressIndicator.adaptive` only for a truly empty screen.

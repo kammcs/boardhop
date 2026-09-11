@@ -22,6 +22,9 @@ abstract final class Radii {
   static const double sm = 8;
   static const double md = 12;
   static const double lg = 16;
+
+  /// Floating glass containers (the iOS tablet rail).
+  static const double xl = 28;
   static const double pill = 999;
 
   static const BorderRadius card = BorderRadius.all(Radius.circular(md));

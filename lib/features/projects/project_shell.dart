@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/pending_writes_banner.dart';
+import '../shared/widgets/glass_navigation_rail.dart';
 import '../shared/account_scope.dart';
 
 /// Bottom navigation (phones) or a rail (wider) across a project's areas.
@@ -116,6 +117,45 @@ class _ProjectShellState extends State<ProjectShell>
                 selectedIcon: Icon(d.selected),
                 label: d.label,
               ),
+          ],
+        ),
+      );
+    }
+    final platform = Theme.of(context).platform;
+    if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
+      // Apple tablets get a floating glass rail over the page background
+      // (no rail column, no divider), so the scaffold color runs edge to
+      // edge and the page app bar is not cut into on the left.
+      return Scaffold(
+        body: Row(
+          children: [
+            SafeArea(
+              right: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.md,
+                  Spacing.md,
+                  0,
+                  Spacing.md,
+                ),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: GlassNavigationRail(
+                    selectedIndex: shell.currentIndex,
+                    onDestinationSelected: (i) => _select(context, i),
+                    destinations: [
+                      for (final d in _destinations)
+                        GlassRailDestination(
+                          icon: d.icon,
+                          selectedIcon: d.selected,
+                          label: d.label,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: body),
           ],
         ),
       );
