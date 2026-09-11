@@ -62,3 +62,6 @@ Thumbs.db
 # Python spike scratch
 __pycache__/
 *.pyc
+
+# Emulator screenshots from tool/shot.sh
+.shots/

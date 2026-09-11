@@ -1,0 +1,50 @@
+# Working on Boardhop with Kelly
+
+Boardhop is Kelly Kamm's (kammcs) Flutter mobile client for Azure DevOps Services: Jira-style boards and work items, GitHub-style pull request review, pipelines, repos and code browsing, for iOS and Android on phones and tablets. This file is the portable version of how Kelly and Claude work together on it, so any agent on any machine continues the same way.
+
+**Read first, in this order:** `NEXT-STEPS.md` (authoritative state and plan; update it when work lands), `DESIGN.md` (UI rulebook), `research/00-feasibility-summary.md` section 0 (settled decisions), then the research document for the area you touch (`research/10-repos-and-code-browsing.md` for repos, `research/09-entra-app-registration.md` for auth, `research/06-notification-relay-and-extension.md` for the relay).
+
+## Hard rules
+
+1. **Azure DevOps writes go only to the scratch project "DevOps Mobile App"** in the puremedia organization. Everything else there (CloudCover 2.0, Product, Special Projects and AI) belongs to a client and is read-only, including "harmless" writes such as favorites, comments, votes or pipeline runs. If a feature can only be exercised by writing elsewhere, stop and ask.
+2. **Never commit secrets or client data.** The Entra client ID lives in the gitignored `.env` as `BOARDHOP_CLIENT_ID`; never print it. Tokens and PATs are never printed, logged or stored. `research/spikes/results/*` is gitignored except its README because raw spike output contains client data; before every commit run `git diff --cached --name-only | grep -E "results/|\.env|secret"` and stop if anything shows. `android/secret.properties` is gitignored too.
+3. **Nothing that costs money without Kelly's explicit go-ahead:** GitHub Actions minutes, cloud resources, store or developer accounts, paid APIs or quotas. Raise them as a question or a NEXT-STEPS item. (A CI workflow was once added unasked and had to be removed.) Free open-source packages are fine.
+4. **Commit and push freely** on `main` once work is analyzed, tested and verified; no confirmation round-trip needed. Every commit message ends with the trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (or the attribution the current session provides). **Never force-push** without Kelly's explicit go-ahead.
+5. **Settled decisions are not reopened:** Flutter; Entra sign-in only at launch (PAT is roadmap); cloud only; `html_editor_enhanced` for rich text; neutral slate theme; hand-rolled Kanban (LongPressDraggable + DragTarget) and diff engine (own Myers diff + `re_highlight` + `super_sliver_list`); free app with a Marketplace extension plus tenant relay as the paid tier. Live task-log tailing is deferred to the relay (REST cannot see a running task's log).
+
+## How Kelly likes to work
+
+- **Interview before large changes when asked** ("interview me on gaps"), then build the whole thing. For research asks, fan questions out to parallel subagents (one precise brief and output file each), reconcile the results at the top level, verify what can be verified with a spike, and write a summary document under `research/` that stands on its own.
+- **Kelly is often away from the desk** and follows from the phone. Send emulator screenshots eagerly with `SendUserFile` (status proactive, display render) as soon as something is visible, not only at the end. Send a `PushNotification` when stuck, when a milestone lands, or when Kelly's input or sign-in is needed. Keep it to one actionable line.
+- **Report faithfully.** Say what was verified on the device and what was not. Kelly has corrected guesses before ("the logo was never navy"); check the artifact instead of assuming.
+- **Plan documents carry the decisions.** Each research doc has a decisions section from Kelly's interview; NEXT-STEPS records what landed, what was verified, and what is blocked on Kelly (with the exact action).
+- Kelly sometimes uses the emulator too (it was once rotated to landscape). Screenshot before driving it.
+
+## Engineering conventions
+
+- `flutter analyze` clean and `flutter test` green before every commit. Unit tests go next to the model or repository they cover (`test/data`, `test/core`, `test/features`).
+- Design: one master theme in `lib/theme/`; colors only through `Theme.of(context)` and `context.boardhopColors`; spacing and radii from tokens; both light and dark; every screen checked at compact and expanded width (`Breakpoint`). No refresh buttons: pull-to-refresh everywhere. A view switch (segmented pill) is the rightmost app-bar item with other actions to its left; icons only on phones, icon and label on tablets. Tiles and colors follow the Azure DevOps web (`AdoTiles`).
+- Buttons: `FilledButton` minimum size 48x48 in the theme; never `Size.fromHeight`.
+- Data: every read caches JSON (`JsonCache`, account-namespaced) so pages open offline and show the cached copy first; every page handles `AdoAuthException` by raising `AuthInteractionRequired` and other `AdoException`s inline. Routes are account-scoped (`/a/{account}/orgs/{org}/...`, see `lib/core/routes.dart`).
+- Azure DevOps API: pin `api-version=7.1` per operation (preview where documented); read work items without a `fields` filter when the format map is needed; always send `test /rev` on work item patches. Facts learned about the API live in `research/spikes/results/README.md`; check there before probing.
+- After changing drift tables run `dart run build_runner build`; the generated file is committed.
+- Editing files with scripts: write Dart with `newline='\n'`; long Python does not survive shell heredocs in the agent tool, so write scripts to a scratch file and run them.
+
+## Development workflow
+
+- **Machine-local files to copy over (never committed):** `.env` with `BOARDHOP_CLIENT_ID`, and `android/secret.properties` with the Android redirect signature hash. Each machine's debug keystore has its own hash, so a new machine needs its `msauth://com.kammcs.boardhop/<hash>` redirect URI added to the Boardhop app registration (research/09) before Android sign-in works there.
+- **Run:** `flutter run --profile -d <device> --dart-define-from-file=.env`. Profile builds hide layout asserts; widget tests catch them.
+- **Android emulator:** AVD `boardhop_pixel_10_pro` (Android 17, Play image, 1280x2856). On Windows start it with `tool/start-emulator.ps1`; elsewhere `emulator -avd boardhop_pixel_10_pro -no-snapshot-load -dns-server 8.8.8.8,1.1.1.1` (the DNS flag matters on hosts whose first resolver is a VPN adapter). The emulator stays signed in across reinstalls. If an in-guest reboot kills its network, kill and restart the emulator process. `ping` never works from the guest; check `adb shell dumpsys connectivity`.
+- **Driving the UI:** `tool/shot.sh <name> [tap x y | swipe x1 y1 x2 y2 ms | text "..." | back | wait s]...` taps in 400-px-wide thumbnail coordinates (times 3.2 for the phone) and saves a screenshot plus a 400-px thumbnail. Tablet checks: `adb shell wm size 2000x1280; adb shell wm density 240`, then `wm size reset; wm density reset`.
+- **Spikes** (Python, `research/spikes/`): read-only probes are `sNN_*.py`, scratch-project writes are `wNN_*.py`. Run with `python research/spikes/_run_with_mcp_creds.py <name>.py`; it takes the PAT from the AzureDevOps MCP server entry in `~/.claude.json` (Kelly authorized that PAT for spikes) and redacts it. Record findings in `research/spikes/results/README.md`; the raw output stays local.
+- **Test data in puremedia:** scratch project "DevOps Mobile App" (work items 15503–15507, PRs 8334 and 8336, pipeline `boardhop-scratch` id 139 with a Deploy environment approval Kelly grants, one repository with a chatty 90 s pipeline step). Kelly is team and project administrator there.
+
+## Where things are
+
+- `lib/core` (client, routes, tiles), `lib/auth` (MSAL multi-account), `lib/data` (models, drift database, repositories), `lib/features/*` (screens by area), `lib/theme`.
+- `packages/msal_auth` is a vendored, patched copy of msal_auth 3.5.3; keep the diff small (its README lists the changes). The Swift side of that patch has never been compiled: the first Mac build should do it.
+- Untested so far because no Mac or physical device was available: iOS build and sign-in, the Authenticator broker path, Conditional Access, and the iOS notification settings in `Info.plist`.
+
+## Memory
+
+The agent's per-machine memory directory holds the same guidance in more detail plus history; this file is the subset that must travel. When a new rule or preference comes up, add it here as well as to memory.
