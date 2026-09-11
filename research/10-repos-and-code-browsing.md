@@ -142,3 +142,13 @@ Phase 5 (added): tags page, share links, file editing with `re_editor` and the p
 - Home tab reads the five latest runs with `cache: false` so the Pipelines tab keeps its 50-run cached list; PR lists reuse the project-scoped cache keys the PR page uses.
 - Two-pane: `CodeBrowserPage` at medium/expanded width keeps the folder list at 38% of the width (300–420 px) and shows `FilePage(embedded: true)` on the right; folders still push a new browser page so the back gesture keeps working.
 
+## 11. Phase 5 notes (2026-09-11)
+
+- `re_editor` 0.10.0 (MIT, same author and grammars as `re_highlight`) works on Flutter 3.47: `CodeEditor(controller: CodeLineEditingController.fromText(text), style: CodeEditorStyle(codeTheme: CodeHighlightTheme(languages: {lang: CodeHighlightThemeMode(mode: builtinLanguages[lang])}, theme: …)), indicatorBuilder: … DefaultCodeLineNumber(...))`. `controller.text` reads the edit back; the controller normalizes to `
+`, so the page restores `
+` when the original used it. Mobile selection toolbar is the default one; no custom `toolbarController` yet.
+- Commit flow: `POST refs` `[{name: refs/heads/x, oldObjectId: 0…0, newObjectId: tip}]` then `POST pushes` with `refUpdates[].oldObjectId = tip` and one `edit` change with `rawtext` content; then `POST pullrequests` `{sourceRefName, targetRefName, title, description}` → `pullRequestId`. The tip is the `commitId` from the file's `items?includeContentMetadata=true` read, so a concurrent push to the same branch would fail rather than be overwritten.
+- Branch name: `alias/stem-MMdd-HHmm`, alias = sign-in name before `@`, sanitized for Git (`RepoRepository.sanitizeBranchName`). The person can change both the message and the branch in the sheet.
+- `share_plus` resolved to 12.0.2 (13.x needs a newer `web` constraint than the other packages allow); API `SharePlus.instance.share(ShareParams(uri:, title:))`.
+- Verified on the scratch repo: README.md edit → a8c9baa on `kkamm/readme-0911-1024` → PR 8336 opened in the app.
+
