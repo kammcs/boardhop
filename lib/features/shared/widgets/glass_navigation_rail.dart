@@ -17,8 +17,9 @@ class GlassRailDestination {
   final String label;
 }
 
-/// The tablet rail on iOS: a floating, translucent, blurred pill that is
-/// only as tall as its destinations and sits over the page background,
+/// The tablet rail on iOS: a floating, translucent, blurred pill that
+/// sits over the page background (sized to its destinations, or spread
+/// along a given height),
 /// in the spirit of iOS 26's glass sidebars. Unlike [NavigationRail] it
 /// paints no full-height column of its own, so the scaffold background
 /// stays one color from edge to edge and the page's app bar keeps its
@@ -33,11 +34,17 @@ class GlassNavigationRail extends StatelessWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onDestinationSelected,
+    this.spread = false,
   });
 
   final List<GlassRailDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
+
+  /// When true the rail fills the height it is given and spaces the
+  /// destinations evenly along it (the shell hands it 80% of the screen,
+  /// centered); when false it is only as tall as its destinations.
+  final bool spread;
 
   /// Width of one destination and so of the whole rail.
   static const double width = 72;
@@ -77,7 +84,10 @@ class GlassNavigationRail extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: spread ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisAlignment: spread
+                    ? MainAxisAlignment.spaceEvenly
+                    : MainAxisAlignment.start,
                 children: [
                   for (var i = 0; i < destinations.length; i++)
                     _GlassRailItem(

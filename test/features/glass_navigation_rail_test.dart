@@ -78,6 +78,36 @@ void main() {
     expect(find.byIcon(Icons.home_outlined), findsOneWidget);
   });
 
+  testWidgets('spread mode fills the given height and spaces items out', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BoardhopTheme.light(),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: 560,
+              child: GlassNavigationRail(
+                spread: true,
+                destinations: destinations,
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.getSize(find.byType(GlassNavigationRail)).height, 560);
+    final first = tester.getCenter(find.text('Home'));
+    final last = tester.getCenter(find.text('Pipelines'));
+    // Four items spread evenly over 560 px sit far further apart than the
+    // ~70 px of a packed rail.
+    expect((last.dy - first.dy) / 3, greaterThan(100));
+  });
+
   testWidgets('builds in dark mode too', (tester) async {
     await pump(tester, theme: BoardhopTheme.dark(), onSelected: (_) {});
     expect(find.byType(GlassNavigationRail), findsOneWidget);

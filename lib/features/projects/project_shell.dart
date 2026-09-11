@@ -84,6 +84,9 @@ class _ProjectShellState extends State<ProjectShell>
         ),
       ];
 
+  /// Share of the shell height the glass rail spans on Apple tablets.
+  static const _railHeightFactor = 0.8;
+
   String projectPath(BuildContext context, String tail) =>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
 
@@ -132,25 +135,25 @@ class _ProjectShellState extends State<ProjectShell>
             SafeArea(
               right: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Spacing.md,
-                  Spacing.md,
-                  0,
-                  Spacing.md,
-                ),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: GlassNavigationRail(
-                    selectedIndex: shell.currentIndex,
-                    onDestinationSelected: (i) => _select(context, i),
-                    destinations: [
-                      for (final d in _destinations)
-                        GlassRailDestination(
-                          icon: d.icon,
-                          selectedIcon: d.selected,
-                          label: d.label,
-                        ),
-                    ],
+                padding: const EdgeInsets.only(left: Spacing.md),
+                // Centered, four fifths of the height, destinations spread
+                // along it (Kelly's iPad feedback).
+                child: Center(
+                  child: FractionallySizedBox(
+                    heightFactor: _railHeightFactor,
+                    child: GlassNavigationRail(
+                      spread: true,
+                      selectedIndex: shell.currentIndex,
+                      onDestinationSelected: (i) => _select(context, i),
+                      destinations: [
+                        for (final d in _destinations)
+                          GlassRailDestination(
+                            icon: d.icon,
+                            selectedIcon: d.selected,
+                            label: d.label,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
