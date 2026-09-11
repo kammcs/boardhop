@@ -58,22 +58,22 @@ class _ProjectShellState extends State<ProjectShell>
   static const _destinations =
       <({String label, IconData icon, IconData selected, String path})>[
         (
-          label: 'Work items',
+          label: 'Home',
+          icon: Icons.home_outlined,
+          selected: Icons.home,
+          path: 'home',
+        ),
+        (
+          label: 'Work',
           icon: Icons.assignment_outlined,
           selected: Icons.assignment,
           path: 'work-items',
         ),
         (
-          label: 'Board',
-          icon: Icons.view_kanban_outlined,
-          selected: Icons.view_kanban,
-          path: 'boards',
-        ),
-        (
-          label: 'Pull requests',
-          icon: Icons.call_merge_outlined,
-          selected: Icons.call_merge,
-          path: 'pull-requests',
+          label: 'Repos',
+          icon: Icons.source_outlined,
+          selected: Icons.source,
+          path: 'repos',
         ),
         (
           label: 'Pipelines',

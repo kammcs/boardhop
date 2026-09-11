@@ -112,7 +112,7 @@ class _ProjectListPageState extends State<ProjectListPage> {
                           ),
                     onTap: () => context.go(
                       '${orgRoute(context, widget.org)}'
-                      '/projects/${Uri.encodeComponent(p.name)}/work-items',
+                      '/projects/${Uri.encodeComponent(p.name)}/home',
                     ),
                   ),
               ],

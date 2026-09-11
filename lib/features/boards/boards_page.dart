@@ -13,6 +13,7 @@ import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
+import '../work_items/widgets/work_view_switch.dart';
 import 'widgets/kanban_board.dart';
 
 /// The team's Kanban board. Columns become drop slots (a split column is two
@@ -297,6 +298,11 @@ class _BoardsPageState extends State<BoardsPage> {
             onPressed: _loading ? null : _load,
           ),
         ],
+        bottom: WorkViewSwitch(
+          org: widget.org,
+          project: widget.project,
+          current: WorkView.board,
+        ),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

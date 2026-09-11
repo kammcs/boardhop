@@ -12,6 +12,7 @@ import '../shared/account_scope.dart';
 import 'widgets/query_picker.dart';
 import 'work_item_detail_page.dart';
 import 'widgets/work_item_visuals.dart';
+import 'widgets/work_view_switch.dart';
 
 /// Work item lists in one project: "assigned to me", "recently updated" or
 /// a saved query, rendered from the drift cache and refreshed on open, on
@@ -163,6 +164,11 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
             onPressed: _refreshing ? null : _refresh,
           ),
         ],
+        bottom: WorkViewSwitch(
+          org: widget.org,
+          project: widget.project,
+          current: WorkView.items,
+        ),
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

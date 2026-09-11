@@ -17,6 +17,7 @@ import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipeline_log_page.dart';
 import 'features/pipelines/pipeline_run_page.dart';
 import 'features/pipelines/pipelines_page.dart';
+import 'features/projects/project_home_page.dart';
 import 'features/projects/project_list_page.dart';
 import 'features/projects/project_shell.dart';
 import 'features/pull_requests/pr_file_diff_page.dart';
@@ -24,6 +25,7 @@ import 'features/pull_requests/pull_request_detail_page.dart';
 import 'features/pull_requests/pull_requests_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
+import 'features/shared/feature_placeholder_page.dart';
 import 'features/shared/splash_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_item_edit_page.dart';
@@ -89,6 +91,17 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   StatefulShellBranch(
                     routes: [
                       GoRoute(
+                        path: ':project/home',
+                        builder: (_, state) => ProjectHomePage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  StatefulShellBranch(
+                    routes: [
+                      GoRoute(
                         path: ':project/work-items',
                         builder: (_, state) => WorkItemsPage(
                           org: state.pathParameters['org']!,
@@ -115,10 +128,6 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  StatefulShellBranch(
-                    routes: [
                       GoRoute(
                         path: ':project/boards',
                         builder: (_, state) => BoardsPage(
@@ -131,10 +140,10 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   StatefulShellBranch(
                     routes: [
                       GoRoute(
-                        path: ':project/pull-requests',
-                        builder: (_, state) => PullRequestsPage(
-                          org: state.pathParameters['org']!,
-                          project: state.pathParameters['project']!,
+                        path: ':project/repos',
+                        builder: (_, state) => const FeaturePlaceholderPage(
+                          title: 'Repositories',
+                          plannedIn: 'the next phase of the repos plan',
                         ),
                       ),
                     ],
@@ -177,6 +186,13 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                     ],
                   ),
                 ],
+              ),
+              GoRoute(
+                path: ':project/pull-requests',
+                builder: (_, state) => PullRequestsPage(
+                  org: state.pathParameters['org']!,
+                  project: state.pathParameters['project']!,
+                ),
               ),
             ],
           ),
