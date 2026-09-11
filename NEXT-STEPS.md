@@ -25,10 +25,6 @@
 | App scaffold | Done. Flutter 3.47.3 / Dart 3.13. `lib/core` (config, `AdoClient`, rate limits, typed errors), `lib/auth` (`AuthService` over `msal_auth` 3.5.3, `AuthBloc`), `lib/data` (drift: organizations, projects, pending_writes), `lib/features/*` (sign-in, org picker, project list, diagnostics; placeholders for work items, boards, PRs, pipelines, activity). Android: `assets/msal_config.json`, `BrowserTabActivity` with the hash from gitignored `android/secret.properties`. iOS: URL scheme, `LSApplicationQueriesSchemes`, keychain group entitlement, deployment target 16.0. 13 unit tests pass; `flutter analyze` is clean. |
 | Still administrative | Partner Center + MPN ID for publisher verification; Visual Studio Marketplace publisher; Apple and Google developer accounts; privacy policy; domain for boardhop. |
 
-## Open item for Kelly (2026-09-10)
-
-- **Purge `research/spikes/results/f3-samples.json` from git history.** It holds puremedia work item HTML and was committed in `008b246`, untracked in `faacc6e`. The results folder is now fully ignored. Rewrite `main` yourself (`git filter-repo --path research/spikes/results/f3-samples.json --invert-paths`, then `git push --force-with-lease`) or tell Claude to do it; force-pushes are otherwise off limits.
-
 ## Values needed from Kelly
 
 - ~~Entra client ID~~ Provided in the gitignored `.env` as `BOARDHOP_CLIENT_ID`; run with `--dart-define-from-file=.env`.
