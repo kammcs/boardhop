@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../theme/theme.dart';
+
 import '../../auth/auth_bloc.dart';
 
 class SignInPage extends StatelessWidget {
@@ -30,7 +32,9 @@ class SignInPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Azure DevOps on your phone',
+                        context.breakpoint.isCompact
+                            ? 'Azure DevOps on your phone'
+                            : 'Azure DevOps on your tablet',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),

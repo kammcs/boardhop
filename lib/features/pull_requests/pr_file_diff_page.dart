@@ -339,11 +339,6 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
               onSelect: _loading ? (_) {} : _selectIteration,
               dense: true,
             ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
         ],
       ),
       body: Column(
@@ -362,30 +357,37 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                           child: CircularProgressIndicator.adaptive(),
                         )
                       : const SizedBox.shrink())
-                : DiffView(
-                    diff: diff,
-                    oldRuns: _oldRuns,
-                    newRuns: _newRuns,
-                    threads: _threads,
-                    composerLine: _composerLine,
-                    posting: _posting,
-                    canAct: _pr?.isActive == true,
-                    onGutterTap: _pr?.isActive == true
-                        ? (line) => setState(
-                            () => _composerLine = _composerLine == line
-                                ? null
-                                : line,
-                          )
-                        : null,
-                    onCancelComposer: () =>
-                        setState(() => _composerLine = null),
-                    onPost: _post,
-                    onReply: _reply,
-                    onSetThreadStatus: _setThreadStatus,
-                    onApplySuggestion:
-                        _pr?.isActive == true && _atLatestIteration
-                        ? _applySuggestion
-                        : null,
+                // The diff scrolls sideways too, so only a pull on the
+                // rows themselves refreshes (same rule as the board).
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    notificationPredicate: (n) =>
+                        n.depth == 1 && n.metrics.axis == Axis.vertical,
+                    child: DiffView(
+                      diff: diff,
+                      oldRuns: _oldRuns,
+                      newRuns: _newRuns,
+                      threads: _threads,
+                      composerLine: _composerLine,
+                      posting: _posting,
+                      canAct: _pr?.isActive == true,
+                      onGutterTap: _pr?.isActive == true
+                          ? (line) => setState(
+                              () => _composerLine = _composerLine == line
+                                  ? null
+                                  : line,
+                            )
+                          : null,
+                      onCancelComposer: () =>
+                          setState(() => _composerLine = null),
+                      onPost: _post,
+                      onReply: _reply,
+                      onSetThreadStatus: _setThreadStatus,
+                      onApplySuggestion:
+                          _pr?.isActive == true && _atLatestIteration
+                          ? _applySuggestion
+                          : null,
+                    ),
                   ),
           ),
         ],

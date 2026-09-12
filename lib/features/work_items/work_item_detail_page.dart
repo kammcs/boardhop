@@ -258,11 +258,6 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                     if (mounted) _refresh();
                   },
           ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshing ? null : _refresh,
-          ),
         ],
       ),
       body: StreamBuilder<WorkItem?>(

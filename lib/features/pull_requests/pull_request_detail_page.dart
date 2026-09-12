@@ -390,11 +390,6 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                   PopupMenuItem(value: 'abandon', child: Text('Abandon…')),
                 ],
               ),
-            IconButton(
-              tooltip: 'Refresh',
-              icon: const Icon(Icons.refresh),
-              onPressed: _loading ? null : _load,
-            ),
           ],
           bottom: TabBar(
             tabs: [
@@ -431,28 +426,37 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                         : const SizedBox.shrink())
                   : TabBarView(
                       children: [
-                        _Overview(
-                          pr: pr,
-                          checks: _checks,
-                          workItems: _workItems,
-                          onWorkItemTap: _openWorkItem,
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Overview(
+                            pr: pr,
+                            checks: _checks,
+                            workItems: _workItems,
+                            onWorkItemTap: _openWorkItem,
+                          ),
                         ),
-                        _Files(
-                          changes: _changes,
-                          iterations: _iterations,
-                          iteration: _iteration,
-                          onSelectIteration: _selectIteration,
-                          onTap: _openFile,
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Files(
+                            changes: _changes,
+                            iterations: _iterations,
+                            iteration: _iteration,
+                            onSelectIteration: _selectIteration,
+                            onTap: _openFile,
+                          ),
                         ),
-                        _Conversation(
-                          threads: _conversation,
-                          filter: _threadFilter,
-                          onFilter: (f) => setState(() => _threadFilter = f),
-                          canAct: pr.isActive,
-                          busy: _acting,
-                          onReply: _reply,
-                          onSetStatus: _setThreadStatus,
-                          onOpenThread: _openThread,
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Conversation(
+                            threads: _conversation,
+                            filter: _threadFilter,
+                            onFilter: (f) => setState(() => _threadFilter = f),
+                            canAct: pr.isActive,
+                            busy: _acting,
+                            onReply: _reply,
+                            onSetStatus: _setThreadStatus,
+                            onOpenThread: _openThread,
+                          ),
                         ),
                       ],
                     ),
@@ -487,6 +491,8 @@ class _Overview extends StatelessWidget {
         .length;
     return ContentColumn(
       child: ListView(
+        // Short pages must still answer a pull-to-refresh.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: Spacing.xxl),
         children: [
           Padding(
@@ -809,6 +815,8 @@ class _Files extends StatelessWidget {
     final scheme = theme.colorScheme;
     return ContentColumn(
       child: ListView(
+        // Short pages must still answer a pull-to-refresh.
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: Spacing.xxl),
         children: [
           if (iterations.isNotEmpty)
@@ -938,6 +946,7 @@ class _Conversation extends StatelessWidget {
                     ),
                   )
                 : ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       Spacing.lg,
                       Spacing.sm,

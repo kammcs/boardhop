@@ -130,11 +130,6 @@ class _PipelineLogPageState extends State<PipelineLogPage> {
             icon: const Icon(Icons.vertical_align_bottom),
             onPressed: _lines.isEmpty ? null : _jumpToEnd,
           ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
         ],
       ),
       body: Column(
@@ -149,16 +144,19 @@ class _PipelineLogPageState extends State<PipelineLogPage> {
           Expanded(
             child: ColoredBox(
               color: colors.codeBackground,
-              child: SelectionArea(
-                child: _wrap
-                    ? _list(style)
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(
-                          width: _widest(style),
-                          child: _list(style),
+              child: RefreshIndicator(
+                onRefresh: _load,
+                child: SelectionArea(
+                  child: _wrap
+                      ? _list(style)
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: _widest(style),
+                            child: _list(style),
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
           ),
@@ -177,6 +175,7 @@ class _PipelineLogPageState extends State<PipelineLogPage> {
   }
 
   Widget _list(TextStyle style) => ListView.builder(
+    physics: const AlwaysScrollableScrollPhysics(),
     controller: _controller,
     padding: const EdgeInsets.symmetric(
       horizontal: Spacing.lg,

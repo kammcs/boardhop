@@ -19,6 +19,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
 import '../pipelines/pipelines_page.dart' show RunTile;
 import '../shared/account_scope.dart';
+import '../shared/reload_on_return.dart';
 import '../shared/widgets/ado_tile.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 
@@ -37,7 +38,7 @@ class ProjectHomePage extends StatefulWidget {
   State<ProjectHomePage> createState() => _ProjectHomePageState();
 }
 
-class _ProjectHomePageState extends State<ProjectHomePage> {
+class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
   static const _limit = 5;
 
   List<GitRepository>? _repos;
@@ -67,8 +68,12 @@ class _ProjectHomePageState extends State<ProjectHomePage> {
       _guard('items', _loadItems),
       _guard('runs', _loadRuns),
     ]);
+    markLoaded();
     if (mounted) setState(() => _loading = false);
   }
+
+  @override
+  Future<void> reload() => _load();
 
   Future<void> _guard(String key, Future<void> Function() fn) async {
     try {

@@ -35,7 +35,13 @@ class PullRequestsPage extends StatefulWidget {
 }
 
 class _PullRequestsPageState extends State<PullRequestsPage> {
-  PrListFilter _filter = PrListFilter.toReview;
+  /// The org-wide inbox is a review queue, so it opens on "To review".
+  /// A list scoped to one repository is opened to see that repository's
+  /// pull requests, which are often all your own, so it opens on "All
+  /// active" instead of an empty queue.
+  late PrListFilter _filter = widget.repositoryId == null
+      ? PrListFilter.toReview
+      : PrListFilter.all;
   List<PullRequest> _items = const [];
 
   /// When the list on screen was fetched (from the network or the cache),
