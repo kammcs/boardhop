@@ -11,6 +11,7 @@ import '../../data/repositories/board_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
+import '../work_items/form/new_work_item_button.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
 import '../work_items/widgets/work_view_switch.dart';
@@ -292,6 +293,13 @@ class _BoardsPageState extends State<BoardsPage> {
                   ),
               ],
             ),
+          NewWorkItemButton(
+            org: widget.org,
+            project: widget.project,
+            // The board itself loads with the project's default team;
+            // phase 4 passes the board's team here.
+            onCreated: () => _load(),
+          ),
           // The switch stays rightmost so it never moves when an action
           // appears next to it.
           WorkViewSwitch(

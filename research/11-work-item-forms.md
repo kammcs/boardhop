@@ -1,7 +1,7 @@
 # 11. Work item forms: creating and editing any work item
 
 **Date:** 2026-09-12
-**Status:** plan agreed with Kelly (section 7); spikes run 2026-09-12 (section 9) and the plan adjusted where they disagreed. People picker re-decided the same day (section 7). Not started.
+**Status:** plan agreed with Kelly (section 7); spikes run 2026-09-12 (section 9) and the plan adjusted where they disagreed. People picker re-decided the same day (section 7). **Phases 0 and 1 landed 2026-09-12** (section 8).
 **Ask (Kelly):** the app cannot create work items. Research how the Azure DevOps web renders work item forms, including custom fields that depend on the work item type, and plan a create flow whose button sits in the Work app bar to the left of the Items/Board pill, with a form that fits a phone and a tablet differently.
 **Method:** existing research (01 §2.7, §3.2, §9.3; 05 §5.1, §5.2), spike s11 (field metadata, `validateOnly`), w01 (Markdown on create), the Processes REST reference, and a review of what the app does today.
 
@@ -160,6 +160,8 @@ Read-only unless marked; results in `research/spikes/results/README.md`, raw out
 |---|---|---|
 | 0 | Spikes s24, s25, w16, w17; `FormSpec` models and repository with the fallback; tests from recorded JSON | Scratch project, CloudCover read-only |
 | 1 | Type chooser; `+` in the Work app bar; phone form with header, groups, string/picklist/number/date/boolean controls, state transitions, identity picker, tree pickers, tags; dry-run validation; create; open on success | Emulator against the scratch project |
+
+**Phase 1 landed 2026-09-12** and was verified on the phone emulator against the scratch project (Task #15542 created, #15543–#15545 from the error and snackbar checks). Two corrections to this plan: `System.AssignedTo` is sent as `"Display Name <unique>"`, because spike s29 found the work item store refuses the identity id that `teams/{id}/members` and `graph/storagekeys` both report; and `FieldSpec` carries no `isLimitedToAllowedValues` (the type's field read omits it, spike s25), so a field the process does not flag `isPicklist` keeps the free-text row and everything else is closed.
 | 2 | Tablet dialog layout with columns and page tabs; rich-text field through the existing editor; Markdown choice | Tablet emulator, iPad simulator |
 | 3 | Edit through the same form (replace `WorkItemEditPage`); transition-driven state sheet on the detail page | Scratch items 15503–15507 |
 | 4 | Board column `+`, "Add child", templates, drafts | Scratch board |

@@ -906,16 +906,24 @@ class WorkItemFormRepository {
       if (t.trim().isNotEmpty) t.trim(),
   ];
 
-  /// `System.AssignedTo` takes the identity id, or the
-  /// `"Display Name <unique>"` form when the person came from the Graph
-  /// search, which has no id (see [resolveIdentityId]).
+  /// `System.AssignedTo` takes the `"Display Name <unique>"` form, and the
+  /// identity id only when the person has no unique name.
+  ///
+  /// The id looked like the safer value, but spike s29 (2026-09-12) found
+  /// the work item store refuses it: the id `teams/{id}/members` reports —
+  /// which is also what `graph/storagekeys` resolves a descriptor to — comes
+  /// back as "The identity value '…' for field 'Assigned To' is an unknown
+  /// identity", while both the display form and the bare unique name are
+  /// accepted and echo the same person.
   static String assignedToValue(IdentityRef person) {
-    final id = person.id;
-    if (id != null && id.isNotEmpty) return id;
     final unique = person.uniqueName;
     if (unique != null && unique.isNotEmpty) {
-      return '${person.displayName} <$unique>';
+      return person.displayName.isEmpty
+          ? unique
+          : '${person.displayName} <$unique>';
     }
+    final id = person.id;
+    if (id != null && id.isNotEmpty) return id;
     return person.displayName;
   }
 

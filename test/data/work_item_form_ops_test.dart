@@ -238,7 +238,20 @@ void main() {
       expect(WorkItemFormRepository.parseTags(null), isEmpty);
     });
 
-    test('assignedToValue prefers the id, else the display form', () {
+    test('assignedToValue prefers the display form, else the id', () {
+      // Spike s29: the work item store refuses the identity id the team
+      // member list carries ("unknown identity"), so the id is only the
+      // fallback for someone without a unique name.
+      expect(
+        WorkItemFormRepository.assignedToValue(
+          const IdentityRef(
+            displayName: 'Kelly Kamm',
+            uniqueName: 'kelly@example.test',
+            id: 'kelly-id',
+          ),
+        ),
+        'Kelly Kamm <kelly@example.test>',
+      );
       expect(
         WorkItemFormRepository.assignedToValue(
           const IdentityRef(displayName: 'Kelly Kamm', id: 'kelly-id'),

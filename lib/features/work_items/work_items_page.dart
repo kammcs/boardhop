@@ -9,6 +9,7 @@ import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'form/new_work_item_button.dart';
 import 'widgets/query_picker.dart';
 import 'work_item_detail_page.dart';
 import 'widgets/work_item_visuals.dart';
@@ -158,6 +159,13 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
         actions: [
+          NewWorkItemButton(
+            org: widget.org,
+            project: widget.project,
+            onCreated: _refresh,
+          ),
+          // The switch stays rightmost so it never moves when an action
+          // appears next to it.
           WorkViewSwitch(
             org: widget.org,
             project: widget.project,

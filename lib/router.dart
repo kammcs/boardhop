@@ -39,6 +39,7 @@ import 'features/repos/repos_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
 import 'features/shared/splash_page.dart';
+import 'features/work_items/form/work_item_form_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_item_edit_page.dart';
 import 'features/work_items/work_items_page.dart';
@@ -128,6 +129,25 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           project: state.pathParameters['project']!,
                         ),
                         routes: [
+                          // Before ':id': go_router matches in order and
+                          // "new" is not an id.
+                          GoRoute(
+                            path: 'new',
+                            builder: (_, state) {
+                              final query = state.uri.queryParameters;
+                              return WorkItemFormPage(
+                                org: state.pathParameters['org']!,
+                                project: state.pathParameters['project']!,
+                                typeName: query['type'] ?? 'Task',
+                                teamId: query['team'],
+                                stateName: query['state'],
+                                lane: query['lane'],
+                                laneField: query['laneField'],
+                                parentId: int.tryParse(query['parent'] ?? ''),
+                                templateId: query['template'],
+                              );
+                            },
+                          ),
                           GoRoute(
                             path: ':id',
                             builder: (_, state) => WorkItemDetailPage(
