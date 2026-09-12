@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:html_editor_enhanced/html_editor.dart';
 
+import '../../../../data/models/work_item.dart';
 import '../../../../data/models/work_item_form.dart';
 import '../../../../theme/theme.dart';
 import '../../widgets/html_field_editor.dart';
 import '../../widgets/rich_text_view.dart';
 import '../work_item_form_state.dart';
+import 'attachment_picker.dart';
+import 'attachments_section.dart';
 import 'form_field_slot.dart';
 
 /// An `html` field (`HtmlFieldControl`): a card with the rendered value and
@@ -23,6 +26,8 @@ class RichTextControl extends StatelessWidget {
     required this.field,
     required this.label,
     this.enabled = true,
+    this.headers = const {},
+    this.attachments,
     this.onFormatChosen,
   });
 
@@ -30,6 +35,13 @@ class RichTextControl extends StatelessWidget {
   final FieldSpec field;
   final String label;
   final bool enabled;
+
+  /// `Authorization` for the images the value embeds, which are
+  /// `_apis/wit/attachments` URLs (research/01 §10.3).
+  final Map<String, String> headers;
+
+  /// Phase 5: uploading an image from inside the editor.
+  final AttachmentSource? attachments;
 
   /// Remembers the choice per project (`FormPrefs`).
   final void Function(String reference, String format)? onFormatChosen;
@@ -87,6 +99,7 @@ class RichTextControl extends StatelessWidget {
                             child: RichTextView(
                               content: content,
                               format: format,
+                              headers: headers,
                             ),
                           ),
                   ),
@@ -113,10 +126,54 @@ class RichTextControl extends StatelessWidget {
       content: state.value(reference) as String? ?? '',
       format: state.formatOf(reference),
       allowFormatChoice: state.canChooseFormat(reference),
+      headers: headers,
+      onInsertImage: attachments == null ? null : _insertImage,
     );
     if (result == null) return;
     state.setRichValue(reference, result.content, format: result.format);
     onFormatChosen?.call(reference, result.format);
+  }
+
+  /// The editor's "Insert image": the same picker and upload the
+  /// Attachments page uses, plus the `AttachedFile` relation, so an
+  /// embedded image is also an attachment of the item rather than an
+  /// orphaned upload.
+  Future<String?> _insertImage(BuildContext context) async {
+    final source = attachments;
+    if (source == null) return null;
+    final from = await showAttachmentSourceSheet(context);
+    if (from == null) return null;
+    final picked = await pickAttachment(from);
+    if (picked == null) return null;
+    if (picked.isTooLarge) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                attachmentTooLargeMessage(picked.name, picked.size),
+              ),
+            ),
+          );
+      }
+      return null;
+    }
+    final uploaded = await source.upload(picked.name, picked.bytes!);
+    state.addRelation(
+      WorkItemRelation(
+        rel: WorkItemRelation.attachedFileRel,
+        url: uploaded.url,
+        attributes: {
+          if (uploaded.fileName != null) 'name': uploaded.fileName,
+          'resourceSize': picked.size,
+        },
+      ),
+    );
+    // On an existing item the relation is written at once, so the upload is
+    // never left dangling if the form is then closed.
+    await source.commit?.call();
+    return uploaded.url;
   }
 }
 
@@ -139,12 +196,16 @@ Future<RichTextResult?> openRichTextEditor(
   required String content,
   String format = 'html',
   bool allowFormatChoice = false,
+  Map<String, String> headers = const {},
+  Future<String?> Function(BuildContext context)? onInsertImage,
 }) {
   final editor = RichTextEditor(
     title: title,
     content: content,
     format: format,
     allowFormatChoice: allowFormatChoice,
+    headers: headers,
+    onInsertImage: onInsertImage,
   );
   if (context.breakpoint.isCompact) {
     return Navigator.of(context).push<RichTextResult>(
@@ -179,6 +240,8 @@ class RichTextEditor extends StatefulWidget {
     required this.content,
     this.format = 'html',
     this.allowFormatChoice = false,
+    this.headers = const {},
+    this.onInsertImage,
   });
 
   final String title;
@@ -188,6 +251,12 @@ class RichTextEditor extends StatefulWidget {
   /// The Markdown choice is only offered on a new item's description
   /// (spike w01); an existing item follows its own format map.
   final bool allowFormatChoice;
+
+  /// `Authorization` for the Markdown preview's embedded images.
+  final Map<String, String> headers;
+
+  /// Uploads an image and answers with its attachment URL (phase 5).
+  final Future<String?> Function(BuildContext context)? onInsertImage;
 
   @override
   State<RichTextEditor> createState() => _RichTextEditorState();
@@ -387,6 +456,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
                             child: RichTextView(
                               content: _markdown.text,
                               format: 'markdown',
+                              headers: widget.headers,
                             ),
                           )
                         : TextField(
@@ -413,6 +483,9 @@ class _RichTextEditorState extends State<RichTextEditor> {
                       html: _initialHtml,
                       hint: widget.title,
                       height: height,
+                      onInsertImage: widget.onInsertImage == null
+                          ? null
+                          : () => widget.onInsertImage!(context),
                       onError: (message) {
                         if (mounted) setState(() => _error = message);
                       },

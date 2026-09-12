@@ -4,6 +4,15 @@
     <!-- Local notifications for new activity (Android 13+ runtime prompt). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Work item attachments (phase 5). image_picker hands the capture to
+         the camera app and reads photos through the system photo picker, so
+         no CAMERA or READ_MEDIA_* permission is needed; file_picker uses the
+         Storage Access Framework, which needs none either. The feature is
+         declared optional so the app still installs on a device without a
+         camera (a Pixel Tablet has none). -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:label="Boardhop"
         android:name="${applicationName}"

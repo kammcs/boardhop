@@ -75,7 +75,7 @@ void main() {
       );
       expect(
         WorkItemFormRepository.specKey('puremedia', 'DevOps Mobile App', 'Bug'),
-        'form:spec:puremedia:DevOps Mobile App:Bug',
+        'form:spec2:puremedia:DevOps Mobile App:Bug',
       );
     });
   });

@@ -41,9 +41,9 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Boardhop does not use the camera. The rich text editor component references it, and Apple requires this notice; you will never be asked for camera access.</string>
+	<string>Boardhop uses the camera when you take a photo to attach to a work item or to insert into a description.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Boardhop does not read your photo library. The rich text editor component references it, and Apple requires this notice; you will never be asked for photo access.</string>
+	<string>Boardhop reads your photo library when you choose a picture to attach to a work item or to insert into a description.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Boardhop does not use your location. The web view component references it, and Apple requires this notice; you will never be asked for location access.</string>
 	<key>LSRequiresIPhoneOS</key>

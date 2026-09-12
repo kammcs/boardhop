@@ -59,6 +59,10 @@ dependencies:
   share_plus: ^12.0.2
   # Parses the legacy `<FORM><Layout>` tree of a work item type (spike s26).
   xml: ^7.0.1
+  # Camera and photo library for work item attachments (phase 5); pinned.
+  image_picker: 1.2.3
+  # Any other file for work item attachments (SAF / UIDocumentPicker); pinned.
+  file_picker: 10.3.10
 dev_dependencies:
   flutter_test:
     sdk: flutter

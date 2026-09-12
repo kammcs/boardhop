@@ -29,28 +29,46 @@ const headerValueFields = <String>[
   'System.Tags',
 ];
 
+/// What a group of the layout holds instead of field controls.
+enum FormPanelKind {
+  /// Field controls, the ordinary case.
+  none,
+
+  /// A `LinksControl` over work item links: the Links page, and the
+  /// "Related Work" group of the Details page.
+  links,
+
+  /// An `AttachmentsControl`: the Attachments page.
+  attachments,
+
+  /// A panel Azure DevOps fills from Git and the pipelines (the
+  /// "Development" and "Deployment" groups). Shown as a line of text.
+  external,
+}
+
 /// One card of the phone form: a labeled group of the layout with the
-/// controls a new item can actually fill.
-///
-/// A group whose controls are all panels (links, attachments, deployments,
-/// the history log) keeps its label and renders disabled: those need an id,
-/// so they only work after the item exists (phase 5).
+/// controls a new item can actually fill, or one of the panels
+/// ([FormGroupView.panel]).
 @immutable
 class FormGroupView {
   const FormGroupView({
     required this.label,
     required this.controls,
-    this.unavailable = false,
+    this.panel = FormPanelKind.none,
     this.pageLabel,
   });
 
   final String label;
   final List<FormControl> controls;
-  final bool unavailable;
 
-  /// Set on the groups of a custom page, which follow the Details page
-  /// under the page's own heading.
+  /// Set when the group is a panel rather than a stack of field controls.
+  final FormPanelKind panel;
+
+  /// Set on the groups of a custom, Links or Attachments page, which follow
+  /// the Details page under the page's own heading on a phone.
   final String? pageLabel;
+
+  bool get isPanel => panel != FormPanelKind.none;
 }
 
 /// Whether one control of the layout belongs on this form.
@@ -127,7 +145,28 @@ class FormPageView {
   bool get isEmpty => columns.isEmpty;
 }
 
-/// The create form's pages: Details first, then the custom pages.
+/// What a group of panels renders as, or null when the form drops it (the
+/// history log, which the detail page's discussion covers).
+FormPanelKind? panelKindFor(Iterable<FormControl> panels) {
+  var kind = FormPanelKind.none;
+  for (final control in panels) {
+    if (control.controlType == FormControlType.log) continue;
+    if (control.isExternalPanel) return FormPanelKind.external;
+    switch (control.controlType) {
+      case FormControlType.links:
+        kind = FormPanelKind.links;
+      case FormControlType.attachments:
+        kind = FormPanelKind.attachments;
+      default:
+        break;
+    }
+  }
+  return kind == FormPanelKind.none ? null : kind;
+}
+
+/// The form's pages: Details first, then the custom pages, then Links and
+/// Attachments (phase 5; History is never shown — the detail page carries
+/// the discussion).
 ///
 /// Each page keeps the layout's own columns, so the tablet arrangement can
 /// put them next to each other; the phone arrangement flattens them
@@ -153,19 +192,24 @@ List<FormPageView> pageViewsFor(FormSpec spec, {ControlFilter? renders}) {
           );
           continue;
         }
-        final panels = group.controls.where((c) => c.isPanel).length;
-        if (panels > 0 && panels == group.controls.length) {
-          groups.add(
-            FormGroupView(
-              label: group.label.isEmpty
-                  ? (group.controls.first.label ?? 'Links')
-                  : group.label,
-              controls: const [],
-              unavailable: true,
-              pageLabel: pageLabel,
-            ),
-          );
-        }
+        final panels = group.controls.where((c) => c.isPanel).toList();
+        if (panels.isEmpty || panels.length != group.controls.length) continue;
+        final kind = panelKindFor(panels);
+        if (kind == null) continue;
+        var label = group.label.isEmpty
+            ? (panels.first.label ?? '')
+            : group.label;
+        // A page of one panel ("Links", "Attachments") already says it in
+        // its own heading or tab.
+        if (label.toLowerCase() == (pageLabel ?? '').toLowerCase()) label = '';
+        groups.add(
+          FormGroupView(
+            label: label,
+            controls: panels,
+            panel: kind,
+            pageLabel: pageLabel,
+          ),
+        );
       }
       if (groups.isNotEmpty) {
         columns.add(
@@ -201,6 +245,21 @@ List<FormPageView> pageViewsFor(FormSpec spec, {ControlFilter? renders}) {
       if (view != null) out.add(view);
     }
   }
+  // Links and Attachments last, in the web's own order (research/11 §3).
+  for (final kind in const [FormPageKind.links, FormPageKind.attachments]) {
+    for (final page in spec.layout.pages) {
+      if (page.kind != kind || page == details) continue;
+      final fallback = kind == FormPageKind.links ? 'Links' : 'Attachments';
+      final label = page.label.isEmpty ? fallback : page.label;
+      final view = viewOf(page, pageLabel: label);
+      if (view != null) {
+        out.add(
+          FormPageView(label: label, columns: view.columns, isDetails: false),
+        );
+      }
+      break;
+    }
+  }
   return out;
 }
 
@@ -221,7 +280,8 @@ Set<String> fieldRefsFor(
   'System.State',
   if (withReason) 'System.Reason',
   for (final g in groups)
-    for (final c in g.controls) c.fieldReferenceName!,
+    if (!g.isPanel)
+      for (final c in g.controls) c.fieldReferenceName!,
 };
 
 /// A field value as the controls hold it: identities as [IdentityRef],
@@ -305,7 +365,10 @@ class WorkItemFormState extends ChangeNotifier {
     Map<String, String> formats = const {},
     Set<String> dirtyFields = const {},
     Set<String> richFields = const {},
-  }) : pages = pageViewsFor(
+    List<WorkItemRelation> relations = const [],
+    List<WorkItemRelation> newRelations = const [],
+  }) : _baseRelations = [...relations],
+       pages = pageViewsFor(
          spec,
          renders: isCreate
              ? null
@@ -317,8 +380,16 @@ class WorkItemFormState extends ChangeNotifier {
        _dirty = {...dirtyFields},
        _richFields = {...richFields},
        _values = {...initialValues} {
+    // Relations the form opens with that are not on the server yet: the
+    // parent of an "Add child", and what a resumed draft had uploaded.
+    // They ride into the create patch but do not make the form dirty.
+    for (final relation in newRelations) {
+      if (_hasRelation(relation)) continue;
+      _addedRelations.add(relation);
+    }
     fieldRefs = fieldRefsFor(groups, withReason: !isCreate);
     for (final group in groups) {
+      if (group.isPanel) continue;
       for (final control in group.controls) {
         final reference = control.fieldReferenceName!;
         if (control.readOnly || (spec.fields[reference]?.readOnly ?? false)) {
@@ -397,6 +468,17 @@ class WorkItemFormState extends ChangeNotifier {
   /// changed: the page answers with a `validateOnly` dry run.
   final VoidCallback? onDependentFieldChanged;
 
+  /// The relations the item already has on the server (empty on a new
+  /// item). Removals are remembered by key and resolved to an index against
+  /// a freshly read item at save time (research/01 §2.6).
+  final List<WorkItemRelation> _baseRelations;
+  final Set<String> _removedRelations = {};
+  final List<WorkItemRelation> _addedRelations = [];
+
+  /// The user added or removed a link or an attachment: Save has work to do
+  /// even when no field changed.
+  bool _relationsDirty = false;
+
   final Map<String, Object?> _values;
   final Map<String, String> _errors = {};
   final Map<String, String> _parseErrors = {};
@@ -440,7 +522,140 @@ class WorkItemFormState extends ChangeNotifier {
 
   String? errorFor(String reference) => _errors[reference];
 
-  bool get isDirty => _dirty.isNotEmpty;
+  bool get isDirty => _dirty.isNotEmpty || _relationsDirty;
+
+  // ----------------------------------------------------------- relations
+
+  /// Every relation the form holds: the server's, minus what was removed,
+  /// plus what was added. In create mode all of them are additions.
+  List<WorkItemRelation> get relations => [
+    for (final r in _baseRelations)
+      if (!_removedRelations.contains(r.key)) r,
+    ..._addedRelations,
+  ];
+
+  /// The links to other work items, which the Links page groups by kind.
+  List<WorkItemRelation> get linkRelations => [
+    for (final r in relations)
+      if (r.isWorkItemLink) r,
+  ];
+
+  /// The `AttachedFile` relations, which the Attachments page lists.
+  List<WorkItemRelation> get attachmentRelations => [
+    for (final r in relations)
+      if (r.isAttachment) r,
+  ];
+
+  bool get hasRelationChanges =>
+      _removedRelations.isNotEmpty || _addedRelations.isNotEmpty;
+
+  Set<String> get removedRelationKeys => Set.unmodifiable(_removedRelations);
+
+  /// The additions as the patch carries them.
+  List<Map<String, Object?>> get addedRelationValues => [
+    for (final r in _addedRelations) relationValue(r),
+  ];
+
+  /// An attachment was added or dropped: the only relation change the form
+  /// writes without waiting for Save.
+  bool get hasAttachmentChanges =>
+      _addedRelations.any((r) => r.isAttachment) ||
+      _baseRelations.any(
+        (r) => r.isAttachment && _removedRelations.contains(r.key),
+      );
+
+  static Map<String, Object?> relationValue(WorkItemRelation relation) =>
+      <String, Object?>{
+        'rel': relation.rel,
+        'url': relation.url,
+        if (relation.attributes.isNotEmpty) 'attributes': relation.attributes,
+      };
+
+  bool _hasRelation(WorkItemRelation relation) =>
+      relations.any((r) => r.key == relation.key);
+
+  /// Adds a link or an attachment. A work item has at most one parent, so a
+  /// second parent link **replaces** the first (the old one is removed in
+  /// the same patch, research/11 §4.3).
+  void addRelation(WorkItemRelation relation) {
+    if (relation.isParent) {
+      for (final existing in relations) {
+        if (existing.isParent) _drop(existing);
+      }
+    }
+    if (!_hasRelation(relation)) {
+      // Re-adding exactly what was just removed is the removal undone.
+      if (!_removedRelations.remove(relation.key)) {
+        _addedRelations.add(relation);
+      }
+    }
+    _relationsDirty = true;
+    notifyListeners();
+  }
+
+  void removeRelation(WorkItemRelation relation) {
+    _drop(relation);
+    _relationsDirty = true;
+    notifyListeners();
+  }
+
+  void _drop(WorkItemRelation relation) {
+    _addedRelations.removeWhere((r) => r.key == relation.key);
+    if (_baseRelations.any((r) => r.key == relation.key)) {
+      _removedRelations.add(relation.key);
+    }
+  }
+
+  /// The item was patched while the form stayed open (an attachment added
+  /// to an existing item is written at once, research/11 §4.3): [relations]
+  /// becomes the new base, and whatever the patch did **not** carry — the
+  /// links, which wait for Save — stays pending on top of it.
+  void rebaseRelations(List<WorkItemRelation> relations) {
+    final onServer = {for (final r in relations) r.key};
+    final stillAdded = [
+      for (final r in _addedRelations)
+        if (!onServer.contains(r.key)) r,
+    ];
+    final stillRemoved = {
+      for (final key in _removedRelations)
+        if (onServer.contains(key)) key,
+    };
+    _baseRelations
+      ..clear()
+      ..addAll(relations);
+    _addedRelations
+      ..clear()
+      ..addAll(stillAdded);
+    _removedRelations
+      ..clear()
+      ..addAll(stillRemoved);
+    _relationsDirty = hasRelationChanges;
+    notifyListeners();
+  }
+
+  /// The relation ops of an edit patch, with the removal indices taken from
+  /// [fresh] — the item read again immediately before the save.
+  ///
+  /// [attachmentsOnly] is the immediate write an upload triggers: it must
+  /// not drag a link the user added but has not saved along with it.
+  List<Map<String, Object?>> buildRelationOps(
+    WorkItem fresh, {
+    bool attachmentsOnly = false,
+  }) => WorkItemFormRepository.buildRelationOps(
+    fresh,
+    removedKeys: attachmentsOnly
+        ? [
+            for (final r in fresh.relations)
+              if (r.isAttachment && _removedRelations.contains(r.key)) r.key,
+          ]
+        : _removedRelations,
+    additions: attachmentsOnly
+        ? [
+            for (final r in _addedRelations)
+              if (r.isAttachment) relationValue(r),
+          ]
+        : addedRelationValues,
+  );
 
   /// The fields the user changed, kept across a conflict reload.
   Set<String> get dirtyFields => Set.unmodifiable(_dirty);
@@ -698,7 +913,9 @@ class WorkItemFormState extends ChangeNotifier {
       markdownDescription: markdown.contains('System.Description'),
       markdownFields: markdown.difference(const {'System.Description'}),
       parentUrl: parentUrl,
-      relations: relations,
+      // The links and attachments of the Links and Attachments pages ride
+      // in the create call (spike w16), after whatever the caller adds.
+      relations: [...relations, ...addedRelationValues],
     );
   }
 
@@ -729,6 +946,9 @@ class WorkItemFormState extends ChangeNotifier {
         for (final entry in _formats.entries)
           if (out.containsKey(entry.key)) entry.key: entry.value,
       },
+      // Removal is positional, so the indices come from the item this
+      // patch is guarded by (research/01 §2.6).
+      relationOps: hasRelationChanges ? buildRelationOps(base) : const [],
     );
   }
 

@@ -179,10 +179,47 @@ class WorkItemRelation extends Equatable {
   static const parentRel = 'System.LinkTypes.Hierarchy-Reverse';
   static const childRel = 'System.LinkTypes.Hierarchy-Forward';
   static const relatedRel = 'System.LinkTypes.Related';
+  static const predecessorRel = 'System.LinkTypes.Dependency-Reverse';
+  static const successorRel = 'System.LinkTypes.Dependency-Forward';
+  static const duplicateRel = 'System.LinkTypes.Duplicate-Forward';
+  static const duplicateOfRel = 'System.LinkTypes.Duplicate-Reverse';
+  static const attachedFileRel = 'AttachedFile';
+  static const hyperlinkRel = 'Hyperlink';
+  static const artifactLinkRel = 'ArtifactLink';
 
   bool get isParent => rel == parentRel;
   bool get isChild => rel == childRel;
   bool get isRelated => rel == relatedRel;
+
+  /// An uploaded file (research/01 §2.5).
+  bool get isAttachment => rel == attachedFileRel;
+
+  /// A link to another work item, rather than to a file, a hyperlink or a
+  /// Git artifact.
+  bool get isWorkItemLink => targetId != null;
+
+  /// `attributes.name`: the file name of an attachment, and the label of a
+  /// hyperlink or an artifact link.
+  String? get name {
+    final value = attributes['name'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  String? get comment {
+    final value = attributes['comment'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  /// `attributes.resourceSize`: an attachment's size in bytes.
+  int? get resourceSize => (attributes['resourceSize'] as num?)?.toInt();
+
+  /// The attachment guid of an `AttachedFile` relation, which is the last
+  /// path segment of its `_apis/wit/attachments/{guid}` URL.
+  String? get attachmentId {
+    if (!isAttachment) return null;
+    final segments = Uri.parse(url).pathSegments;
+    return segments.isEmpty ? null : segments.last;
+  }
 
   /// The work item this link points at, or null when it points at anything
   /// else (an attachment, a commit, a hyperlink).
@@ -192,6 +229,25 @@ class WorkItemRelation extends Equatable {
       return null;
     }
     return int.tryParse(Uri.parse(url).pathSegments.last);
+  }
+
+  /// The relation's identity, independent of how its URL is spelled.
+  ///
+  /// Azure DevOps removes a relation by position, so a removal is
+  /// remembered by what it points at and resolved to an index against a
+  /// freshly read item (research/01 §2.6) — and the URL itself cannot carry
+  /// that identity: the service **rewrites it with the project GUID**
+  /// (`…/puremedia/98720989-…/_apis/wit/attachments/{guid}`, spike s37)
+  /// while the app sends the project by name, so a literal comparison never
+  /// matches what comes back.
+  String get key {
+    final target = targetId;
+    if (target != null) return '$rel|workitem:$target';
+    final attachment = attachmentId;
+    if (attachment != null && attachment.isNotEmpty) {
+      return '$rel|attachment:$attachment';
+    }
+    return '$rel|$url';
   }
 
   @override
@@ -255,6 +311,24 @@ class WorkItem extends Equatable {
     for (final r in relations)
       if (r.isChild) r,
   ];
+
+  /// The links to other work items, in wire order: what the Links page
+  /// groups by kind (research/11 §4.3).
+  List<WorkItemRelation> get linkRelations => [
+    for (final r in relations)
+      if (r.isWorkItemLink) r,
+  ];
+
+  /// The `AttachedFile` relations, in wire order: the Attachments page.
+  List<WorkItemRelation> get attachmentRelations => [
+    for (final r in relations)
+      if (r.isAttachment) r,
+  ];
+
+  /// How many files are attached. `System.AttachedFileCount` is not in
+  /// the item read, not even with `$expand=all` (spike s36), so the
+  /// `AttachedFile` relations are the count.
+  int get attachedFileCount => attachmentRelations.length;
 
   T? field<T>(String referenceName) {
     final v = fields[referenceName];

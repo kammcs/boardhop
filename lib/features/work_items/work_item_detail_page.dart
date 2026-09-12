@@ -13,6 +13,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
 import 'form/type_chooser.dart';
 import 'form/work_item_form_page.dart';
@@ -67,11 +68,10 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   /// s32).
   FormSpec? _spec;
 
-  /// The item's linked work items, resolved through the batch read: the
-  /// parent and the children the compact Links row lists (phase 5 builds
-  /// the full Links page).
-  WorkItem? _parent;
-  List<WorkItem> _children = const [];
+  /// The item's linked work items, resolved through one batch read and
+  /// keyed by id: the compact Links row groups the relations by kind, the
+  /// same way the form's Links page does (phase 5).
+  Map<int, WorkItem> _linked = const {};
 
   @override
   void initState() {
@@ -122,36 +122,22 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     }
   }
 
-  /// Resolves the parent and the children of [item] in one batch read.
-  /// Links are a nicety: a refusal leaves the row off rather than failing
-  /// the page.
+  /// Resolves every work item [item] links to, in one batch read. Links
+  /// are a nicety: a refusal leaves the row off rather than failing the
+  /// page.
   Future<void> _loadLinks(WorkItemRepository repo, WorkItem item) async {
-    final parentId = item.parentRelation?.targetId;
-    final childIds = <int>[
-      for (final r in item.childRelations)
+    final ids = <int>{
+      for (final r in item.linkRelations)
         if (r.targetId != null) r.targetId!,
-    ];
-    final ids = <int>[?parentId, ...childIds];
+    };
     if (ids.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _parent = null;
-          _children = const [];
-        });
-      }
+      if (mounted) setState(() => _linked = const {});
       return;
     }
     try {
-      final linked = await repo.batch(widget.org, widget.project, ids);
-      final byId = {for (final w in linked) w.id: w};
+      final linked = await repo.batch(widget.org, widget.project, ids.toList());
       if (!mounted) return;
-      setState(() {
-        _parent = parentId == null ? null : byId[parentId];
-        _children = [
-          for (final id in childIds)
-            if (byId[id] != null) byId[id]!,
-        ];
-      });
+      setState(() => _linked = {for (final w in linked) w.id: w});
     } on AdoException {
       // Keep whatever was shown before; the links row is not the page.
     }
@@ -487,12 +473,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                           : () => _changeAssignment(item),
                     ),
                     _Facts(item: item),
-                    if (_parent != null || _children.isNotEmpty)
+                    if (item.linkRelations.isNotEmpty)
                       _Section(
                         title: 'Links',
                         child: _Links(
-                          parent: _parent,
-                          children: _children,
+                          relations: item.linkRelations,
+                          linked: _linked,
                           visuals: _visuals,
                           onOpen: _openLinked,
                         ),
@@ -618,6 +604,10 @@ class _Facts extends StatelessWidget {
       ('Area', item.areaPath ?? ''),
       ('Iteration', item.iterationPath ?? ''),
       if (item.reason != null) ('Reason', item.reason!),
+      // `System.AttachedFileCount` is not in the item read, not even with
+      // `\$expand=all` (spike s36), so the relations are counted.
+      if (item.attachmentRelations.isNotEmpty)
+        ('Attachments', '${item.attachmentRelations.length}'),
       (
         'Created',
         '${relativeTime(item.createdDate)}'
@@ -756,19 +746,23 @@ class _Discussion extends StatelessWidget {
   }
 }
 
-/// The compact Links row: the parent and the children with their titles,
-/// each opening that item. The full Links page (add, remove, other link
-/// types) is phase 5.
+/// The compact Links row: every work item link grouped by kind, each row
+/// opening that item. Adding and removing is the form's Links page
+/// (phase 5), which shares [groupLinkRelations] with this.
 class _Links extends StatelessWidget {
   const _Links({
-    required this.parent,
-    required this.children,
+    required this.relations,
+    required this.linked,
     required this.visuals,
     required this.onOpen,
   });
 
-  final WorkItem? parent;
-  final List<WorkItem> children;
+  final List<WorkItemRelation> relations;
+
+  /// The resolved targets by id; an id the batch could not read shows as
+  /// the bare id.
+  final Map<int, WorkItem> linked;
+
   final WorkItemVisuals visuals;
   final ValueChanged<WorkItem> onOpen;
 
@@ -776,48 +770,63 @@ class _Links extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    Widget row(String caption, WorkItem item) => InkWell(
-      onTap: () => onOpen(item),
-      borderRadius: Radii.chip,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 88,
-              child: Text(
-                caption,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+    Widget row(String caption, WorkItemRelation relation) {
+      final item = linked[relation.targetId];
+      final kind = LinkKind.of(relation.rel);
+      return InkWell(
+        onTap: item == null ? null : () => onOpen(item),
+        borderRadius: Radii.chip,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 88,
+                child: Text(
+                  caption,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-            Icon(
-              visuals.typeIcon(item),
-              size: 16,
-              color: visuals.typeColor(context, item),
-            ),
-            const SizedBox(width: Spacing.xs),
-            Expanded(
-              child: Text(
-                '#${item.id} ${item.title}',
-                style: theme.textTheme.bodyMedium,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Icon(
+                item == null ? kind.icon : visuals.typeIcon(item),
+                size: 16,
+                color: item == null
+                    ? scheme.onSurfaceVariant
+                    : visuals.typeColor(context, item),
               ),
-            ),
-          ],
+              const SizedBox(width: Spacing.xs),
+              Expanded(
+                child: Text(
+                  item == null
+                      ? '#${relation.targetId}'
+                      : '#${item.id} ${item.title}',
+                  style: theme.textTheme.bodyMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (parent != null) row('Parent', parent!),
-        for (var i = 0; i < children.length; i++)
-          row(i == 0 ? 'Children (${children.length})' : '', children[i]),
+        for (final group in groupLinkRelations(relations))
+          for (var i = 0; i < group.relations.length; i++)
+            row(
+              i > 0
+                  ? ''
+                  : group.relations.length > 1
+                  ? '${group.kind.heading} (${group.relations.length})'
+                  : group.kind.label,
+              group.relations[i],
+            ),
       ],
     );
   }

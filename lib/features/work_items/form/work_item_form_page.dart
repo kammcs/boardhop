@@ -12,7 +12,10 @@ import '../../../data/repositories/work_item_repository.dart';
 import '../../../theme/theme.dart';
 import '../../shared/account_scope.dart';
 import '../../shared/unsaved_work.dart';
+import '../widgets/work_item_visuals.dart';
+import 'controls/attachments_section.dart';
 import 'controls/identity_picker.dart';
+import 'controls/links_section.dart';
 import 'controls/tree_picker.dart';
 import 'form_prefs.dart';
 import 'work_item_form_body.dart';
@@ -235,6 +238,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         isCreate: false,
         original: item,
         readOnly: offline,
+        relations: item.relations,
         onDependentFieldChanged: _dryRun,
       )..onDiscard = _discardConflict;
       form.onReload = () => _reload(keepChanges: true);
@@ -294,6 +298,14 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         dirtyFields: keep.keys.toSet(),
         isCreate: false,
         original: item,
+        relations: item.relations,
+        // What the user added but has not saved survives the reload; a
+        // removal does not, because the fresh list is the authority on
+        // what is still there.
+        newRelations: [
+          for (final value in form.addedRelationValues)
+            WorkItemRelation.fromJson(value.cast<String, dynamic>()),
+        ],
         onDependentFieldChanged: _dryRun,
       )..onDiscard = _discardConflict;
       next.onReload = () => _reload(keepChanges: true);
@@ -413,6 +425,10 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
           await FormPrefs.descriptionFormat(widget.org, widget.project);
 
       if (!mounted) return;
+      // The "Add child" parent and whatever a resumed draft had uploaded
+      // are relations from the start: the Links and Attachments pages show
+      // them, and they ride in the create patch (spike w16).
+      final link = _link;
       final form = WorkItemFormState(
         spec: spec,
         initialValues: values,
@@ -420,7 +436,13 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         formats: {...?draft?.formats, 'System.Description': format},
         dirtyFields: dirty,
         richFields: rich,
-        link: _link,
+        link: link,
+        newRelations: [
+          if (link?.url != null)
+            WorkItemRelation(rel: link!.rel, url: link.url!),
+          for (final value in draft?.relations ?? const [])
+            WorkItemRelation.fromJson(value.cast<String, dynamic>()),
+        ],
       );
       _disposeForm();
       form.addListener(_onFormChanged);
@@ -455,8 +477,13 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     TeamDefaults? defaults,
   }) async {
     final repo = _repo;
+    final workItems = context.read<WorkItemRepository>();
     final accountId = AccountScope.of(context);
-    final me = context.read<AuthService>().accountById(accountId)?.username;
+    final auth = context.read<AuthService>();
+    final me = auth.accountById(accountId)?.username;
+    // Attachment bytes and the images an HTML field embeds are `_apis`
+    // routes gated by the token (research/01 §10.3, spike w17).
+    final headers = await _authHeaders(auth, accountId);
     try {
       final teamId =
           team ??
@@ -474,7 +501,25 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         widget.org,
         widget.project,
       );
+      final visuals = await _visuals(workItems);
       return FormSources(
+        links: LinkSource(
+          resolve: (ids) => workItems.batch(widget.org, widget.project, ids),
+          search: (text) =>
+              repo.searchWorkItems(widget.org, widget.project, text),
+          open: _openLinked,
+          visuals: visuals,
+        ),
+        attachments: AttachmentSource(
+          bytes: repo.attachmentBytes,
+          upload: (name, bytes) =>
+              repo.uploadAttachment(widget.org, widget.project, name, bytes),
+          // On a new item the relation rides in the create patch; on an
+          // existing one it is written straight away (research/11 §4.3).
+          commit: widget.isEdit ? _commitRelations : null,
+          headers: headers,
+        ),
+        headers: headers,
         identities: IdentitySource(
           members: () async => members,
           search: (query) => repo.searchPeople(widget.org, projectId, query),
@@ -505,6 +550,91 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     } on AdoException {
       if (!widget.isEdit) rethrow;
       return null;
+    }
+  }
+
+  Future<Map<String, String>> _authHeaders(
+    AuthService auth,
+    String accountId,
+  ) async {
+    try {
+      final token = await auth.accessToken(accountId: accountId);
+      return {'Authorization': 'Bearer $token'};
+    } on AdoException {
+      // The images then show their placeholder; the form itself still
+      // loads from the cache.
+      return const {};
+    }
+  }
+
+  /// Type icons and state colors for the Links rows.
+  Future<WorkItemVisuals> _visuals(WorkItemRepository workItems) async {
+    try {
+      final types = await workItems.types(widget.org, widget.project);
+      return WorkItemVisuals({for (final t in types) t.name: t});
+    } on AdoException {
+      return const WorkItemVisuals({});
+    }
+  }
+
+  /// Opens a linked item. The dialog stays where it is: the route is pushed
+  /// on the shell's navigator, which is where the form's own route lives.
+  void _openLinked(int id) => GoRouter.of(
+    context,
+  ).push('${projectRoute(context, widget.org, widget.project)}/work-items/$id');
+
+  /// Writes the pending **attachment** relations of an existing item at
+  /// once, so an uploaded file is never an orphan. Links are not written
+  /// here: they wait for Save, as the rest of the form does. The removal
+  /// indices come from a fresh read and the patch is guarded by that
+  /// revision (research/01 §2.6).
+  Future<bool> _commitRelations() async {
+    final form = _form;
+    final item = _item;
+    if (form == null || item == null || !form.hasAttachmentChanges) return true;
+    final workItems = context.read<WorkItemRepository>();
+    try {
+      final fresh = await workItems.refreshItem(
+        widget.org,
+        widget.project,
+        widget.itemId!,
+      );
+      final ops = form.buildRelationOps(fresh, attachmentsOnly: true);
+      if (ops.isEmpty) {
+        form.rebaseRelations(fresh.relations);
+        return true;
+      }
+      var saved = await workItems.patch(widget.org, widget.project, fresh, [
+        {'op': 'test', 'path': '/rev', 'value': fresh.rev},
+        ...ops,
+      ]);
+      // The patch asks for `$expand=relations`; if it ever answers without
+      // them the form would think the write had not landed, so read again
+      // rather than rebase on an empty list.
+      if (saved.relations.isEmpty) {
+        saved = await workItems.refreshItem(
+          widget.org,
+          widget.project,
+          widget.itemId!,
+        );
+      }
+      if (!mounted) return true;
+      setState(() => _item = saved);
+      form.rebaseRelations(saved.relations);
+      return true;
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+      return false;
+    } on AdoException {
+      // The change stays pending and Save will try again.
+      return false;
     }
   }
 
@@ -624,28 +754,18 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     return values;
   }
 
-  /// The create patch: the form's fields plus the link the form was opened
-  /// from -- a parent as the `Hierarchy-Reverse` relation, anything else as
-  /// a plain relation (spike w16: both ride in the create call).
-  List<Map<String, Object?>> _createOps(WorkItemFormState form) {
-    final link = _link;
-    final url = link?.url;
-    if (link == null || url == null || url.isEmpty) return form.buildOps();
-    return link.isParent
-        ? form.buildOps(parentUrl: url)
-        : form.buildOps(
-            relations: [
-              {'rel': link.rel, 'url': url},
-            ],
-          );
-  }
+  /// The create patch. The link the form was opened from, the links of the
+  /// Links page and the uploads of the Attachments page are all relations
+  /// of the form state by now, and [WorkItemFormState.buildOps] folds them
+  /// in (spike w16: they ride in the create call).
+  List<Map<String, Object?>> _createOps(WorkItemFormState form) =>
+      form.buildOps();
 
   /// Keeps what has been typed as the project's draft for this type, so the
   /// chooser can offer it again (research/11 4.6). Never for an edit.
   Future<void> _keepDraft() async {
     final form = _form;
     if (form == null || widget.isEdit) return;
-    final link = _link;
     await _repo.saveDraft(
       widget.org,
       WorkItemDraft(
@@ -654,9 +774,9 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         savedAt: DateTime.now(),
         values: form.draftValues(),
         formats: form.formats,
-        relations: [
-          if (link?.url != null) {'rel': link!.rel, 'url': link.url},
-        ],
+        // The link the form was opened from, the links added on the Links
+        // page and the files already uploaded: resuming keeps all of them.
+        relations: form.addedRelationValues,
         prefill: {
           if (widget.teamId != null) 'team': widget.teamId,
           if (widget.stateName != null) 'state': widget.stateName,
@@ -756,17 +876,34 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       form.revealFirstError();
       return;
     }
-    final ops = form.buildEditOps(item);
-    if (ops.length < 2) {
-      _close(false);
-      return;
-    }
     form.setSaving(true);
     final repo = _repo;
     final workItems = context.read<WorkItemRepository>();
     try {
-      await repo.validatePatch(widget.org, widget.project, item, ops);
-      await workItems.patch(widget.org, widget.project, item, ops);
+      // Removing a relation is positional (research/01 §2.6), so the item
+      // is read again and the indices are taken from that copy; the patch
+      // is guarded by its revision, and a 412 raises the conflict banner
+      // rather than writing against a list that moved.
+      var base = item;
+      if (form.hasRelationChanges) {
+        base = await workItems.refreshItem(
+          widget.org,
+          widget.project,
+          widget.itemId!,
+        );
+        if (base.rev != item.rev) {
+          form.setConflict(true);
+          return;
+        }
+        if (mounted) setState(() => _item = base);
+      }
+      final ops = form.buildEditOps(base);
+      if (ops.length < 2) {
+        _close(false);
+        return;
+      }
+      await repo.validatePatch(widget.org, widget.project, base, ops);
+      await workItems.patch(widget.org, widget.project, base, ops);
       if (!mounted) return;
       _close(true);
     } on AdoAuthException catch (e) {

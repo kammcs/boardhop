@@ -52,6 +52,10 @@ const _unknownFieldBody = <String, dynamic>{
   'RuleValidationErrors': null,
 };
 
+const _items = 'https://dev.azure.com/puremedia/_apis/wit/workItems';
+const _files = 'https://dev.azure.com/puremedia/_apis/wit/attachments';
+const _related = '$_items/15552';
+
 WorkItem _item() => WorkItem.fromJson({
   'id': 15503,
   'rev': 7,
@@ -218,6 +222,145 @@ void main() {
         'path': '/multilineFieldsFormat/System.Description',
         'value': 'Markdown',
       });
+    });
+
+    test('the relation ops come after the fields and the format', () {
+      final ops = WorkItemFormRepository.buildEditOps(
+        _item(),
+        const {'System.State': 'Active'},
+        relationOps: const [
+          {'op': 'remove', 'path': '/relations/2'},
+          {
+            'op': 'add',
+            'path': '/relations/-',
+            'value': {'rel': 'System.LinkTypes.Related', 'url': _related},
+          },
+        ],
+      );
+      expect(ops.map((op) => op['path']).toList(), const [
+        '/rev',
+        '/fields/System.State',
+        '/relations/2',
+        '/relations/-',
+      ]);
+    });
+  });
+
+  group('buildRelationOps', () {
+    WorkItem withRelations(List<Map<String, Object?>> relations) =>
+        WorkItem.fromJson({..._item().toJson(), 'relations': relations});
+
+    final fresh = withRelations([
+      {'rel': 'System.LinkTypes.Hierarchy-Reverse', 'url': '$_items/15546'},
+      {'rel': 'System.LinkTypes.Related', 'url': '$_items/15547'},
+      {
+        'rel': 'AttachedFile',
+        'url': '$_files/guid-1?fileName=a.png',
+        'attributes': {'name': 'a.png'},
+      },
+      {'rel': 'System.LinkTypes.Hierarchy-Forward', 'url': '$_items/15550'},
+    ]);
+
+    test('no changes, no ops', () {
+      expect(WorkItemFormRepository.buildRelationOps(fresh), isEmpty);
+    });
+
+    test('removals are indices from the fresh read, highest first', () {
+      final ops = WorkItemFormRepository.buildRelationOps(
+        fresh,
+        removedKeys: [
+          fresh.relations[1].key,
+          fresh.relations[3].key,
+          fresh.relations[0].key,
+        ],
+      );
+      expect(ops, const [
+        {'op': 'remove', 'path': '/relations/3'},
+        {'op': 'remove', 'path': '/relations/1'},
+        {'op': 'remove', 'path': '/relations/0'},
+      ]);
+    });
+
+    test('a key that is no longer on the item is skipped', () {
+      final ops = WorkItemFormRepository.buildRelationOps(
+        fresh,
+        removedKeys: const ['System.LinkTypes.Related|https://gone.test/1'],
+      );
+      expect(ops, isEmpty);
+    });
+
+    test('additions append, after every removal', () {
+      final ops = WorkItemFormRepository.buildRelationOps(
+        fresh,
+        removedKeys: [fresh.relations[2].key],
+        additions: [
+          WorkItemFormRepository.linkRelation(
+            rel: 'System.LinkTypes.Related',
+            url: _related,
+            comment: 'same area',
+          ),
+        ],
+      );
+      expect(ops, [
+        const {'op': 'remove', 'path': '/relations/2'},
+        {
+          'op': 'add',
+          'path': '/relations/-',
+          'value': {
+            'rel': 'System.LinkTypes.Related',
+            'url': _related,
+            'attributes': const {'comment': 'same area'},
+          },
+        },
+      ]);
+    });
+
+    test('the relation key ignores how the url is spelled', () {
+      // The service echoes the relation back with the project **GUID** in
+      // the URL while the app sends the project by name (spike s37), so the
+      // key is the rel plus what the relation points at.
+      const sent = WorkItemRelation(
+        rel: 'AttachedFile',
+        url:
+            'https://dev.azure.com/puremedia/DevOps%20Mobile%20App/_apis/wit/'
+            'attachments/dc2f8ae1-77a1-4fd9-90fe-54b3a59f4716?fileName=a.png',
+      );
+      const echoed = WorkItemRelation(
+        rel: 'AttachedFile',
+        url:
+            'https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-'
+            '0e58ec1bb9a9/_apis/wit/attachments/'
+            'dc2f8ae1-77a1-4fd9-90fe-54b3a59f4716',
+      );
+      expect(sent.key, echoed.key);
+
+      const link = WorkItemRelation(
+        rel: 'System.LinkTypes.Related',
+        url: '$_items/15547',
+      );
+      const sameTargetOtherKind = WorkItemRelation(
+        rel: 'System.LinkTypes.Hierarchy-Forward',
+        url: '$_items/15547',
+      );
+      expect(link.key, isNot(sameTargetOtherKind.key));
+      expect(
+        link.key,
+        const WorkItemRelation(
+          rel: 'System.LinkTypes.Related',
+          url:
+              'https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-'
+              '0e58ec1bb9a9/_apis/wit/workItems/15547',
+        ).key,
+      );
+
+      // A hyperlink has neither, so it keeps its URL.
+      expect(
+        const WorkItemRelation(
+          rel: 'Hyperlink',
+          url: 'https://example.test/spec',
+        ).key,
+        'Hyperlink|https://example.test/spec',
+      );
     });
   });
 

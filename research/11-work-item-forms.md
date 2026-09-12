@@ -1,7 +1,7 @@
 # 11. Work item forms: creating and editing any work item
 
 **Date:** 2026-09-12
-**Status:** plan agreed with Kelly (section 7); spikes run 2026-09-12 (section 9) and the plan adjusted where they disagreed. People picker re-decided the same day (section 7). **Phases 0 and 1 landed 2026-09-12** (section 8).
+**Status:** **Phases 0–5 complete 2026-09-12.** Plan agreed with Kelly (section 7); spikes run 2026-09-12 (section 9) and the plan adjusted where they disagreed. People picker re-decided the same day (section 7). Per-phase notes in section 8.
 **Ask (Kelly):** the app cannot create work items. Research how the Azure DevOps web renders work item forms, including custom fields that depend on the work item type, and plan a create flow whose button sits in the Work app bar to the left of the Items/Board pill, with a form that fits a phone and a tablet differently.
 **Method:** existing research (01 §2.7, §3.2, §9.3; 05 §5.1, §5.2), spike s11 (field metadata, `validateOnly`), w01 (Markdown on create), the Processes REST reference, and a review of what the app does today.
 
@@ -165,7 +165,7 @@ Read-only unless marked; results in `research/spikes/results/README.md`, raw out
 | 2 | Tablet dialog layout with columns and page tabs; rich-text field through the existing editor; Markdown choice | Tablet emulator, iPad simulator |
 | 3 | Edit through the same form (replace `WorkItemEditPage`); transition-driven state sheet on the detail page | Scratch items 15503–15507 |
 | 4 | Board column `+`, "Add child", templates, drafts | Scratch board (**landed 2026-09-12**, notes below) |
-| 5 | Links page (add parent/child/related with search) and Attachments page (camera, library, files) | Scratch project |
+| 5 | Links page (add parent/child/related with search) and Attachments page (camera, library, files) | Scratch project (**landed 2026-09-12**, notes below) |
 
 ### Phase 2 notes (2026-09-12)
 
@@ -211,6 +211,81 @@ The board column `+`, "Add child" / "Add related", team templates and drafts. Wh
 - **Drafts.** Closing a dirty *new* form asks **Keep draft / Discard / Cancel**; a save that cannot reach the server offers "Keep draft" in its banner. A draft keeps what the patch would send (`WorkItemFormState.draftValues()`: identities as `"Name <unique>"`, tags joined, dates ISO, long text already HTML), the format map, the relations and the **pre-fills** it was opened with (team, state, lane, laneField, parent, rel, template), so resuming lands in the same column, lane or parent. Resuming marks every restored field dirty and every restored `html` field rich, so nothing is escaped twice. The chooser lists them on top as `Resume draft: Task - Half typed - 5m ago` (the app's own relative wording, not "5 min ago") with a trailing delete icon; a successful create clears the draft, and one older than **30 days** is dropped on read (`WorkItemDraft.maxAge`).
 - **The chooser from a column or from Add child is a sheet at every width.** `showTypeChooser` hangs its menu on the widget that opened it, and neither a column's `+` (inside a lazy list) nor an overflow item is a stable anchor, so both pass none and get the bottom sheet even on a tablet. The Work app bar's `+` still drops its menu under the button.
 - **One helper opens the form everywhere.** `openWorkItemForm` and `loadTypeChooserData` (in `new_work_item_button.dart`) are now shared by the Work app bar `+`, the board column `+` and the detail page's Add child / Add related, so all three follow the same rule: route on a phone, dialog from medium up.
+
+### Phase 5 notes (2026-09-12)
+
+The Links and Attachments pages, and the rich editor's "Insert image". What deviated from §4.3 and
+§4.5 while building it:
+
+- **Which panel is editable comes from the layout, not from a name.** `FormControl` now parses
+  `LinksControlOptions/WorkItemLinkFilters[@FilterType="excludeAll"]`, which is what marks the
+  **Development** group (Git branches, commits, pull requests, builds) as carrying no work item link
+  at all; that group and **Deployment** (`DeploymentsControl`) render one line, *"Managed in Azure
+  DevOps"*, while **Related Work** and the **Links** page are real, editable lists. The three
+  disabled "Available after creation" cards are gone, and the `FormSpec` cache key was bumped to
+  `form:spec2:` so a spec cached before the flag is re-read rather than showing Development as an
+  always-empty link list.
+- **The Links and Attachments pages are visible in both modes.** `pageViewsFor` now appends them
+  after Details and the custom pages (History is still never shown): a section at the bottom on a
+  phone under its own heading, a tab on a tablet. `FormGroupView.panel` (`FormPanelKind`) says which
+  panel a group is.
+- **Link kinds are mapped locally.** `wit/workitemrelationtypes` would cost a call that the page
+  must work without offline, so `LinkKind` carries the six addable kinds (Parent, Child, Related,
+  Predecessor, Successor, Duplicate of) plus Duplicate and an **Other** bucket for anything else,
+  under its raw `rel`. "Duplicate" itself is shown but not offered: the pair is added from its
+  "Duplicate of" end. Rows resolve through one `WorkItemRepository.batch` (title, type, state) and a
+  target that cannot be read shows as its bare id.
+- **Relations live in `WorkItemFormState`.** The item's own list is the base, removals are remembered
+  by key and additions in a pending list, so `relations` is base − removed + added. The key cannot
+  be the URL: the service **rewrites a relation's URL with the project GUID** and drops the
+  `?fileName=` query (spike s37), so `WorkItemRelation.key` is the `rel` plus the **target id** of a
+  work item link or the **attachment guid** of a file. Before that, an attachment written straight
+  away stayed pending and the next Save was refused with "Relation already exists" (seen on the
+  emulator). On
+  create everything is an addition and rides in the create patch (spike w16) — including the parent
+  of an "Add child", which is now a row on the Links page instead of only a line in the header. A
+  second parent **replaces** the first in one patch. `buildRelationOps` resolves the removed keys to
+  indices against the item it is given and emits them in **descending** order.
+- **`test /rev` does not guard a relation patch** (spike s35): adding and removing a link left `rev`
+  at 1 and `System.ChangedDate` untouched, while an attachment did bump both. So the save **re-reads
+  the item** first, refuses on a moved revision (the conflict banner) and takes the removal indices
+  from that copy — the narrowest window REST allows. Recorded in research/01 §2.6.
+- **Links wait for Save, attachments do not.** An upload that is not attached is an orphan, so on an
+  existing item the `AttachedFile` relation is patched the moment the upload finishes
+  (`attachmentsOnly: true`, so a link the user added but has not saved is not dragged along), and
+  `rebaseRelations` folds the server's list back in while keeping the still-pending link changes.
+  That needed `WorkItemRepository.patch` to ask for **`$expand=relations`**: without it the response
+  carries no relations, the rebase could not see the write, and the next Save was refused with
+  "Relation already exists" (found on the emulator). It also stops every field patch from dropping
+  the cached relations, since a patch bumps `rev` and the cache merge only keeps them at an equal one.
+- **Attachments.** Rows are read off the relation: `attributes.name` (falling back to the URL's
+  `?fileName=`), `attributes.resourceSize`, the guid from the URL. Images show a thumbnail fetched
+  with the bearer token and cached by guid in memory and under `attachments/` in the app support
+  directory; tapping one opens a full-screen `InteractiveViewer`. Any other file downloads to the
+  temp directory and goes to the **share sheet** (`share_plus`, already a dependency) rather than
+  `open_filex` — one dependency fewer and the user picks the app. The client cap is the documented
+  60 MB and an oversize file is **never read into memory**: the size is checked first.
+- **`System.AttachedFileCount` does not exist on a read** (spike s36), not even with `$expand=all`,
+  and neither do `RelatedLinkCount` or `ExternalLinkCount`; w17 had read the count from the create
+  response. The detail page's new Attachments fact counts the `AttachedFile` relations instead.
+- **"Insert image" is a real toolbar button.** `HtmlToolbarOptions.customToolbarButtons` takes it
+  cleanly, so it sits at the end of the editor's own toolbar (not in the app bar), runs the same
+  picker and upload, adds the `AttachedFile` relation so the upload is not orphaned, and pastes
+  `<img src="…">` at the caret through `evaluateJavascript` with `jsonEncode` — the plugin's own
+  `insertHtml` interpolates into a single-quoted JavaScript string, which a file name with a quote
+  would break. **The image does not render inside the editor**: Summernote's WebView sends no
+  Authorization header (research/01 §10.3), so it shows a broken-image glyph until Done, after which
+  the control's preview and the detail page render it properly through `RichTextView`, which now gets
+  the headers on the form too.
+- **A photo gets a readable name.** `image_picker` copies the file into the app cache and names it
+  after the platform id — the Android photo picker gave `19.png` — so a name that carries no meaning
+  is replaced by `image-20260912-100901.png` (`photo-…` from the camera), keeping the extension.
+- **New dependencies:** `image_picker` 1.2.3 (camera and photo library) and `file_picker` 10.3.10
+  (any other file), both free and open source, both pinned. Neither needs an Android permission (the
+  system photo picker and the Storage Access Framework), only the optional `android.hardware.camera`
+  feature so the app still installs on a tablet without one. The iOS `NSCameraUsageDescription` and
+  `NSPhotoLibraryUsageDescription` strings said Boardhop does not use them; they now say what it
+  actually does.
 
 ## 9. Spike results (2026-09-12) and what they change
 

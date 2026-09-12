@@ -296,6 +296,7 @@ class FormControl extends Equatable {
     this.readOnly = false,
     this.visible = true,
     this.emptyText,
+    this.excludesWorkItemLinks = false,
   });
 
   factory FormControl.fromJson(Map<String, dynamic> json) => FormControl(
@@ -305,6 +306,7 @@ class FormControl extends Equatable {
     readOnly: json['readOnly'] as bool? ?? false,
     visible: json['visible'] as bool? ?? true,
     emptyText: json['emptyText'] as String?,
+    excludesWorkItemLinks: json['excludesWorkItemLinks'] as bool? ?? false,
   );
 
   /// `<Control Label="Assi&amp;gned To" FieldName="System.AssignedTo"
@@ -316,7 +318,21 @@ class FormControl extends Equatable {
     readOnly: _isTrue(element.getAttribute('ReadOnly')),
     visible: !_isTrue(element.getAttribute('Hidden')),
     emptyText: _blankToNull(element.getAttribute('EmptyText')),
+    excludesWorkItemLinks: _excludesWorkItemLinks(element),
   );
+
+  /// `<LinksControlOptions><WorkItemLinkFilters FilterType="excludeAll"/>`:
+  /// the "Development" group's panel, which carries only Git and build
+  /// artifacts and no work item link the form could edit.
+  static bool _excludesWorkItemLinks(XmlElement element) {
+    for (final filters in element.findAllElements('WorkItemLinkFilters')) {
+      if ((filters.getAttribute('FilterType') ?? '').toLowerCase() ==
+          'excludeall') {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// Field reference name, or the pseudo-name of a panel (`Development`,
   /// `Related Work`, `Deployments`), or null.
@@ -328,6 +344,10 @@ class FormControl extends Equatable {
 
   /// Placeholder the web shows in an empty control ("Enter title here").
   final String? emptyText;
+
+  /// A `LinksControl` whose filters exclude every work item link type: it
+  /// lists Git and build artifacts only, which Azure DevOps owns.
+  final bool excludesWorkItemLinks;
 
   /// A `LabelControl` with neither label nor field: the web's vertical
   /// spacer in the header, which the app drops.
@@ -343,6 +363,13 @@ class FormControl extends Equatable {
       controlType == FormControlType.log ||
       controlType == FormControlType.deployments;
 
+  /// A panel whose rows Azure DevOps maintains from Git and the pipelines:
+  /// the "Development" links group and the "Deployment" group. The form
+  /// shows them as a line of text rather than an editable list.
+  bool get isExternalPanel =>
+      controlType == FormControlType.deployments ||
+      (controlType == FormControlType.links && excludesWorkItemLinks);
+
   Map<String, dynamic> toJson() => {
     if (fieldReferenceName != null) 'field': fieldReferenceName,
     if (label != null) 'label': label,
@@ -350,6 +377,7 @@ class FormControl extends Equatable {
     if (readOnly) 'readOnly': true,
     if (!visible) 'visible': false,
     if (emptyText != null) 'emptyText': emptyText,
+    if (excludesWorkItemLinks) 'excludesWorkItemLinks': true,
   };
 
   /// Labels carry Windows accelerators (`Assi&gned To`, `&&` for a literal
@@ -380,6 +408,7 @@ class FormControl extends Equatable {
     readOnly,
     visible,
     emptyText,
+    excludesWorkItemLinks,
   ];
 }
 

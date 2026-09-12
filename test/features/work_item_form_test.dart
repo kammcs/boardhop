@@ -6,6 +6,7 @@ import 'package:boardhop/data/models/work_item_form.dart';
 import 'package:boardhop/data/repositories/work_item_form_repository.dart';
 import 'package:boardhop/features/work_items/form/controls/boolean_control.dart';
 import 'package:boardhop/features/work_items/form/controls/date_control.dart';
+import 'package:boardhop/features/work_items/form/controls/links_section.dart';
 import 'package:boardhop/features/work_items/form/controls/picklist_control.dart';
 import 'package:boardhop/features/work_items/form/controls/rich_text_control.dart';
 import 'package:boardhop/features/work_items/form/controls/text_control.dart';
@@ -164,11 +165,27 @@ void main() {
         'Development',
         'Related Work',
         'System Info',
+        // The Links and Attachments pages follow, each one panel whose own
+        // label is dropped because the page heading already says it
+        // (phase 5).
+        '',
+        '',
       ]);
-      // Panels need an id: phase 5 replaces the placeholder.
+      // The panels of the Details page: Deployment and Development carry
+      // Git and pipeline artifacts the service owns, Related Work is a real
+      // link list (phase 5).
       expect(
-        state.groups.where((g) => g.unavailable).map((g) => g.label).toList(),
-        const ['Deployment', 'Development', 'Related Work'],
+        [
+          for (final g in state.groups)
+            if (g.isPanel) '${g.label}:${g.panel.name}',
+        ],
+        const [
+          'Deployment:external',
+          'Development:external',
+          'Related Work:links',
+          ':links',
+          ':attachments',
+        ],
       );
       expect(
         state.groups[2].controls.map((c) => c.fieldReferenceName).toList(),
@@ -202,7 +219,11 @@ void main() {
       expect(find.byType(TextControl), findsWidgets);
       expect(find.byType(DateControl), findsNothing);
       expect(find.byType(BooleanControl), findsNothing);
-      expect(find.text('Available after creation'), findsWidgets);
+      // The panels the service owns say so; Related Work is a real link
+      // list (phase 5). The Links and Attachments pages sit further down
+      // the lazy list and have their own tests.
+      expect(find.text('Managed in Azure DevOps'), findsNWidgets(2));
+      expect(find.byType(LinksSection), findsWidgets);
       state.dispose();
     });
 
@@ -337,7 +358,12 @@ void main() {
 
     test('the layout keeps the web sections as columns', () {
       final state = WorkItemFormState(spec: spec);
-      expect(state.pages.length, 1);
+      // Details, then the Links and Attachments pages (phase 5).
+      expect(state.pages.map((p) => p.label).toList(), const [
+        'Details',
+        'Links',
+        'Attachments',
+      ]);
       final columns = state.pages.first.columns;
       expect(columns.map((c) => c.percentWidth).toList(), const [50, 50]);
       expect(columns.first.groups.map((g) => g.label).toList(), const [
@@ -352,10 +378,13 @@ void main() {
         'Related Work',
         'System Info',
       ]);
-      // The phone order is those columns flattened, as phase 1 settled.
+      // The phone order is those columns flattened, as phase 1 settled,
+      // with the Links and Attachments panels under their own headings.
       expect(state.groups.map((g) => g.label).toList(), [
         ...columns.first.groups.map((g) => g.label),
         ...columns.last.groups.map((g) => g.label),
+        '',
+        '',
       ]);
       state.dispose();
     });

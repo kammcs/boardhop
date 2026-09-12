@@ -438,6 +438,12 @@ class WorkItemRepository {
       project: project,
       path: '_apis/wit/workitems/${item.id}',
       apiVersion: apiVersion,
+      // Without `$expand` the answer carries no relations, and because a
+      // patch bumps `rev` the cache merge cannot keep the ones it had: the
+      // links and attachments would vanish from the cached copy until the
+      // next detail read, and a form that just wrote a relation would think
+      // the write had not landed (phase 5).
+      query: {r'$expand': 'relations'},
       body: [
         // The form's own patch (`buildEditOps`) already opens with the
         // guard; never send it twice.

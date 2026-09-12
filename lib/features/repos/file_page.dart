@@ -15,7 +15,6 @@ import 'widgets/code_view.dart';
 import 'widgets/item_actions.dart';
 import 'widgets/repo_image.dart';
 import 'widgets/repo_markdown.dart';
-import 'widgets/repo_visuals.dart';
 
 /// One file on one branch: highlighted source with line numbers (wrap and
 /// text size toggles), a rendered view for Markdown, images inline, and a

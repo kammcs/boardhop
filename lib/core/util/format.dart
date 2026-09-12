@@ -70,3 +70,16 @@ String pathLeaf(String? path) {
   final i = path.lastIndexOf('\\');
   return i < 0 ? path : path.substring(i + 1);
 }
+
+/// "25 MB", "238 KB", "1.2 GB".
+String formatBytes(int? bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.round()} KB';
+  final mb = kb / 1024;
+  if (mb < 1024) {
+    return mb < 10 ? '${mb.toStringAsFixed(1)} MB' : '${mb.round()} MB';
+  }
+  return '${(mb / 1024).toStringAsFixed(1)} GB';
+}

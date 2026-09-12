@@ -8,10 +8,12 @@ import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
 import '../widgets/work_item_actions.dart';
 import '../widgets/work_item_visuals.dart';
+import 'controls/attachments_section.dart';
 import 'controls/boolean_control.dart';
 import 'controls/date_control.dart';
 import 'controls/form_field_slot.dart';
 import 'controls/identity_picker.dart';
+import 'controls/links_section.dart';
 import 'controls/picklist_control.dart';
 import 'controls/rich_text_control.dart';
 import 'controls/tags_field.dart';
@@ -26,12 +28,27 @@ class FormSources {
     required this.identities,
     required this.classifications,
     required this.tags,
+    this.links,
+    this.attachments,
+    this.headers = const {},
     this.onFormatChosen,
   });
 
   final IdentitySource identities;
   final ClassificationSource classifications;
   final Future<List<String>> Function() tags;
+
+  /// The Links page: resolving, searching and opening link targets
+  /// (phase 5). Null in a widget test, which renders the page read-only.
+  final LinkSource? links;
+
+  /// The Attachments page: fetching, uploading and committing files.
+  final AttachmentSource? attachments;
+
+  /// `Authorization` for the images an HTML field embeds, which are
+  /// `_apis/wit/attachments` URLs and need the bearer token (research/01
+  /// §10.3, spike w17).
+  final Map<String, String> headers;
 
   /// Remembers the Markdown-or-HTML choice per project (`FormPrefs`).
   final void Function(String reference, String format)? onFormatChosen;
@@ -308,25 +325,79 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
     WorkItemFormState state,
     FormGroupView group,
     String slot,
-  ) => [
-    for (final control in group.controls)
-      KeyedSubtree(
-        key: _keyFor(
-          '$slot/${control.fieldReferenceName}',
-          control.fieldReferenceName!,
+  ) {
+    if (group.isPanel) {
+      return [buildPanel(state: state, group: group, sources: widget.sources)];
+    }
+    return [
+      for (final control in group.controls)
+        KeyedSubtree(
+          key: _keyFor(
+            '$slot/${control.fieldReferenceName}',
+            control.fieldReferenceName!,
+          ),
+          child: buildControl(
+            state: state,
+            control: control,
+            sources: widget.sources,
+            groupLabel: group.label,
+          ),
         ),
-        child: buildControl(
-          state: state,
-          control: control,
-          sources: widget.sources,
-          groupLabel: group.label,
-        ),
-      ),
-  ];
+    ];
+  }
 }
 
-/// One group of the layout as a card, or the disabled placeholder for the
-/// panels that need an id (links, attachments, deployments).
+/// One of the layout's panels: the Links list, the Attachments list, or a
+/// line of text for the panels Azure DevOps fills itself (research/11
+/// §4.3).
+Widget buildPanel({
+  required WorkItemFormState state,
+  required FormGroupView group,
+  FormSources? sources,
+}) => switch (group.panel) {
+  FormPanelKind.links => LinksSection(
+    state: state,
+    source: sources?.links,
+    enabled: !state.locked,
+  ),
+  FormPanelKind.attachments => AttachmentsSection(
+    state: state,
+    source: sources?.attachments,
+    enabled: !state.locked,
+  ),
+  // "Development" (branches, commits, pull requests) and "Deployment"
+  // (pipeline environments) are artifact links the service writes; the app
+  // never edits them.
+  FormPanelKind.external => const _ManagedElsewhere(),
+  FormPanelKind.none => const SizedBox.shrink(),
+};
+
+class _ManagedElsewhere extends StatelessWidget {
+  const _ManagedElsewhere();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.cloud_outlined, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: Spacing.sm),
+        Expanded(
+          child: Text(
+            'Managed in Azure DevOps',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One group of the layout as a card: field controls, or one of the panels
+/// (links, attachments, the service's own artifact lists).
 class _GroupCard extends StatelessWidget {
   const _GroupCard({
     required this.group,
@@ -346,7 +417,6 @@ class _GroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Padding(
       padding: padding,
       child: Card(
@@ -361,27 +431,7 @@ class _GroupCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: Spacing.md),
                   child: Text(group.label, style: theme.textTheme.titleMedium),
                 ),
-              if (group.unavailable)
-                Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      size: 16,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: Spacing.sm),
-                    Expanded(
-                      child: Text(
-                        'Available after creation',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              else
-                ...body,
+              ...body,
             ],
           ),
         ),
@@ -453,6 +503,8 @@ Widget buildControl({
       field: field,
       label: label,
       enabled: enabled,
+      headers: sources?.headers ?? const {},
+      attachments: sources?.attachments,
       onFormatChosen: sources?.onFormatChosen,
     );
   }

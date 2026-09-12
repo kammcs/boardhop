@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/git_repository.dart';
 
+// `formatBytes` moved to `core/util/format.dart` in phase 5 (the work item
+// attachments page needs it too); re-exported so the repo screens that
+// import this file keep working.
+export '../../../core/util/format.dart' show formatBytes;
+
 /// Language dot colors, the ones GitHub and GitLab use so the cue reads
 /// the same as on the web. Anything unlisted gets a neutral dot.
 const _languageColors = <String, Color>{
@@ -37,19 +42,6 @@ const _languageColors = <String, Color>{
 
 Color languageColor(BuildContext context, String? name) =>
     _languageColors[name] ?? Theme.of(context).colorScheme.outline;
-
-/// "25 MB", "238 KB", "1.2 GB".
-String formatBytes(int? bytes) {
-  if (bytes == null) return '';
-  if (bytes < 1024) return '$bytes B';
-  final kb = bytes / 1024;
-  if (kb < 1024) return '${kb.round()} KB';
-  final mb = kb / 1024;
-  if (mb < 1024) {
-    return mb < 10 ? '${mb.toStringAsFixed(1)} MB' : '${mb.round()} MB';
-  }
-  return '${(mb / 1024).toStringAsFixed(1)} GB';
-}
 
 /// Small colored dot for a language, sized to the text next to it.
 class LanguageDot extends StatelessWidget {

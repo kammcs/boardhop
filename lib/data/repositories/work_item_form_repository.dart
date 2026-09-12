@@ -36,8 +36,11 @@ class WorkItemFormRepository {
   /// Process metadata changes rarely; research/11 §5 settles on a day.
   static const cacheTtl = Duration(hours: 24);
 
+  /// Bumped in phase 5: a spec cached before it has no
+  /// `excludesWorkItemLinks` on its links panels, which would show the
+  /// Development group as an editable (and always empty) link list.
   static String specKey(String org, String project, String type) =>
-      'form:spec:$org:$project:$type';
+      'form:spec2:$org:$project:$type';
   static String orgFieldsKey(String org) => 'form:fields:$org';
   static String nodesKey(String org, String project, String kind) =>
       'form:nodes:$org:$project:$kind';
@@ -827,6 +830,73 @@ class WorkItemFormRepository {
     return AttachmentRef.fromJson(json, fileName: fileName);
   }
 
+  /// An attachment's bytes, fetched with the bearer token. Without the
+  /// header the service answers HTTP 203 and a sign-in page instead of the
+  /// file (spike w17, research/01 §10.3), so neither a plain `Image.network`
+  /// nor the editor's WebView can reach one.
+  Future<Uint8List> attachmentBytes(String url) =>
+      _client.getBytes(Uri.parse(url));
+
+  /// The largest attachment Azure DevOps accepts through the simple upload.
+  /// The object-limits page says 60 MB and the reference page hints at more
+  /// for raised orgs; the client enforces the documented floor because the
+  /// chunked protocol is unspecified (research/01 §2.5).
+  static const maxAttachmentBytes = 60 * 1024 * 1024;
+
+  /// One `AttachedFile` relation for an uploaded file (spike w17).
+  static Map<String, Object?> attachmentRelation(
+    AttachmentRef attachment, {
+    String? comment,
+  }) => {
+    'rel': attachedFileRel,
+    'url': attachment.url,
+    if (attachment.fileName != null || comment != null)
+      'attributes': <String, Object?>{
+        if (attachment.fileName != null) 'name': attachment.fileName,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+      },
+  };
+
+  /// One work item link relation.
+  static Map<String, Object?> linkRelation({
+    required String rel,
+    required String url,
+    String? comment,
+  }) => {
+    'rel': rel,
+    'url': url,
+    if (comment != null && comment.isNotEmpty)
+      'attributes': <String, Object?>{'comment': comment},
+  };
+
+  /// The relation part of an edit patch.
+  ///
+  /// Azure DevOps removes a relation **by position** (research/01 §2.6), so
+  /// the indices are taken from [fresh] — an item read again immediately
+  /// before the patch — and the removals are emitted in **descending** index
+  /// order, otherwise the first removal shifts every later one. The
+  /// additions follow, because `/relations/-` appends and is unaffected.
+  /// The whole patch still opens with `test /rev`, so a relation list that
+  /// moved under us is refused rather than mangled.
+  static List<Map<String, Object?>> buildRelationOps(
+    WorkItem fresh, {
+    Iterable<String> removedKeys = const [],
+    Iterable<Map<String, Object?>> additions = const [],
+  }) {
+    final removals = removedKeys.toSet();
+    final indices = <int>[];
+    for (final (index, relation) in fresh.relations.indexed) {
+      if (removals.contains(relation.key)) indices.add(index);
+    }
+    indices.sort((a, b) => b.compareTo(a));
+    return [
+      for (final index in indices)
+        {'op': 'remove', 'path': '/relations/$index'},
+      for (final relation in additions)
+        {'op': 'add', 'path': '/relations/-', 'value': relation},
+    ];
+  }
+
   /// Link targets: an exact id when the text is a number, plus a title
   /// search through WIQL, hydrated through the work item batch read.
   Future<List<WorkItem>> searchWorkItems(
@@ -957,11 +1027,13 @@ class WorkItemFormRepository {
   }
 
   /// The edit patch: `test /rev` first, then only the fields whose value
-  /// actually changed, and a format op only when the format changed.
+  /// actually changed, a format op only when the format changed, and the
+  /// relation ops (from [buildRelationOps]) last.
   static List<Map<String, Object?>> buildEditOps(
     WorkItem original,
     Map<String, Object?> values, {
     Map<String, String> formats = const {},
+    List<Map<String, Object?>> relationOps = const [],
   }) {
     final ops = <Map<String, Object?>>[
       {'op': 'test', 'path': '/rev', 'value': original.rev},
@@ -986,6 +1058,7 @@ class WorkItemFormRepository {
         'value': wanted == 'markdown' ? 'Markdown' : 'Html',
       });
     }
+    ops.addAll(relationOps);
     return ops;
   }
 

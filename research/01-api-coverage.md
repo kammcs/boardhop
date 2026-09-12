@@ -291,6 +291,16 @@ Artifact link to a pull request:
 
 Limit: **1,000 links per work item**.
 
+**Removal is positional and unguarded (spikes s35/s36, 2026-09-12).** `remove /relations/{index}` takes the
+index of the relation in the item's own `relations[]`, so the indices must come from a read made immediately
+before the patch and several removals must be sent in **descending** index order. `test /rev` does not protect
+that patch: a **relation-only patch creates no new revision** — adding and removing a `System.LinkTypes.Related`
+link left `rev` at 1 and `System.ChangedDate` untouched — although adding an `AttachedFile` did bump both.
+`System.AttachedFileCount`, `System.RelatedLinkCount` and `System.ExternalLinkCount` are **not returned by the
+item read**, not even with `$expand=all`, so a count comes from the relations themselves.
+
+A relation also cannot be identified by its URL: the service **rewrites it with the project GUID** and drops the `?fileName=` query (spike s37), so the caller must match on the target id or the attachment guid instead of the URL it sent. A `PATCH` answers without `relations[]` unless `$expand=relations` is on it.
+
 ### 2.7 Types, fields, states, transitions
 
 | Capability | Method + Path | api-version | Scope |
