@@ -144,7 +144,9 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
   /// Runs a write, then reloads. Completing a pull request is asynchronous
   /// on the service (the merge is queued), so [settle] keeps reloading for
   /// a few seconds until the status leaves `active`.
-  Future<void> _act(
+  /// Runs a write, reloads, and reports whether the write itself went
+  /// through, so a caller chaining two writes can stop after the first.
+  Future<bool> _act(
     Future<void> Function() action, {
     bool settle = false,
   }) async {
@@ -152,12 +154,14 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
       _acting = true;
       _error = null;
     });
+    var ok = false;
     try {
       await action();
+      ok = true;
       await _load();
       for (var i = 0; settle && i < 6 && _pr?.isActive == true; i++) {
         await Future<void>.delayed(const Duration(seconds: 2));
-        if (!mounted) return;
+        if (!mounted) return ok;
         await _load();
       }
     } on AdoAuthException catch (e) {
@@ -174,6 +178,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     } finally {
       if (mounted) setState(() => _acting = false);
     }
+    return ok;
   }
 
   Future<void> _vote(PrVote vote) async {
@@ -275,18 +280,18 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     return ok;
   }
 
-  Future<void> _reply(PrThread thread, String text) async {
+  Future<bool> _reply(PrThread thread, String text) async {
     final pr = _pr;
-    if (pr == null) return;
+    if (pr == null) return false;
     final repo = context.read<PullRequestRepository>();
-    await _act(() => repo.reply(widget.org, pr, thread.id, text));
+    return _act(() => repo.reply(widget.org, pr, thread.id, text));
   }
 
-  Future<void> _setThreadStatus(PrThread thread, String status) async {
+  Future<bool> _setThreadStatus(PrThread thread, String status) async {
     final pr = _pr;
-    if (pr == null) return;
+    if (pr == null) return false;
     final repo = context.read<PullRequestRepository>();
-    await _act(() => repo.setThreadStatus(widget.org, pr, thread.id, status));
+    return _act(() => repo.setThreadStatus(widget.org, pr, thread.id, status));
   }
 
   void _openFile(PrFileChange change) {
@@ -867,8 +872,8 @@ class _Conversation extends StatelessWidget {
   final ValueChanged<PrConversationFilter> onFilter;
   final bool canAct;
   final bool busy;
-  final Future<void> Function(PrThread thread, String text) onReply;
-  final Future<void> Function(PrThread thread, String status) onSetStatus;
+  final Future<bool> Function(PrThread thread, String text) onReply;
+  final Future<bool> Function(PrThread thread, String status) onSetStatus;
   final ValueChanged<PrThread> onOpenThread;
 
   @override

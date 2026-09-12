@@ -26,8 +26,8 @@ class ThreadCard extends StatefulWidget {
   /// False on completed or abandoned pull requests: read-only card.
   final bool canAct;
   final bool busy;
-  final Future<void> Function(String text)? onReply;
-  final Future<void> Function(String status)? onSetStatus;
+  final Future<bool> Function(String text)? onReply;
+  final Future<bool> Function(String status)? onSetStatus;
 
   /// Set when a ```` ```suggestion ```` in this thread can be committed to
   /// the source branch (file thread, latest iteration, active PR).
@@ -46,6 +46,9 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
   /// the keyboard.
   final _composerKey = GlobalKey();
   bool _replying = false;
+
+  /// The trimmed reply text, so the buttons can follow an empty box.
+  String _draft = '';
 
   @override
   void initState() {
@@ -82,19 +85,48 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
   }
 
   void _startReply() {
-    setState(() => _replying = true);
+    setState(() {
+      _replying = true;
+      _draft = _controller.text.trim();
+    });
     _revealComposer();
   }
 
-  Future<void> _send() async {
+  /// Posts the reply and, when [thenStatus] is set, flips the thread to
+  /// it afterwards ("Reply & resolve"). The comment is the part that
+  /// matters: if the status call fails the reply is kept and the failure
+  /// is said out loud, rather than rolling anything back.
+  Future<void> _send({String? thenStatus}) async {
     final text = _controller.text.trim();
     if (text.isEmpty || widget.onReply == null) return;
-    await widget.onReply!(text);
-    if (mounted) {
+    final messenger = ScaffoldMessenger.of(context);
+    final posted = await widget.onReply!(text);
+    if (!mounted) return;
+    if (posted) {
       setState(() => _replying = false);
       _controller.clear();
     }
+    if (!posted || thenStatus == null) return;
+    final changed = await widget.onSetStatus?.call(thenStatus) ?? false;
+    if (!changed && mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Replied, but the thread could not be marked '
+            '${PrThreadStatus.label(thenStatus).toLowerCase()}.',
+          ),
+        ),
+      );
+    }
   }
+
+  /// Status the thread moves to when a reply is sent with the paired
+  /// button: an open thread resolves, a settled one reopens.
+  String get _pairedStatus =>
+      widget.thread.isResolved ? PrThreadStatus.active : PrThreadStatus.fixed;
+
+  String get _pairedLabel =>
+      widget.thread.isResolved ? 'Reply & reactivate' : 'Reply & resolve';
 
   @override
   Widget build(BuildContext context) {
@@ -237,14 +269,28 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                         minLines: 1,
                         maxLines: 5,
                         enabled: !widget.busy,
+                        onChanged: (v) {
+                          final draft = v.trim();
+                          // Only the empty/non-empty flip changes the row.
+                          if (draft.isEmpty != _draft.isEmpty) {
+                            setState(() => _draft = draft);
+                          } else {
+                            _draft = draft;
+                          }
+                        },
                         decoration: const InputDecoration(
                           hintText: 'Reply (Markdown)',
                           isDense: true,
                         ),
                       ),
                       const SizedBox(height: Spacing.xs),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
+                      // Empty box: the only sensible action is the status
+                      // change, so nothing typed can be lost. With text,
+                      // the paired button posts and then flips the status.
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: Spacing.xs,
+                        runSpacing: Spacing.xs,
                         children: [
                           TextButton(
                             onPressed: widget.busy
@@ -252,11 +298,33 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                                 : () => setState(() => _replying = false),
                             child: const Text('Cancel'),
                           ),
-                          const SizedBox(width: Spacing.xs),
-                          FilledButton(
-                            onPressed: widget.busy ? null : _send,
-                            child: Text(widget.busy ? 'Posting…' : 'Reply'),
-                          ),
+                          if (_draft.isEmpty)
+                            if (widget.onSetStatus != null)
+                              FilledButton(
+                                onPressed: widget.busy
+                                    ? null
+                                    : () => widget.onSetStatus!(_pairedStatus),
+                                child: Text(
+                                  widget.thread.isResolved
+                                      ? 'Reactivate'
+                                      : 'Resolve',
+                                ),
+                              )
+                            else
+                              const SizedBox.shrink()
+                          else ...[
+                            TextButton(
+                              onPressed: widget.busy ? null : () => _send(),
+                              child: Text(widget.busy ? 'Posting…' : 'Reply'),
+                            ),
+                            if (widget.onSetStatus != null)
+                              FilledButton(
+                                onPressed: widget.busy
+                                    ? null
+                                    : () => _send(thenStatus: _pairedStatus),
+                                child: Text(_pairedLabel),
+                              ),
+                          ],
                         ],
                       ),
                     ],
@@ -265,10 +333,25 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
               else
                 Padding(
                   padding: const EdgeInsets.only(left: 20),
-                  child: TextButton.icon(
-                    onPressed: widget.busy ? null : _startReply,
-                    icon: const Icon(Icons.reply, size: 18),
-                    label: const Text('Reply'),
+                  child: Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: widget.busy ? null : _startReply,
+                        icon: const Icon(Icons.reply, size: 18),
+                        label: const Text('Reply'),
+                      ),
+                      if (widget.onSetStatus != null && !t.isResolved)
+                        TextButton.icon(
+                          onPressed: widget.busy
+                              ? null
+                              : () => widget.onSetStatus!(PrThreadStatus.fixed),
+                          icon: const Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                          ),
+                          label: const Text('Resolve'),
+                        ),
+                    ],
                   ),
                 ),
           ],

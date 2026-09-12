@@ -157,24 +157,27 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     _load();
   }
 
-  /// Runs a thread write, then re-reads the threads for this iteration.
-  Future<void> _write(Future<void> Function() action) async {
+  /// Runs a write, re-reads the threads, and reports whether the write
+  /// itself succeeded (a chained resolve stops if the reply failed).
+  Future<bool> _write(Future<void> Function() action) async {
     final ref = _ref;
     final it = _iteration;
-    if (ref == null || it == null) return;
+    if (ref == null || it == null) return false;
     setState(() {
       _posting = true;
       _error = null;
     });
     final source = PrDiffSource(context.read<AdoClient>());
+    var ok = false;
     try {
       await action();
+      ok = true;
       final threads = await source.threads(
         ref,
         iteration: it,
         baseIteration: 0,
       );
-      if (!mounted) return;
+      if (!mounted) return ok;
       setState(() {
         _threads = _forThisFile(threads);
         _composerLine = null;
@@ -193,6 +196,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     } finally {
       if (mounted) setState(() => _posting = false);
     }
+    return ok;
   }
 
   Future<void> _post(int line, String text) async {
@@ -212,18 +216,20 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     );
   }
 
-  Future<void> _reply(PrThread thread, String text) async {
+  Future<bool> _reply(PrThread thread, String text) async {
     final pr = _pr;
-    if (pr == null) return;
+    if (pr == null) return false;
     final repo = context.read<PullRequestRepository>();
-    await _write(() => repo.reply(widget.org, pr, thread.id, text));
+    return _write(() => repo.reply(widget.org, pr, thread.id, text));
   }
 
-  Future<void> _setThreadStatus(PrThread thread, String status) async {
+  Future<bool> _setThreadStatus(PrThread thread, String status) async {
     final pr = _pr;
-    if (pr == null) return;
+    if (pr == null) return false;
     final repo = context.read<PullRequestRepository>();
-    await _write(() => repo.setThreadStatus(widget.org, pr, thread.id, status));
+    return _write(
+      () => repo.setThreadStatus(widget.org, pr, thread.id, status),
+    );
   }
 
   /// Whether the file on screen is the source branch tip, so anchored line

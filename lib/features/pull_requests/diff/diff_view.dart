@@ -44,8 +44,8 @@ class DiffView extends StatefulWidget {
 
   /// Whether threads offer reply and status changes (active PR).
   final bool canAct;
-  final Future<void> Function(PrThread thread, String text)? onReply;
-  final Future<void> Function(PrThread thread, String status)?
+  final Future<bool> Function(PrThread thread, String text)? onReply;
+  final Future<bool> Function(PrThread thread, String status)?
   onSetThreadStatus;
 
   /// Commits a suggestion; null when the file is not at the latest
@@ -349,8 +349,8 @@ class _ThreadView extends StatelessWidget {
   final double gutterWidth;
   final bool canAct;
   final bool busy;
-  final Future<void> Function(String text)? onReply;
-  final Future<void> Function(String status)? onSetStatus;
+  final Future<bool> Function(String text)? onReply;
+  final Future<bool> Function(String status)? onSetStatus;
   final Future<void> Function(PrComment comment, String suggestion)?
   onApplySuggestion;
 
