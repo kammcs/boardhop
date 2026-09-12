@@ -436,7 +436,10 @@ class WorkItemRepository {
       path: '_apis/wit/workitems/${item.id}',
       apiVersion: apiVersion,
       body: [
-        {'op': 'test', 'path': '/rev', 'value': item.rev},
+        // The form's own patch (`buildEditOps`) already opens with the
+        // guard; never send it twice.
+        if (ops.isEmpty || ops.first['path'] != '/rev')
+          {'op': 'test', 'path': '/rev', 'value': item.rev},
         ...ops,
       ],
       contentType: AdoClient.jsonPatchContentType,

@@ -7,10 +7,13 @@ import '../../auth/auth_service.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/util/format.dart';
 import '../../data/models/work_item.dart';
+import '../../data/models/work_item_form.dart';
+import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'form/work_item_form_page.dart';
 import 'widgets/rich_text_view.dart';
 import 'widgets/work_item_actions.dart';
 import 'widgets/work_item_visuals.dart';
@@ -56,6 +59,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   WorkItemVisuals _visuals = const WorkItemVisuals({});
   String? _me;
 
+  /// The type's form spec, for the state sheet's Reason rules. Cached for a
+  /// day by the repository, and not worth an error when it fails: the sheet
+  /// falls back to the transitions the type list already carries (spike
+  /// s32).
+  FormSpec? _spec;
+
   @override
   void initState() {
     super.initState();
@@ -76,7 +85,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       _me ??= auth.accountById(accountId)?.username;
       final types = await repo.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
-      await repo.refreshItem(widget.org, widget.project, widget.id);
+      final item = await repo.refreshItem(
+        widget.org,
+        widget.project,
+        widget.id,
+      );
+      _spec = await _formSpec(item);
       final comments = await repo.comments(
         widget.org,
         widget.project,
@@ -96,6 +110,19 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  Future<FormSpec?> _formSpec(WorkItem item) async {
+    if (item.type.isEmpty) return null;
+    try {
+      return await context.read<WorkItemFormRepository>().formSpec(
+        widget.org,
+        widget.project,
+        item.type,
+      );
+    } on AdoException {
+      return _spec;
     }
   }
 
@@ -157,10 +184,23 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     }
   }
 
+  /// The state chip: the legal transitions from where the item is, and the
+  /// reason for the move when the type's rules require one (research/11
+  /// §4.3). The quick action keeps the offline queue.
   Future<void> _changeState(WorkItem item) async {
-    final state = await pickState(context, item: item, visuals: _visuals);
-    if (state == null || state == item.state || !mounted) return;
-    await _write(item, {'System.State': state});
+    final spec = _spec;
+    final change = await pickState(
+      context,
+      item: item,
+      visuals: _visuals,
+      transitions: spec?.transitionsFrom(item.state) ?? const [],
+      reason: spec?.fields['System.Reason'],
+    );
+    if (change == null || change.state == item.state || !mounted) return;
+    await _write(item, {
+      'System.State': change.state,
+      if (change.reason != null) 'System.Reason': change.reason,
+    });
   }
 
   Future<void> _changeAssignment(WorkItem item) async {
@@ -169,6 +209,39 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     await _write(item, {
       'System.AssignedTo': action == AssignAction.toMe ? _me : '',
     });
+  }
+
+  /// The pencil opens the full form in edit mode: the route on a phone, the
+  /// same box as a dialog over this page from medium up (research/11 §4.5).
+  Future<void> _edit() async {
+    final bool? saved;
+    if (context.breakpoint.isCompact) {
+      saved = await context.push<bool>(
+        '${orgRoute(context, widget.org)}/projects/'
+        '${Uri.encodeComponent(widget.project)}/work-items/'
+        '${widget.id}/edit',
+      );
+    } else {
+      saved = await showDialog<bool>(
+        context: context,
+        // The account's repositories are provided by the `/a/:account` shell
+        // route, which the root navigator sits above.
+        useRootNavigator: false,
+        builder: (_) => WorkItemFormPage.edit(
+          org: widget.org,
+          project: widget.project,
+          id: widget.id,
+          asDialog: true,
+        ),
+      );
+    }
+    if (!mounted) return;
+    await _refresh();
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('Saved')));
+    }
   }
 
   Future<bool> _postComment(String text) async {
@@ -245,18 +318,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
               ),
         actions: [
           IconButton(
-            tooltip: 'Edit title and description',
+            tooltip: 'Edit',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: _refreshing || _writing
-                ? null
-                : () async {
-                    await context.push(
-                      '${orgRoute(context, widget.org)}/projects/'
-                      '${Uri.encodeComponent(widget.project)}/work-items/'
-                      '${widget.id}/edit',
-                    );
-                    if (mounted) _refresh();
-                  },
+            onPressed: _refreshing || _writing ? null : _edit,
           ),
         ],
       ),

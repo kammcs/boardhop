@@ -41,7 +41,6 @@ import 'features/shared/account_scope.dart';
 import 'features/shared/splash_page.dart';
 import 'features/work_items/form/work_item_form_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
-import 'features/work_items/work_item_edit_page.dart';
 import 'features/work_items/work_items_page.dart';
 
 /// `/orgs` lists every signed-in account with its organizations; everything
@@ -156,9 +155,13 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                               id: int.parse(state.pathParameters['id']!),
                             ),
                             routes: [
+                              // The full form in edit mode; the detail
+                              // page shows the same box as a dialog from
+                              // medium up, so this route is the phone push
+                              // and the deep link.
                               GoRoute(
                                 path: 'edit',
-                                builder: (_, state) => WorkItemEditPage(
+                                builder: (_, state) => WorkItemFormPage.edit(
                                   org: state.pathParameters['org']!,
                                   project: state.pathParameters['project']!,
                                   id: int.parse(state.pathParameters['id']!),

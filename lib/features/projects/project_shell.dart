@@ -7,6 +7,7 @@ import '../../core/display_cutout.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/pending_writes_banner.dart';
+import '../shared/unsaved_work.dart';
 import '../shared/account_scope.dart';
 import '../shared/widgets/glass_navigation_rail.dart';
 import 'glass_shell_layout.dart';
@@ -116,12 +117,22 @@ class _ProjectShellState extends State<ProjectShell>
   String projectPath(BuildContext context, String tail) =>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';
 
-  void _select(BuildContext context, int index) {
+  Future<void> _select(BuildContext context, int index) async {
     // Branch routes carry path parameters, so navigate to the concrete
     // location instead of relying on a branch default (`goBranch` would
     // use the placeholder initialLocation from the router). Going to the
     // root of the current branch pops it back to that root.
-    context.go(projectPath(context, _destinations[index].path));
+    final path = projectPath(context, _destinations[index].path);
+    if (index == shell.currentIndex) {
+      // Re-tapping the current tab resets its branch, which would drop an
+      // open page without its own `PopScope` ever running: already at the
+      // root there is nothing to do, and a form with unsaved changes is
+      // asked first (phase 2 review).
+      if (widget.location == path) return;
+      if (!await UnsavedWork.confirmLeave()) return;
+      if (!context.mounted) return;
+    }
+    context.go(path);
   }
 
   @override

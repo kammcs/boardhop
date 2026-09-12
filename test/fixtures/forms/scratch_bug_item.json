@@ -1,0 +1,33 @@
+{
+  "id": 15546,
+  "rev": 7,
+  "url": "https://dev.azure.com/puremedia/_apis/wit/workItems/15546",
+  "fields": {
+    "System.Id": 15546,
+    "System.Rev": 7,
+    "System.AreaPath": "DevOps Mobile App",
+    "System.TeamProject": "DevOps Mobile App",
+    "System.IterationPath": "DevOps Mobile App\\Iteration 1",
+    "System.WorkItemType": "Bug",
+    "System.State": "New",
+    "System.Reason": "New",
+    "System.CreatedDate": "2026-09-12T10:04:11.113Z",
+    "System.ChangedDate": "2026-09-12T11:22:03.517Z",
+    "System.Title": "[phase3] the edit form loads from the item",
+    "System.Tags": "phase3; forms",
+    "System.AssignedTo": {
+      "displayName": "Kelly Kamm",
+      "uniqueName": "kelly@kammcs.com",
+      "id": "00000000-0000-0000-0000-000000000001"
+    },
+    "Microsoft.VSTS.Common.Priority": 2,
+    "Microsoft.VSTS.Common.Severity": "3 - Medium",
+    "Microsoft.VSTS.Scheduling.StoryPoints": 3,
+    "Microsoft.VSTS.TCM.ReproSteps": "<div>Open the item and press the pencil.</div>",
+    "Microsoft.VSTS.TCM.SystemInfo": "<div>Pixel 10 Pro emulator</div>"
+  },
+  "multilineFieldsFormat": {
+    "Microsoft.VSTS.TCM.ReproSteps": "html",
+    "Microsoft.VSTS.TCM.SystemInfo": "html"
+  }
+}

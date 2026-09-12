@@ -1,53 +1,167 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/work_item.dart';
+import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
 import 'work_item_visuals.dart';
 
-/// Bottom sheet listing the states the item's type allows.
-Future<String?> pickState(
+/// What the state sheet answers with: the target state and, when the type's
+/// rules require one, the reason for the move.
+class StateChange {
+  const StateChange(this.state, {this.reason});
+
+  final String state;
+  final String? reason;
+}
+
+/// Bottom sheet listing the **legal transitions** from the item's current
+/// state (`transitions[state]`, spike w18), not every state of the type.
+///
+/// The type list read carries `transitions` for every type (spike s32), so
+/// the sheet costs no extra call. [reason] is the type's `System.Reason`
+/// rule: when it is `alwaysRequired`, the sheet asks for a reason in a
+/// second step before the patch goes out.
+Future<StateChange?> pickState(
   BuildContext context, {
   required WorkItem item,
   required WorkItemVisuals visuals,
+  FieldSpec? reason,
+  List<String> transitions = const [],
 }) {
   final type = visuals.typeOf(item);
-  final states = type?.states ?? const <WorkItemState>[];
-  return showModalBottomSheet<String>(
+  final legal = transitions.isNotEmpty
+      ? transitions
+      : (type?.transitions[item.state] ??
+            [for (final s in type?.states ?? const <WorkItemState>[]) s.name]);
+  return pickStateChange(
+    context,
+    states: legal,
+    current: item.state,
+    colorOf: (context, state) => visuals.stateColorFor(context, item, state),
+    categoryOf: (state) => type?.stateNamed(state)?.category,
+    reason: reason,
+  );
+}
+
+/// The state sheet itself, over a plain list of state names, so the work
+/// item form's header chip and the detail page share one picker.
+Future<StateChange?> pickStateChange(
+  BuildContext context, {
+  required List<String> states,
+  required String current,
+  required Color Function(BuildContext context, String state) colorOf,
+  String? Function(String state)? categoryOf,
+  FieldSpec? reason,
+}) {
+  return showModalBottomSheet<StateChange>(
     context: context,
     showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Spacing.lg,
-              0,
-              Spacing.lg,
-              Spacing.sm,
-            ),
-            child: Text(
-              'State',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          if (states.isEmpty)
-            const ListTile(title: Text('No states known for this type.')),
-          for (final s in states)
-            ListTile(
-              leading: StateDot(
-                color: visuals.stateColorFor(context, item, s.name),
-                size: 12,
-              ),
-              title: Text(s.name),
-              subtitle: s.category == null ? null : Text(s.category!),
-              trailing: s.name == item.state ? const Icon(Icons.check) : null,
-              onTap: () => Navigator.of(context).pop(s.name),
-            ),
-        ],
-      ),
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (context) => _StateSheet(
+      states: states,
+      current: current,
+      colorOf: colorOf,
+      categoryOf: categoryOf,
+      reason: reason,
     ),
   );
+}
+
+class _StateSheet extends StatefulWidget {
+  const _StateSheet({
+    required this.states,
+    required this.current,
+    required this.colorOf,
+    this.categoryOf,
+    this.reason,
+  });
+
+  final List<String> states;
+  final String current;
+  final Color Function(BuildContext context, String state) colorOf;
+  final String? Function(String state)? categoryOf;
+  final FieldSpec? reason;
+
+  @override
+  State<_StateSheet> createState() => _StateSheetState();
+}
+
+class _StateSheetState extends State<_StateSheet> {
+  /// The state chosen in step one while step two asks for its reason.
+  String? _pending;
+
+  bool _needsReason(String state) {
+    final reason = widget.reason;
+    return state != widget.current &&
+        reason != null &&
+        reason.alwaysRequired &&
+        reason.allowedValues.isNotEmpty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pending = _pending;
+    return SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: pending == null
+            ? [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Spacing.lg,
+                    0,
+                    Spacing.lg,
+                    Spacing.sm,
+                  ),
+                  child: Text('State', style: theme.textTheme.titleMedium),
+                ),
+                if (widget.states.isEmpty)
+                  const ListTile(
+                    title: Text('No transitions known for this type.'),
+                  ),
+                for (final state in widget.states)
+                  ListTile(
+                    leading: StateDot(
+                      color: widget.colorOf(context, state),
+                      size: 12,
+                    ),
+                    title: Text(state),
+                    subtitle: widget.categoryOf?.call(state) == null
+                        ? null
+                        : Text(widget.categoryOf!(state)!),
+                    trailing: state == widget.current
+                        ? const Icon(Icons.check)
+                        : null,
+                    onTap: () => _needsReason(state)
+                        ? setState(() => _pending = state)
+                        : Navigator.of(context).pop(StateChange(state)),
+                  ),
+              ]
+            : [
+                ListTile(
+                  leading: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => setState(() => _pending = null),
+                  ),
+                  title: Text(
+                    'Reason for $pending',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                for (final value in widget.reason!.allowedValues)
+                  ListTile(
+                    title: Text(value),
+                    onTap: () =>
+                        Navigator.of(context)
+                            .pop(StateChange(pending, reason: value)),
+                  ),
+              ],
+      ),
+    );
+  }
 }
 
 enum AssignAction { toMe, unassign }

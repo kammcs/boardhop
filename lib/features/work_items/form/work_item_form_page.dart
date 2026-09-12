@@ -11,13 +11,16 @@ import '../../../data/repositories/work_item_form_repository.dart';
 import '../../../data/repositories/work_item_repository.dart';
 import '../../../theme/theme.dart';
 import '../../shared/account_scope.dart';
+import '../../shared/unsaved_work.dart';
 import 'controls/identity_picker.dart';
 import 'controls/tree_picker.dart';
 import 'form_prefs.dart';
 import 'work_item_form_body.dart';
 import 'work_item_form_state.dart';
 
-/// Create a work item of one type: `…/work-items/new?type=Bug`.
+/// Create a work item of one type (`…/work-items/new?type=Bug`), or edit an
+/// existing one through the same form ([WorkItemFormPage.edit],
+/// `…/work-items/15542/edit`).
 ///
 /// The form opens on the server's own defaults — a `validateOnly` dry run of
 /// the type plus the pre-fills answers with State, Reason, Area and
@@ -42,11 +45,36 @@ class WorkItemFormPage extends StatefulWidget {
     this.parentId,
     this.templateId,
     this.asDialog = false,
-  });
+  }) : itemId = null;
+
+  /// Edit an existing item: the same form, loaded from the item's own
+  /// fields and saved with `test /rev` (research/11 §4.6). The type comes
+  /// from the item, so the caller names only its id.
+  const WorkItemFormPage.edit({
+    super.key,
+    required this.org,
+    required this.project,
+    required int id,
+    this.asDialog = false,
+  }) : itemId = id,
+       typeName = '',
+       teamId = null,
+       stateName = null,
+       lane = null,
+       laneField = null,
+       parentId = null,
+       templateId = null;
 
   final String org;
   final String project;
+
+  /// The type to create. Empty in edit mode, where the item names it.
   final String typeName;
+
+  /// The item being edited, or null on a new item.
+  final int? itemId;
+
+  bool get isEdit => itemId != null;
 
   /// The board's team when the form came from a board (phase 4); the
   /// project's default team otherwise.
@@ -77,29 +105,184 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
   String? _error;
   bool _loading = true;
 
+  /// Edit mode: the item at the revision the form is guarded by, and
+  /// whether it came from the cache with no connection (the form is then
+  /// read-only, research/11 §4.6).
+  WorkItem? _item;
+  bool _offline = false;
+
+  /// Bumped when a conflict reload replaces the form state, so the body —
+  /// and the title's own controller — is rebuilt from the fresh values.
+  int _epoch = 0;
+
+  late final UnsavedWorkGuard _guard = UnsavedWorkGuard(
+    isDirty: () => _form?.isDirty ?? false,
+    confirmLeave: _confirmDiscard,
+  );
+
   @override
   void initState() {
     super.initState();
+    UnsavedWork.register(_guard);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
-    _form?.dispose();
+    UnsavedWork.unregister(_guard);
+    _disposeForm();
     super.dispose();
+  }
+
+  /// The app bar reads the form (Save waits for the first change, and shows
+  /// the spinner while it saves), so the page rebuilds with it. The body
+  /// has its own `AnimatedBuilder`.
+  void _onFormChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _disposeForm() {
+    _form?.removeListener(_onFormChanged);
+    _form?.dispose();
+    _form = null;
   }
 
   WorkItemFormRepository get _repo => context.read<WorkItemFormRepository>();
 
-  Future<void> _load() async {
+  Future<void> _load() => widget.isEdit ? _loadEdit() : _loadCreate();
+
+  /// The item, its form spec and its own values. The cached copy shows
+  /// first when the network is gone, read-only behind a banner: the form
+  /// never queues an edit (research/11 §4.6).
+  Future<void> _loadEdit() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _offline = false;
+    });
+    final repo = _repo;
+    final workItems = context.read<WorkItemRepository>();
+    try {
+      final cached = await workItems
+          .watchItem(widget.org, widget.itemId!)
+          .first;
+      var offline = false;
+      WorkItem item;
+      try {
+        item = await workItems.refreshItem(
+          widget.org,
+          widget.project,
+          widget.itemId!,
+        );
+      } on AdoNetworkException {
+        if (cached == null) rethrow;
+        item = cached;
+        offline = true;
+      }
+      final spec = await repo.formSpec(widget.org, widget.project, item.type);
+      final sources = await _pickerSources();
+      if (!mounted) return;
+      final form = WorkItemFormState(
+        spec: spec,
+        initialValues: valuesFromItem(spec, item),
+        formats: formatsFromItem(spec, item),
+        isCreate: false,
+        original: item,
+        readOnly: offline,
+        onDependentFieldChanged: _dryRun,
+      )..onDiscard = _discardConflict;
+      form.onReload = () => _reload(keepChanges: true);
+      _disposeForm();
+      form.addListener(_onFormChanged);
+      setState(() {
+        _item = item;
+        _offline = offline;
+        _epoch++;
+        _form = form;
+        _sources = sources;
+      });
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoNetworkException {
+      if (mounted) {
+        setState(() => _error = 'Editing needs a connection');
+      }
+    } on AdoException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Re-reads the item after a conflict. [keepChanges] puts the user's
+  /// changed fields back on top of the fresh copy; without it their edits
+  /// are dropped for the server's values.
+  Future<void> _reload({required bool keepChanges}) async {
+    final form = _form;
+    if (form == null) return;
+    final keep = <String, Object?>{
+      if (keepChanges)
+        for (final reference in form.dirtyFields)
+          reference: form.value(reference),
+    };
+    final workItems = context.read<WorkItemRepository>();
+    setState(() => _loading = true);
+    try {
+      final item = await workItems.refreshItem(
+        widget.org,
+        widget.project,
+        widget.itemId!,
+      );
+      if (!mounted) return;
+      final next = WorkItemFormState(
+        spec: form.spec,
+        initialValues: {...valuesFromItem(form.spec, item), ...keep},
+        formats: formatsFromItem(form.spec, item),
+        dirtyFields: keep.keys.toSet(),
+        isCreate: false,
+        original: item,
+        onDependentFieldChanged: _dryRun,
+      )..onDiscard = _discardConflict;
+      next.onReload = () => _reload(keepChanges: true);
+      _disposeForm();
+      next.addListener(_onFormChanged);
+      setState(() {
+        _item = item;
+        _epoch++;
+        _form = next;
+      });
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoException catch (e) {
+      if (mounted) form.setBanner(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _discardConflict() => _reload(keepChanges: false);
+
+  Future<void> _loadCreate() async {
     setState(() {
       _loading = true;
       _error = null;
     });
     final repo = _repo;
     final workItems = context.read<WorkItemRepository>();
-    final accountId = AccountScope.of(context);
-    final me = context.read<AuthService>().accountById(accountId)?.username;
     try {
       final spec = await repo.formSpec(
         widget.org,
@@ -150,15 +333,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       }
 
       final values = await _initialValues(spec, prefill);
-      // The Graph reads take the project **id**; the route carries the name
-      // and `graph/descriptors/{name}` answers HTTP 400, which used to send
-      // the people search org-wide (spike s30).
-      final projectId = await _projectId(repo);
-      final members = await _teamMembers(projectId, team);
-      final recent = await FormPrefs.recentAssignees(
-        widget.org,
-        widget.project,
-      );
+      final sources = await _pickerSources(team: team, defaults: defaults);
       final format = await FormPrefs.descriptionFormat(
         widget.org,
         widget.project,
@@ -171,41 +346,11 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         onDependentFieldChanged: _dryRun,
         formats: {'System.Description': format},
       );
-      _form?.dispose();
+      _disposeForm();
+      form.addListener(_onFormChanged);
       setState(() {
         _form = form;
-        _sources = FormSources(
-          identities: IdentitySource(
-            members: () async => members,
-            search: (query) => repo.searchPeople(widget.org, projectId, query),
-            resolve: (person) => repo.resolveIdentityId(widget.org, person),
-            me: _meAmong(members, me),
-            recent: recent,
-            onPicked: (person) =>
-                FormPrefs.rememberAssignee(widget.org, widget.project, person),
-          ),
-          classifications: ClassificationSource(
-            nodes: ({required bool areas}) => repo.classificationNodes(
-              widget.org,
-              widget.project,
-              areas: areas,
-            ),
-            teamIterations: () =>
-                repo.teamIterations(widget.org, widget.project, team: team),
-            currentIterationPath: defaults.currentIterationPath,
-            backlogIterationPath: defaults.backlogIterationPath,
-          ),
-          tags: () => repo.tags(widget.org, widget.project),
-          onFormatChosen: (reference, chosen) {
-            if (reference == 'System.Description') {
-              FormPrefs.setDescriptionFormat(
-                widget.org,
-                widget.project,
-                chosen,
-              );
-            }
-          },
-        );
+        _sources = sources;
       });
     } on AdoAuthException catch (e) {
       if (mounted) {
@@ -223,19 +368,94 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     }
   }
 
+  /// The pickers the header and the controls open: people, the area and
+  /// iteration trees and the tag suggestions, all from the team whose
+  /// defaults the form follows.
+  ///
+  /// In edit mode a refusal is not fatal — a form on a cached item simply
+  /// opens without its pickers.
+  Future<FormSources?> _pickerSources({
+    String? team,
+    TeamDefaults? defaults,
+  }) async {
+    final repo = _repo;
+    final accountId = AccountScope.of(context);
+    final me = context.read<AuthService>().accountById(accountId)?.username;
+    try {
+      final teamId =
+          team ??
+          widget.teamId ??
+          await repo.defaultTeamId(widget.org, widget.project);
+      final teamDefaults =
+          defaults ??
+          await repo.teamDefaults(widget.org, widget.project, team: teamId);
+      // The Graph reads take the project **id**; the route carries the name
+      // and `graph/descriptors/{name}` answers HTTP 400, which used to send
+      // the people search org-wide (spike s30).
+      final projectId = await _projectId(repo);
+      final members = await _teamMembers(projectId, teamId);
+      final recent = await FormPrefs.recentAssignees(
+        widget.org,
+        widget.project,
+      );
+      return FormSources(
+        identities: IdentitySource(
+          members: () async => members,
+          search: (query) => repo.searchPeople(widget.org, projectId, query),
+          resolve: (person) => repo.resolveIdentityId(widget.org, person),
+          me: _meAmong(members, me),
+          recent: recent,
+          onPicked: (person) =>
+              FormPrefs.rememberAssignee(widget.org, widget.project, person),
+        ),
+        classifications: ClassificationSource(
+          nodes: ({required bool areas}) => repo.classificationNodes(
+            widget.org,
+            widget.project,
+            areas: areas,
+          ),
+          teamIterations: () =>
+              repo.teamIterations(widget.org, widget.project, team: teamId),
+          currentIterationPath: teamDefaults.currentIterationPath,
+          backlogIterationPath: teamDefaults.backlogIterationPath,
+        ),
+        tags: () => repo.tags(widget.org, widget.project),
+        onFormatChosen: (reference, chosen) {
+          if (reference == 'System.Description') {
+            FormPrefs.setDescriptionFormat(widget.org, widget.project, chosen);
+          }
+        },
+      );
+    } on AdoException {
+      if (!widget.isEdit) rethrow;
+      return null;
+    }
+  }
+
   /// The debounced dry run a field with `dependentFields` triggers: the
   /// server re-evaluates its rules and answers with per-field messages
   /// (research/11 §2).
   Future<void> _dryRun() async {
     final form = _form;
+    final item = _item;
     if (form == null || form.saving || form.title.isEmpty) return;
+    if (widget.isEdit && (item == null || _offline)) return;
     try {
-      await _repo.validate(
-        widget.org,
-        widget.project,
-        widget.typeName,
-        form.buildOps(parentUrl: _parentUrl),
-      );
+      if (item != null) {
+        await _repo.validatePatch(
+          widget.org,
+          widget.project,
+          item,
+          form.buildEditOps(item),
+        );
+      } else {
+        await _repo.validate(
+          widget.org,
+          widget.project,
+          widget.typeName,
+          form.buildOps(parentUrl: _parentUrl),
+        );
+      }
       form.clearServerErrors();
     } on WorkItemRuleException catch (e) {
       form.applyRuleErrors(e);
@@ -283,7 +503,11 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     for (final reference in references) {
       final field = spec.fields[reference];
       if (field?.defaultValue != null) {
-        values[reference] = _decode(spec, reference, field!.defaultValue);
+        values[reference] = decodeFieldValue(
+          spec,
+          reference,
+          field!.defaultValue,
+        );
       }
     }
     values['System.State'] = spec.initialState;
@@ -302,7 +526,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         if (reference == 'System.Title') continue;
         final value = probe.fields[reference];
         if (value == null) continue;
-        values[reference] = _decode(spec, reference, value);
+        values[reference] = decodeFieldValue(spec, reference, value);
       }
       if (probe.state.isNotEmpty) values['System.State'] = probe.state;
     } on WorkItemRuleException {
@@ -315,27 +539,10 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     }
 
     for (final entry in prefill.entries) {
-      values[entry.key] = _decode(spec, entry.key, entry.value);
+      values[entry.key] = decodeFieldValue(spec, entry.key, entry.value);
     }
     if (widget.stateName != null) values['System.State'] = spec.initialState;
     return values;
-  }
-
-  /// A field value as the controls hold it: identities as [IdentityRef],
-  /// tags as a list, everything else as it came.
-  static Object? _decode(FormSpec spec, String reference, Object? value) {
-    if (value == null) return null;
-    if (reference == 'System.Tags') {
-      return value is List
-          ? [for (final t in value) '$t']
-          : WorkItemFormRepository.parseTags(value);
-    }
-    final field = spec.fields[reference];
-    if (field != null &&
-        (field.isIdentity || field.type == FieldType.identity)) {
-      return value is IdentityRef ? value : IdentityRef.fromField(value);
-    }
-    return value;
   }
 
   /// The dialog pops itself; the route goes through go_router.
@@ -353,8 +560,14 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     final leave = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog.adaptive(
-        title: const Text('Discard this work item?'),
-        content: const Text('It has not been created yet.'),
+        title: Text(
+          widget.isEdit ? 'Discard your changes?' : 'Discard this work item?',
+        ),
+        content: Text(
+          widget.isEdit
+              ? 'The item keeps the values it has on the server.'
+              : 'It has not been created yet.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -368,6 +581,62 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       ),
     );
     return leave ?? false;
+  }
+
+  /// Saves an edit: the dry run with `test /rev`, then the real patch with
+  /// only the changed fields. A 412 raises the conflict banner rather than
+  /// overwriting whoever else wrote (research/11 §4.6).
+  Future<void> _save() async {
+    final form = _form;
+    final item = _item;
+    if (form == null || item == null || form.saving) return;
+    form
+      ..setConflict(false)
+      ..clearServerErrors();
+    if (!form.validateLocally()) {
+      form.revealFirstError();
+      return;
+    }
+    final ops = form.buildEditOps(item);
+    if (ops.length < 2) {
+      _close(false);
+      return;
+    }
+    form.setSaving(true);
+    final repo = _repo;
+    final workItems = context.read<WorkItemRepository>();
+    try {
+      await repo.validatePatch(widget.org, widget.project, item, ops);
+      await workItems.patch(widget.org, widget.project, item, ops);
+      if (!mounted) return;
+      _close(true);
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoStaleRevisionException {
+      form.setConflict(true);
+    } on WorkItemRuleException catch (e) {
+      form
+        ..applyRuleErrors(e)
+        ..revealFirstError();
+    } on AdoValidationException catch (e) {
+      form
+        ..applyRuleErrors(WorkItemRuleException.fromValidation(e))
+        ..revealFirstError();
+    } on AdoNetworkException {
+      // The full form is online only: nothing is queued (research/11 §4.6).
+      form.setBanner('Editing needs a connection');
+    } on AdoException catch (e) {
+      form.setBanner(e.message);
+    } finally {
+      if (mounted) form.setSaving(false);
+    }
   }
 
   Future<void> _create() async {
@@ -477,7 +746,12 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
   }
 
   PreferredSizeWidget _appBar({required bool primary}) {
-    final saving = _form?.saving ?? false;
+    final form = _form;
+    final saving = form?.saving ?? false;
+    final edit = widget.isEdit;
+    // Create is always available (the local checks say what is missing);
+    // Save waits until something actually changed.
+    final canSubmit = form != null && !saving && (!edit || form.isDirty);
     return AppBar(
       primary: primary,
       leading: IconButton(
@@ -489,19 +763,19 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
                 if (await _confirmDiscard() && mounted) _close();
               },
       ),
-      title: Text('New ${widget.typeName}'),
+      title: Text(edit ? '#${widget.itemId}' : 'New ${widget.typeName}'),
       actions: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: Spacing.sm),
           child: FilledButton(
-            onPressed: _form == null || saving ? null : _create,
+            onPressed: canSubmit ? (edit ? _save : _create) : null,
             child: saving
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Create'),
+                : Text(edit ? 'Save' : 'Create'),
           ),
         ),
       ],
@@ -516,6 +790,26 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_loading || saving) const LinearProgressIndicator(),
+        // The full form is online only (research/11 §4.6): a cached item
+        // opens read-only and says so.
+        if (_offline)
+          Material(
+            color: scheme.secondaryContainer,
+            child: ListTile(
+              leading: Icon(
+                Icons.cloud_off_outlined,
+                color: scheme.onSecondaryContainer,
+              ),
+              title: Text(
+                'Editing needs a connection',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+              trailing: TextButton(
+                onPressed: _loading ? null : _load,
+                child: const Text('Retry'),
+              ),
+            ),
+          ),
         if (_error != null)
           Material(
             color: scheme.errorContainer,
@@ -545,7 +839,13 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         else
           Expanded(
             child: ContentColumn(
-              child: WorkItemFormBody(state: form, sources: _sources),
+              // A conflict reload replaces the state: the key rebuilds the
+              // body, and with it the title's own controller.
+              child: WorkItemFormBody(
+                key: ValueKey(_epoch),
+                state: form,
+                sources: _sources,
+              ),
             ),
           ),
       ],

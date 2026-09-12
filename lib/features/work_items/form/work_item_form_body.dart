@@ -1,10 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Durations;
+import 'package:intl/intl.dart';
 
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
+import '../widgets/work_item_actions.dart';
 import '../widgets/work_item_visuals.dart';
 import 'controls/boolean_control.dart';
 import 'controls/date_control.dart';
@@ -402,7 +404,12 @@ Widget buildControl({
   // group of the same name ("Description", "Repro Steps"); the card title
   // already says it.
   final label = _sameLabel(named, groupLabel) ? '' : named;
-  final enabled = !state.saving;
+  final enabled = !state.locked;
+  // A read-only control of an existing item is text, as the web shows it
+  // (research/11 §4.3); it is never offered on a new item.
+  if (state.isReadOnlyField(field.referenceName)) {
+    return ReadOnlyControl(state: state, field: field, label: label);
+  }
   if (field.isIdentity || field.type == FieldType.identity) {
     return IdentityControl(
       state: state,
@@ -466,6 +473,48 @@ Widget buildControl({
   );
 }
 
+/// A field the process or the layout marks read-only, on an existing item:
+/// its value as text under the same label the editable controls use.
+class ReadOnlyControl extends StatelessWidget {
+  const ReadOnlyControl({
+    super.key,
+    required this.state,
+    required this.field,
+    required this.label,
+  });
+
+  final WorkItemFormState state;
+  final FieldSpec field;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return FormFieldSlot(
+      label: label,
+      helpText: field.helpText,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
+        child: Text(
+          displayValue(state.value(field.referenceName)),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String displayValue(Object? value) => switch (value) {
+    null => '—',
+    IdentityRef person => person.displayName,
+    DateTime date => DateFormat.yMMMd().add_jm().format(date.toLocal()),
+    Iterable<Object?> list => list.join(', '),
+    _ => '$value',
+  };
+}
+
 /// A control label and its group label are the same thing to the reader
 /// even when the process spells one with a colon or another case.
 bool _sameLabel(String a, String b) {
@@ -507,7 +556,7 @@ class _FormHeaderState extends State<FormHeader> {
   }
 
   WorkItem get _probe => WorkItem(
-    id: 0,
+    id: widget.state.original?.id ?? 0,
     rev: 0,
     fields: {
       'System.WorkItemType': widget.state.spec.type.name,
@@ -528,6 +577,9 @@ class _FormHeaderState extends State<FormHeader> {
     final iteration = state.value('System.IterationPath') as String?;
     final assignee = state.assignedTo;
     final tags = state.tags;
+    final id = state.original?.id;
+    final idLabel = id == null ? null : '#$id';
+    final reasonField = state.spec.fields['System.Reason'];
 
     final typeChip = Chip(
       avatar: Icon(
@@ -538,16 +590,28 @@ class _FormHeaderState extends State<FormHeader> {
       label: Text(state.spec.type.name),
       visualDensity: VisualDensity.compact,
     );
-    final stateChip = Tooltip(
-      message: 'A new item starts in its first state',
-      child: Chip(
-        avatar: StateDot(
-          color: visuals.stateColorFor(context, probe, state.stateName),
-        ),
-        label: Text(state.stateName),
-        visualDensity: VisualDensity.compact,
-      ),
-    );
+    // On a new item the server owns the state (spike w16); on an existing
+    // one the chip opens the legal transitions (research/11 §4.3).
+    final stateChip = state.isCreate
+        ? Tooltip(
+            message: 'A new item starts in its first state',
+            child: Chip(
+              avatar: StateDot(
+                color: visuals.stateColorFor(context, probe, state.stateName),
+              ),
+              label: Text(state.stateName),
+              visualDensity: VisualDensity.compact,
+            ),
+          )
+        : ActionChip(
+            avatar: StateDot(
+              color: visuals.stateColorFor(context, probe, state.stateName),
+            ),
+            label: Text(state.stateName),
+            tooltip: 'Change state',
+            visualDensity: VisualDensity.compact,
+            onPressed: state.locked ? null : () => _pickState(visuals, probe),
+          );
     final assigneeChip = ActionChip(
       avatar: IdentityAvatar(identity: assignee, radius: 10),
       label: Text(
@@ -556,7 +620,7 @@ class _FormHeaderState extends State<FormHeader> {
       ),
       tooltip: 'Assigned to',
       visualDensity: VisualDensity.compact,
-      onPressed: state.saving || widget.sources == null
+      onPressed: state.locked || widget.sources == null
           ? null
           : () => _pickAssignee(assignee),
     );
@@ -565,7 +629,7 @@ class _FormHeaderState extends State<FormHeader> {
       label: Text(_leaf(area) ?? 'Area', overflow: TextOverflow.ellipsis),
       tooltip: area ?? 'Area',
       visualDensity: VisualDensity.compact,
-      onPressed: state.saving || widget.sources == null
+      onPressed: state.locked || widget.sources == null
           ? null
           : () => _pickPath(areas: true, current: area),
     );
@@ -577,7 +641,7 @@ class _FormHeaderState extends State<FormHeader> {
       ),
       tooltip: iteration ?? 'Iteration',
       visualDensity: VisualDensity.compact,
-      onPressed: state.saving || widget.sources == null
+      onPressed: state.locked || widget.sources == null
           ? null
           : () => _pickPath(areas: false, current: iteration),
     );
@@ -589,7 +653,7 @@ class _FormHeaderState extends State<FormHeader> {
       ),
       tooltip: 'Tags',
       visualDensity: VisualDensity.compact,
-      onPressed: state.saving || widget.sources == null
+      onPressed: state.locked || widget.sources == null
           ? null
           : () => _pickTags(tags),
     );
@@ -600,7 +664,7 @@ class _FormHeaderState extends State<FormHeader> {
       error: titleError,
       child: TextField(
         controller: _title,
-        enabled: !state.saving,
+        enabled: !state.locked,
         minLines: 1,
         maxLines: 3,
         textCapitalization: TextCapitalization.sentences,
@@ -614,6 +678,60 @@ class _FormHeaderState extends State<FormHeader> {
         onChanged: (text) => state.setValue('System.Title', text),
       ),
     );
+
+    // HTTP 412: the item moved on while the form was open. Nothing is
+    // overwritten silently — Reload keeps what the user typed on top of the
+    // fresh copy, Discard drops it (research/11 §4.6).
+    final conflictBanner = !state.conflict
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: Spacing.md),
+            child: Material(
+              color: scheme.tertiaryContainer,
+              borderRadius: Radii.card,
+              child: Padding(
+                padding: Spacing.card,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.sync_problem_outlined,
+                          size: 18,
+                          color: scheme.onTertiaryContainer,
+                        ),
+                        const SizedBox(width: Spacing.sm),
+                        Expanded(
+                          child: Text(
+                            'This item changed on the server',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: scheme.onTertiaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: state.locked ? null : state.onDiscard,
+                          child: const Text('Discard'),
+                        ),
+                        const SizedBox(width: Spacing.sm),
+                        FilledButton.tonal(
+                          onPressed: state.locked ? null : state.onReload,
+                          child: const Text('Reload'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
 
     final banner = state.bannerError == null
         ? null
@@ -663,6 +781,13 @@ class _FormHeaderState extends State<FormHeader> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Padding(padding: chipDrop, child: typeChip),
+                if (idLabel != null) ...[
+                  const SizedBox(width: Spacing.sm),
+                  Padding(
+                    padding: chipDrop,
+                    child: Text(idLabel, style: theme.textTheme.titleMedium),
+                  ),
+                ],
                 const SizedBox(width: Spacing.md),
                 Expanded(child: titleSlot),
                 const SizedBox(width: Spacing.md),
@@ -681,7 +806,15 @@ class _FormHeaderState extends State<FormHeader> {
               children: [areaChip, iterationChip, tagsChip],
             ),
           ] else ...[
-            Row(children: [typeChip]),
+            Row(
+              children: [
+                typeChip,
+                if (idLabel != null) ...[
+                  const SizedBox(width: Spacing.sm),
+                  Text(idLabel, style: theme.textTheme.titleMedium),
+                ],
+              ],
+            ),
             const SizedBox(height: Spacing.sm),
             titleSlot,
             Wrap(
@@ -697,6 +830,19 @@ class _FormHeaderState extends State<FormHeader> {
               ],
             ),
           ],
+          // A transition reveals Reason right under the chips, as the web
+          // does; unsent, the server picks the new state's default.
+          if (state.showReason && reasonField != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Spacing.md),
+              child: PicklistControl(
+                state: state,
+                field: reasonField,
+                label: reasonField.name,
+                enabled: !state.locked,
+              ),
+            ),
+          ?conflictBanner,
           ?banner,
         ],
       ),
@@ -707,6 +853,22 @@ class _FormHeaderState extends State<FormHeader> {
     if (path == null || path.isEmpty) return null;
     final segments = path.split(r'\').where((s) => s.isNotEmpty);
     return segments.isEmpty ? null : segments.last;
+  }
+
+  /// The state chip of an existing item: the legal transitions only
+  /// (`transitions[state]`, spike w18), through the same sheet the detail
+  /// page uses.
+  Future<void> _pickState(WorkItemVisuals visuals, WorkItem probe) async {
+    final state = widget.state;
+    final picked = await pickStateChange(
+      context,
+      states: state.legalTransitions,
+      current: state.stateName,
+      colorOf: (context, name) => visuals.stateColorFor(context, probe, name),
+      categoryOf: (name) => state.spec.type.stateNamed(name)?.category,
+    );
+    if (picked == null) return;
+    state.setStateName(picked.state);
   }
 
   Future<void> _pickAssignee(IdentityRef? current) async {

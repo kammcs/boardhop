@@ -74,6 +74,11 @@ class _NewWorkItemButtonState extends State<NewWorkItemButton> {
         anchor: anchor,
       );
       if (choice == null || !mounted) return;
+      // The `+` is busy only while the metadata loads and the chooser is
+      // open. It must not stay disabled while the form itself is open: a
+      // tab re-tap can drop that route without the await ever returning
+      // (phase 2 review).
+      setState(() => _busy = false);
       // From medium up the form is a centered dialog over the list or the
       // board, which stays visible around it (research/11 §4.5); a phone
       // pushes the route.

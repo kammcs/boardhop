@@ -53,19 +53,44 @@ class FormGroupView {
   final String? pageLabel;
 }
 
+/// Whether one control of the layout belongs on this form.
+typedef ControlFilter = bool Function(FormSpec spec, FormControl control);
+
 /// True when the control is a field a new work item can be created with.
 bool rendersOnCreate(FormSpec spec, FormControl control) {
-  if (!control.visible || control.readOnly || control.isPanel) return false;
+  if (control.readOnly) return false;
+  final field = _fieldOf(spec, control);
+  return field != null && !field.readOnly;
+}
+
+/// True when the control belongs on the edit form: the same fields as on
+/// create, plus the read-only ones that carry a value, which the web shows
+/// as text (research/11 §4.3).
+ControlFilter rendersOnEdit(bool Function(String reference) hasValue) =>
+    (spec, control) {
+      final field = _fieldOf(spec, control);
+      if (field == null) return false;
+      if (control.readOnly || field.readOnly) {
+        return hasValue(field.referenceName);
+      }
+      return true;
+    };
+
+/// The field a renderable control names, or null when the control is not a
+/// field of this form at all (a panel, a label, a header field, one of the
+/// server's bookkeeping fields, or the history log).
+FieldSpec? _fieldOf(FormSpec spec, FormControl control) {
+  if (!control.visible || control.isPanel) return null;
   if (control.controlType == FormControlType.label ||
       control.controlType == FormControlType.other) {
-    return false;
+    return null;
   }
   final reference = control.fieldReferenceName;
-  if (reference == null || headerFieldRefs.contains(reference)) return false;
-  if (FieldSpec.isBookkeeping(reference)) return false;
+  if (reference == null || headerFieldRefs.contains(reference)) return null;
+  if (FieldSpec.isBookkeeping(reference)) return null;
   final field = spec.fields[reference];
-  if (field == null || field.readOnly) return false;
-  return field.type != FieldType.history;
+  if (field == null || field.type == FieldType.history) return null;
+  return field;
 }
 
 /// One column of a page: a layout section with the groups a new item can
@@ -107,7 +132,8 @@ class FormPageView {
 /// Each page keeps the layout's own columns, so the tablet arrangement can
 /// put them next to each other; the phone arrangement flattens them
 /// top-down through [FormPageView.groups].
-List<FormPageView> pageViewsFor(FormSpec spec) {
+List<FormPageView> pageViewsFor(FormSpec spec, {ControlFilter? renders}) {
+  final filter = renders ?? rendersOnCreate;
   FormPageView? viewOf(FormPage page, {String? pageLabel}) {
     final columns = <FormColumnView>[];
     for (final section in page.sections) {
@@ -115,7 +141,7 @@ List<FormPageView> pageViewsFor(FormSpec spec) {
       for (final group in section.groups) {
         final controls = [
           for (final c in group.controls)
-            if (rendersOnCreate(spec, c)) c,
+            if (filter(spec, c)) c,
         ];
         if (controls.isNotEmpty) {
           groups.add(
@@ -181,17 +207,61 @@ List<FormPageView> pageViewsFor(FormSpec spec) {
 /// The Details page's groups in web order (every column flattened top-down),
 /// then the custom pages under their own heading. History, Links and
 /// Attachments pages are not part of the create form (research/11 §4.4).
-List<FormGroupView> groupViewsFor(FormSpec spec) => [
-  for (final page in pageViewsFor(spec)) ...page.groups,
+List<FormGroupView> groupViewsFor(FormSpec spec, {ControlFilter? renders}) => [
+  for (final page in pageViewsFor(spec, renders: renders)) ...page.groups,
 ];
 
 /// Every field the form owns: the header's, the state chip's and the field
 /// controls of the group cards, in that order.
-Set<String> fieldRefsFor(List<FormGroupView> groups) => <String>{
+Set<String> fieldRefsFor(
+  List<FormGroupView> groups, {
+  bool withReason = false,
+}) => <String>{
   ...headerValueFields,
   'System.State',
+  if (withReason) 'System.Reason',
   for (final g in groups)
     for (final c in g.controls) c.fieldReferenceName!,
+};
+
+/// A field value as the controls hold it: identities as [IdentityRef],
+/// tags as a list, everything else as it came.
+Object? decodeFieldValue(FormSpec spec, String reference, Object? value) {
+  if (value == null) return null;
+  if (reference == 'System.Tags') {
+    return value is List
+        ? [for (final t in value) '$t']
+        : WorkItemFormRepository.parseTags(value);
+  }
+  final field = spec.fields[reference];
+  if (field != null && (field.isIdentity || field.type == FieldType.identity)) {
+    return value is IdentityRef ? value : IdentityRef.fromField(value);
+  }
+  return value;
+}
+
+/// One work item's own fields as the edit form holds them: every field the
+/// form owns, identities and tags decoded, long text exactly as it is
+/// stored (never converted, research/00 §0).
+Map<String, Object?> valuesFromItem(FormSpec spec, WorkItem item) {
+  final values = <String, Object?>{};
+  for (final reference in fieldRefsFor(
+    groupViewsFor(spec, renders: rendersOnEdit((r) => item.fields[r] != null)),
+    withReason: true,
+  )) {
+    final raw = item.fields[reference];
+    if (raw == null) continue;
+    values[reference] = decodeFieldValue(spec, reference, raw);
+  }
+  values['System.State'] = item.state;
+  return values;
+}
+
+/// `multilineFieldsFormat` per long-text field: the item's own format,
+/// which the edit form follows and never offers to change (spike w01).
+Map<String, String> formatsFromItem(FormSpec spec, WorkItem item) => {
+  for (final entry in spec.fields.entries)
+    if (entry.value.type.isMultiline) entry.key: item.formatOf(entry.key),
 };
 
 /// Values, dirty set, errors and the debounced dry run of one create form.
@@ -204,24 +274,81 @@ class WorkItemFormState extends ChangeNotifier {
     Map<String, Object?> initialValues = const {},
     this.onDependentFieldChanged,
     this.isCreate = true,
+    this.original,
+    this.readOnly = false,
     Map<String, String> formats = const {},
-  }) : pages = pageViewsFor(spec),
+    Set<String> dirtyFields = const {},
+  }) : pages = pageViewsFor(
+         spec,
+         renders: isCreate
+             ? null
+             : rendersOnEdit(
+                 (reference) => _isFilled(initialValues[reference]),
+               ),
+       ),
        _formats = {...formats},
+       _dirty = {...dirtyFields},
        _values = {...initialValues} {
-    fieldRefs = fieldRefsFor(groups);
+    fieldRefs = fieldRefsFor(groups, withReason: !isCreate);
+    for (final group in groups) {
+      for (final control in group.controls) {
+        final reference = control.fieldReferenceName!;
+        if (control.readOnly || (spec.fields[reference]?.readOnly ?? false)) {
+          _readOnlyRefs.add(reference);
+        }
+      }
+    }
+    if (!isCreate) {
+      // The item's long text is already HTML (or Markdown) in its own
+      // format: never escape it again on the way back out (§4.3).
+      for (final reference in fieldRefs) {
+        if (spec.fields[reference]?.type == FieldType.html) {
+          _richFields.add(reference);
+        }
+      }
+      _originalState = original?.state ?? stateName;
+    }
   }
 
   /// Fields the server owns on a new item: the initial state is the only one
-  /// it accepts and it picks the reason itself (spike w16).
-  static const _neverSent = <String>{'System.State', 'System.Reason'};
+  /// it accepts and it picks the reason itself (spike w16). On an edit both
+  /// are the user's to change.
+  static const _neverSentOnCreate = <String>{'System.State', 'System.Reason'};
+
+  static bool _isFilled(Object? value) =>
+      value != null &&
+      !(value is String && value.trim().isEmpty) &&
+      !(value is Iterable && value.isEmpty);
 
   static const dependentDebounce = Duration(milliseconds: 800);
 
   final FormSpec spec;
 
-  /// A new item. Phase 3 edits an existing one, where the format is the
-  /// item's own and is never chosen in the editor (spike w01).
+  /// A new item. An edit form carries [original] instead, where the format
+  /// is the item's own and is never chosen in the editor (spike w01).
   final bool isCreate;
+
+  /// The item being edited, at the revision the form was loaded from: the
+  /// `test /rev` guard and the base every patch op is compared against.
+  final WorkItem? original;
+
+  /// The form is shown but not editable: the cached copy of an item opened
+  /// without a connection (research/11 §4.6, online only).
+  final bool readOnly;
+
+  /// The state the item was loaded in; Reason appears once the user moves
+  /// away from it.
+  String _originalState = '';
+
+  String get originalState => _originalState;
+
+  /// The server refused the save with HTTP 412: the item moved on. The page
+  /// offers Reload (keep my changes on top of the fresh copy) or Discard.
+  bool conflict = false;
+
+  /// Wired by the page for the conflict banner's two buttons.
+  VoidCallback? onReload;
+  VoidCallback? onDiscard;
 
   /// Details first, then the custom pages: tabs on a tablet, stacked
   /// sections on a phone.
@@ -242,11 +369,15 @@ class WorkItemFormState extends ChangeNotifier {
   final Map<String, Object?> _values;
   final Map<String, String> _errors = {};
   final Map<String, String> _parseErrors = {};
-  final Set<String> _dirty = {};
+  final Set<String> _dirty;
 
   /// Long-text fields the rich editor filled: their value is already HTML
   /// (or Markdown) and is sent as it stands, never escaped.
   final Set<String> _richFields = {};
+
+  /// Controls the layout or the process marks read-only: shown as text on an
+  /// existing item, never validated and never sent.
+  final Set<String> _readOnlyRefs = {};
 
   /// `html` or `markdown` per multiline field, for the
   /// `/multilineFieldsFormat` ops of the create patch (spike w01). Only a
@@ -275,7 +406,20 @@ class WorkItemFormState extends ChangeNotifier {
 
   bool get isDirty => _dirty.isNotEmpty;
 
+  /// The fields the user changed, kept across a conflict reload.
+  Set<String> get dirtyFields => Set.unmodifiable(_dirty);
+
+  bool isDirtyField(String reference) => _dirty.contains(reference);
+
+  /// True for a control the process or the layout marks read-only: the edit
+  /// form shows its value as text (research/11 §4.3).
+  bool isReadOnlyField(String reference) => _readOnlyRefs.contains(reference);
+
   bool get hasErrors => _errors.isNotEmpty;
+
+  /// No control takes input: a save is in flight, or the form opened on a
+  /// cached copy with no connection.
+  bool get locked => saving || readOnly;
 
   Map<String, Object?> get values => Map.unmodifiable(_values);
 
@@ -283,6 +427,38 @@ class WorkItemFormState extends ChangeNotifier {
 
   String get stateName =>
       _values['System.State'] as String? ?? spec.initialState ?? '';
+
+  String? get reason => _values['System.Reason'] as String?;
+
+  /// The states this item may move to, the current one included when Azure
+  /// DevOps lists it (spike w18); empty on a new item, whose state the
+  /// server owns.
+  List<String> get legalTransitions =>
+      isCreate ? const [] : spec.transitionsFrom(stateName);
+
+  /// Reason follows a transition: the web reveals it as soon as the state
+  /// moves, and the server picks the default when none is sent.
+  bool get showReason => !isCreate && stateName != _originalState;
+
+  /// Moves the item to another state. The reason of the state it came from
+  /// never travels with it: it is cleared so the server can pick the
+  /// default for the new state unless the user names one.
+  void setStateName(String next) {
+    if (next == stateName) return;
+    // The reason of the state it came from is dropped, not cleared on the
+    // server: an unsent Reason lets the server pick the new state's default
+    // (spike w18: New → Active came back with "Approved").
+    _values['System.Reason'] = null;
+    _dirty.remove('System.Reason');
+    _errors.remove('System.Reason');
+    setValue('System.State', next);
+  }
+
+  void setConflict(bool value) {
+    conflict = value;
+    if (value) bannerError = null;
+    notifyListeners();
+  }
 
   List<String> get tags {
     final raw = _values['System.Tags'];
@@ -385,7 +561,9 @@ class WorkItemFormState extends ChangeNotifier {
       ..addAll(_parseErrors);
     for (final reference in fieldRefs) {
       if (_parseErrors.containsKey(reference)) continue;
-      if (_neverSent.contains(reference)) continue;
+      if (isCreate && _neverSentOnCreate.contains(reference)) continue;
+      if (reference == 'System.Reason' && !showReason) continue;
+      if (_readOnlyRefs.contains(reference)) continue;
       final field = spec.fields[reference];
       if (field == null) continue;
       final value = _values[reference];
@@ -449,20 +627,10 @@ class WorkItemFormState extends ChangeNotifier {
   }) {
     final out = <String, Object?>{};
     for (final reference in fieldRefs) {
-      if (_neverSent.contains(reference)) continue;
+      if (_neverSentOnCreate.contains(reference)) continue;
       if (FieldSpec.isBookkeeping(reference)) continue;
-      final raw = _values[reference];
+      final raw = _sendable(reference);
       if (raw == null) continue;
-      if (raw is Iterable && raw.isEmpty) continue;
-      if (raw is String) {
-        final text = raw.trim();
-        if (text.isEmpty) continue;
-        final isHtmlField = spec.fields[reference]?.type == FieldType.html;
-        out[reference] = isHtmlField && !_richFields.contains(reference)
-            ? htmlFromPlainText(text)
-            : text;
-        continue;
-      }
       out[reference] = raw;
     }
     final markdown = <String>{
@@ -476,6 +644,53 @@ class WorkItemFormState extends ChangeNotifier {
       parentUrl: parentUrl,
       relations: relations,
     );
+  }
+
+  /// The edit patch: `test /rev` and only the fields whose value actually
+  /// changed, built through phase 0's
+  /// [WorkItemFormRepository.buildEditOps] (research/11 §4.6).
+  ///
+  /// A field the user never touched is only offered when it has a value, so
+  /// a field the form shows empty is never cleared behind their back; a
+  /// field they emptied themselves is dirty and is cleared.
+  List<Map<String, Object?>> buildEditOps([WorkItem? item]) {
+    final base = item ?? original;
+    if (base == null) return const [];
+    final out = <String, Object?>{};
+    for (final reference in fieldRefs) {
+      if (FieldSpec.isBookkeeping(reference)) continue;
+      if (_readOnlyRefs.contains(reference)) continue;
+      if (reference == 'System.Reason' && !showReason) continue;
+      final dirty = _dirty.contains(reference);
+      final raw = _sendable(reference);
+      if (raw == null && !dirty) continue;
+      out[reference] = raw ?? '';
+    }
+    return WorkItemFormRepository.buildEditOps(
+      base,
+      out,
+      formats: {
+        for (final entry in _formats.entries)
+          if (out.containsKey(entry.key)) entry.key: entry.value,
+      },
+    );
+  }
+
+  /// One value as the patch carries it, or null when there is nothing to
+  /// send: empty strings and empty lists are "no value".
+  Object? _sendable(String reference) {
+    final raw = _values[reference];
+    if (raw == null) return null;
+    if (raw is Iterable && raw.isEmpty) return null;
+    if (raw is String) {
+      final text = raw.trim();
+      if (text.isEmpty) return null;
+      final isHtmlField = spec.fields[reference]?.type == FieldType.html;
+      return isHtmlField && !_richFields.contains(reference)
+          ? htmlFromPlainText(text)
+          : text;
+    }
+    return raw;
   }
 
   /// Free text next to the allowed values. `FieldSpec` carries no
