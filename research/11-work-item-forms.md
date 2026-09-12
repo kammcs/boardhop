@@ -1,7 +1,7 @@
 # 11. Work item forms: creating and editing any work item
 
 **Date:** 2026-09-12
-**Status:** plan agreed with Kelly (section 7). Not started; spikes in section 6 come first.
+**Status:** plan agreed with Kelly (section 7); spikes run 2026-09-12 (section 9) and the plan adjusted where they disagreed. One decision open: the people picker (section 9). Not started.
 **Ask (Kelly):** the app cannot create work items. Research how the Azure DevOps web renders work item forms, including custom fields that depend on the work item type, and plan a create flow whose button sits in the Work app bar to the left of the Items/Board pill, with a form that fits a phone and a tablet differently.
 **Method:** existing research (01 §2.7, §3.2, §9.3; 05 §5.1, §5.2), spike s11 (field metadata, `validateOnly`), w01 (Markdown on create), the Processes REST reference, and a review of what the app does today.
 
@@ -128,7 +128,7 @@ Team = the team of the board on screen, else the project's default team (`BoardR
 
 Cost: the spec build is about 1.2 TSTU per type (s11) plus the layout call once per process; both cached a day and refreshed in the background when older. The dry run costs one write-sized call per Save and per dependent-field change (debounced to 800 ms), which is well under the 200 TSTU five-minute window.
 
-## 6. Spikes before phase 1
+## 6. Spikes before phase 1 (run 2026-09-12; results in section 9)
 
 Read-only unless marked; results in `research/spikes/results/README.md`, raw output stays local.
 
@@ -141,18 +141,18 @@ Read-only unless marked; results in `research/spikes/results/README.md`, raw out
 
 | Question | Decision |
 |---|---|
-| Fidelity to the web form | **Full process layout**: every page, group and control in web order, custom fields included, from the Processes layout API. |
+| Fidelity to the web form | **Full form layout**: every page, group and control in web order, custom fields included. Source changed after spikes s24/s26: the type's `xmlForm` (works for every type) instead of the Processes layout API (refuses stock types). |
 | Types offered | **Backlog types first, the rest under "Other"**: backlog levels from `backlogconfiguration`, then a collapsed section with the remaining non-hidden types. |
 | Edit | **One form for create and edit.** The detail page's Edit opens the full form; the title-and-description page goes away. |
 | Entry points | **Work app bar `+`, board column `+` (state and lane pre-filled), "Add child" from a work item.** Not on Home. |
 | Tablet | **Centered web-like dialog** up to ~960 dp with the sections in columns; the list or board stays visible around it. |
 | Phone | **Pinned header, sections stacked**: type, title and the core chips pinned; groups as collapsible cards; extra pages as sections at the bottom. |
 | Offline | **Online only, local drafts.** No queued creates, no temporary ids. |
-| People picker | **The type's allowed values**, cached a day, filtered locally, recent first. Org-wide Graph search is not in scope. |
+| People picker | Kelly chose **the type's allowed values**, but spike s25 found that list empty in both projects. **Proposed instead (awaiting Kelly):** team members of the current team as the cached, offline list with recent assignees first, plus a project-scoped Graph subject query as you type (`vso.graph` is already granted). |
 | Rich text on create | **Rich editor, following the project**: HTML editor by default, Markdown when the project or the user chooses it; the spike confirms the format op on create. |
 | Area and iteration defaults | **The current board's team** (project default team elsewhere): its default area and current iteration. |
 | Extras | **Team templates, links (parent, child, related), attachments** are in scope. |
-| Layout unavailable | **Field-list fallback**: required and common fields first, then the rest grouped by prefix. |
+| Layout unavailable | **Field-list fallback**: required and common fields first, then the rest grouped by prefix. After s26 this only covers a type whose `xmlForm` fails to parse. |
 
 ## 8. Phases
 
@@ -165,4 +165,23 @@ Read-only unless marked; results in `research/spikes/results/README.md`, raw out
 | 4 | Board column `+`, "Add child", templates, drafts | Scratch board |
 | 5 | Links page (add parent/child/related with search) and Attachments page (camera, library, files) | Scratch project |
 
-Open after the spikes: the exact permission the layout call needs (if it is process-admin only, phase 0 ships the fallback as the main path and the layout becomes an enhancement); whether `validateOnly` on create returns rule-set default values or only errors; how a template interacts with required-field validation.
+Open after the spikes: how a template interacts with required-field validation (no team has templates yet; the chooser hides the section until one exists).
+
+## 9. Spike results (2026-09-12) and what they change
+
+Scripts s24, s25, s26 (read-only) and w16, w17, w18 (scratch project); findings in `research/spikes/results/README.md`.
+
+| Question | Answer | Change to the plan |
+|---|---|---|
+| Can the app read the process layout? | Only for types an inherited process has customized. Every stock type, including Epic in CloudCover 2.0 and all nine in the scratch project's system Agile process, answers HTTP 400 VS403115 "locked". | The Processes API is out. |
+| Is there a universal layout source? | Yes: `wit/workitemtypes/{type}` returns `xmlForm` (5–7 KB) for every type: the legacy `<FORM><Layout>` tree with the header groups, a `TabGroup` (Details, History, Links, Attachments), labeled groups, columns with percent widths and the custom fields in place. It matches the process layout group for group. | **`FormSpec` is built from `xmlForm`** (a small XML walk: Group → Column → Control, TabGroup → Tab), plus `fields?$expand=All` for rules and the org field list for types. The field-list fallback stays for a parse failure only. The read is the one `types()` already makes, so the layout costs nothing extra. |
+| Is the Assigned To allowed-values list the people picker? | No: it is empty in both projects. | Kelly's pick cannot work. Proposal: team members (`teams/{id}/members`, 13 and 2 rows, avatars through the `_links.avatar` path fixed for reviewers) as the cached offline list with recent assignees first, and a project-scoped `graph/subjectquery` (3 hits for "a" in CloudCover) as you type. **Needs Kelly's decision.** |
+| What does a dry run return? | HTTP 200 with the whole item minus id and rev, including the server's defaults (State, Reason, Area, Iteration, CreatedBy) and the format map; errors as `RuleValidationErrors[]` per field; an unknown field as a different exception without rule errors. | The form opens with one dry run of `{type}` plus the pre-fills, so its defaults are the server's rather than guessed. Error mapping stays as planned; the unknown-field case becomes a generic banner. |
+| Can a new item start in a column's state? | No: only the type's initial state is legal on create (Bug as Active is refused). Create then `PATCH` State works (New → Active, Reason set by the server). | Board-column create is two calls; the card lands in the column after the second, and if the second fails the item still exists in its initial state, which a snackbar says. The State chip is read-only on a new item. |
+| Do links and attachments ride in the create call? | Yes: the parent relation, tags, numbers and a Markdown description created #15539 in one call; an uploaded file's `AttachedFile` relation created #15540 with the count at 1. | As planned. Attachment bytes need the Authorization header (203 sign-in page without it). |
+| Defaults for area and iteration | `teamsettings` carries `defaultIteration`, `backlogIteration`, `defaultIterationMacro` and `bugsBehavior`; `iterations?$timeframe=current` gives the sprint; areas are a single node in both projects while CloudCover has 107 iterations. | The iteration picker lists the team's iterations first (current marked), the whole tree behind "All iterations". |
+| Templates | None exist in either team. | The chooser shows templates only when the team has some; verification waits for one on the scratch team. |
+| Type chooser order | `backlogconfiguration` gives the levels top-down with their types and `bugsBehavior`; `Microsoft.HiddenCategory` lists the eight types to hide. | As planned. |
+| Initial states | Every type has exactly one `transitions[""]` target. | State is not chosen on create. |
+
+Test data created: #15539 (Task, child of 15503, Markdown description), #15540 (Task with an attachment), #15541 (Bug moved New → Active). All in the scratch project, left for the emulator walkthrough.
