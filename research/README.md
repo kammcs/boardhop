@@ -20,6 +20,9 @@ Start with **[00-feasibility-summary.md](00-feasibility-summary.md)**. It holds 
 | [08c-react-native-and-other-stacks.md](08c-react-native-and-other-stacks.md) | React Native MSAL re-check; Kotlin Multiplatform, Capacitor, Uno, Avalonia, native, Tauri |
 | [09-entra-app-registration.md](09-entra-app-registration.md) | Hand-off instructions: register Boardhop in the kammcs tenant, enable it in a customer tenant |
 | [11-work-item-forms.md](11-work-item-forms.md) | Work item create and edit forms: process layout, field controls, phone and tablet designs, decisions and phases |
+| [12-dartnative-evaluation.md](12-dartnative-evaluation.md) | DartNative versus Flutter verdict and iPhone Duo readiness plan (reconciled) |
+| [12a-dartnative-findings.md](12a-dartnative-findings.md) | DartNative maturity, tooling, dependency compatibility, risks (sourced) |
+| [12b-iphone-duo-and-flutter.md](12b-iphone-duo-and-flutter.md) | iPhone Duo facts, iOS 27.1 APIs, Flutter and peer readiness, Boardhop impact (sourced) |
 | [verification/](verification/) | Reproducible anonymous API probes and captured results |
 
 Re-run the probes with:
