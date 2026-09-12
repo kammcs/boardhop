@@ -390,7 +390,7 @@ class _RichTextEditorState extends State<RichTextEditor> {
               520.0,
             );
             return ListView(
-              padding: const EdgeInsets.only(bottom: Spacing.xxl),
+              padding: scrollEndPadding(context),
               children: [
                 if (_error != null)
                   ListTile(

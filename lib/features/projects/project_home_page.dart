@@ -243,7 +243,7 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
             child: ContentColumn(
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: Spacing.xxl),
+                padding: scrollEndPadding(context),
                 children: [
                   if (_loading) const LinearProgressIndicator(),
                   Padding(

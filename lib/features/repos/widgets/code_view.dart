@@ -107,7 +107,7 @@ class _CodeViewState extends State<CodeView> {
       controller: _vertical,
       listController: _listController,
       itemCount: widget.lines.length,
-      padding: const EdgeInsets.only(bottom: Spacing.xxl),
+      padding: scrollEndPadding(context),
       itemBuilder: (context, i) => _LineView(
         number: i + 1,
         runs: widget.lines[i],

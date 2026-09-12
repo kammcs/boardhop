@@ -28,6 +28,23 @@ extension BreakpointContext on BuildContext {
       Breakpoint.fromWidth(MediaQuery.sizeOf(this).width);
 }
 
+/// Bottom padding for a scroll view that sets its own `padding`.
+///
+/// A `ListView` with a null `padding` consumes the ambient
+/// `MediaQuery.padding`, which is how a page's last row clears the home
+/// indicator and the shell's floating glass bar. Setting `padding`
+/// suppresses that, so the end of the list slid under the bar and the
+/// last row could not be reached (found on the project home page when
+/// the bar moved down to Apple's own height, 2026-09-12). This keeps
+/// [extra] as the breathing room a page wants and grows to the inset
+/// whenever the inset is larger.
+EdgeInsets scrollEndPadding(
+  BuildContext context, {
+  double extra = Spacing.xxl,
+}) => EdgeInsets.only(
+  bottom: math.max(extra, MediaQuery.paddingOf(context).bottom),
+);
+
 /// Centers content and caps its width on wide screens so list rows and
 /// forms do not stretch across a tablet.
 ///

@@ -528,7 +528,7 @@ class _Overview extends StatelessWidget {
       child: ListView(
         // Short pages must still answer a pull-to-refresh.
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: Spacing.xxl),
+        padding: scrollEndPadding(context),
         children: [
           Padding(
             padding: Spacing.page,
@@ -852,7 +852,7 @@ class _Files extends StatelessWidget {
       child: ListView(
         // Short pages must still answer a pull-to-refresh.
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: Spacing.xxl),
+        padding: scrollEndPadding(context),
         children: [
           if (iterations.isNotEmpty)
             IterationPicker(

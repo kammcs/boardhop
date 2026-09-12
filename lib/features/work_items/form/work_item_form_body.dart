@@ -156,7 +156,7 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
         Expanded(
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.only(bottom: Spacing.xxl),
+            padding: scrollEndPadding(context),
             children: _cards(context, state),
           ),
         ),

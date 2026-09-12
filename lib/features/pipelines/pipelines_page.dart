@@ -415,7 +415,7 @@ class _RunsTab extends StatelessWidget {
       child: ContentColumn(
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: Spacing.xxl),
+          padding: scrollEndPadding(context),
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -557,7 +557,7 @@ class _DefinitionsTab extends StatelessWidget {
       child: ContentColumn(
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: Spacing.xxl),
+          padding: scrollEndPadding(context),
           children: [
             if (definitions.isEmpty && loaded)
               Padding(

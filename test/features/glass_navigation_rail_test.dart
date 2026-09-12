@@ -172,6 +172,30 @@ void main() {
     final last = tester.getCenter(find.text('Pipelines'));
     expect(first.dy, last.dy);
     expect((last.dx - first.dx) / 3, greaterThan(120));
+
+    // The destinations share the bar and each sits in the middle of its
+    // own slot. A width set on the item's Stack rather than on its
+    // content let the icon and label shrink to their own size and pin to
+    // the left of the slot, so the first tab crowded the bar's left end
+    // (2026-09-12).
+    final bar = tester.getRect(find.byType(GlassNavigationRail));
+    final slot =
+        (bar.width - 2 * GlassNavigationRail.barInset) / destinations.length;
+    for (var i = 0; i < destinations.length; i++) {
+      final wanted = bar.left + GlassNavigationRail.barInset + slot * (i + 0.5);
+      for (final finder in [
+        find.text(destinations[i].label),
+        find.byIcon(destinations[i].icon),
+        find.byIcon(destinations[i].selectedIcon),
+      ]) {
+        if (finder.evaluate().isEmpty) continue;
+        expect(
+          tester.getCenter(finder).dx,
+          closeTo(wanted, 0.5),
+          reason: '${destinations[i].label} is not centred in its slot',
+        );
+      }
+    }
   });
 
   testWidgets('at accessibility text sizes the rail grows and the label '

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart' hide Durations;
@@ -82,14 +81,41 @@ class GlassNavigationRail extends StatelessWidget {
   /// instead.
   static double widthFor(BuildContext context) => width * scaleOf(context);
 
-  /// Cross-axis size of a horizontal rail: icon pill, gap, label line and
-  /// the item's vertical padding. The shell uses it as the page inset.
-  static const double thickness = 32 + Spacing.xs + _labelLine + 2 * Spacing.sm;
+  /// Cross-axis size of a horizontal rail, and so the height of the bar
+  /// along the bottom: the bar's own inset around the selected capsule,
+  /// the item's padding, the icon, the gap and the label line. 56 pt, the
+  /// height Apple's floating tab bar measures on an iPhone 17 (taken off
+  /// an App Store screenshot, Kelly 2026-09-12; ours was 68 and read as a
+  /// slab). The shell uses it as the page inset.
+  static const double thickness =
+      2 * barInset + 2 * itemPadY + iconBox + iconGap + _labelLine;
+
+  /// Gap between the bar's own edge and a destination's capsule, so the
+  /// selected capsule reads as a piece of glass lifted out of the bar
+  /// rather than a block filling it.
+  static const double barInset = 3;
+
+  /// A destination's padding above its icon and below its label, inside
+  /// the capsule.
+  static const double itemPadY = 4;
+
+  /// Box the destination's icon is drawn in, and its size.
+  static const double iconBox = 24;
+
+  /// Gap between the icon and its label.
+  static const double iconGap = 2;
+
   static const double _labelLine = 16;
 
   /// [thickness] for the text size in force: only the label line grows.
   static double thicknessFor(BuildContext context) =>
       thickness + _labelLine * (scaleOf(context) - 1);
+
+  /// Height of a destination's label line at the text size in force. The
+  /// label is drawn in a box of exactly this height so the bar's height
+  /// is [thicknessFor] and not whatever the font happens to measure.
+  static double labelLineFor(BuildContext context) =>
+      _labelLine * scaleOf(context);
 
   /// Blur radius of the glass; the shell keeps this much margin around
   /// the rail so the shadow can fade.
@@ -112,7 +138,12 @@ class GlassNavigationRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(Radii.xl);
+    // A bar along the bottom is a true pill, like Apple's floating tab
+    // bar; a tall rail beside the page keeps the softer rounded rect (a
+    // pill's semicircular ends read wrong down a whole screen).
+    final radius = BorderRadius.circular(
+      axis == Axis.horizontal ? Radii.pill : Radii.xl,
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: radius,
@@ -163,21 +194,21 @@ class GlassNavigationRail extends StatelessWidget {
             child: Padding(
               padding: axis == Axis.vertical
                   ? const EdgeInsets.symmetric(vertical: Spacing.sm)
-                  : const EdgeInsets.symmetric(horizontal: Spacing.sm),
+                  : const EdgeInsets.all(barInset),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // Along the bottom of a phone the bar is narrower than
-                  // four destinations at a large text scale, so items
-                  // share the width instead of overflowing; the label
-                  // scales down inside its item.
+                  // Along the bottom the destinations share the bar's
+                  // width, so the selected capsule is a tab-shaped
+                  // stadium (72 x 50 on an iPhone 17, Apple's own
+                  // proportion) rather than the near-circular blob a
+                  // 72 pt slot gave. It is also what keeps four items at
+                  // a large text scale from overflowing a narrow bar; the
+                  // label scales down inside its item.
                   var itemWidth = widthFor(context);
                   if (axis == Axis.horizontal &&
                       constraints.maxWidth.isFinite &&
                       destinations.isNotEmpty) {
-                    itemWidth = math.min(
-                      itemWidth,
-                      constraints.maxWidth / destinations.length,
-                    );
+                    itemWidth = constraints.maxWidth / destinations.length;
                   }
                   return Flex(
                     direction: axis,
@@ -191,6 +222,7 @@ class GlassNavigationRail extends StatelessWidget {
                           destination: destinations[i],
                           selected: i == selectedIndex,
                           width: itemWidth,
+                          axis: axis,
                           onTap: () => onDestinationSelected(i),
                         ),
                     ],
@@ -210,78 +242,148 @@ class _GlassRailItem extends StatelessWidget {
     required this.destination,
     required this.selected,
     required this.width,
+    required this.axis,
     required this.onTap,
   });
 
   final GlassRailDestination destination;
   final bool selected;
   final double width;
+  final Axis axis;
   final VoidCallback onTap;
+
+  /// How far the capsule sits inside its slot. Along the bottom it keeps
+  /// off its neighbours and, more to the point, off the bar's own rounded
+  /// ends: filling the slot edge to edge made the first destination's
+  /// capsule merge into the left end of the bar, so the bar read as a
+  /// white blob with a grey tail rather than as four tabs.
+  EdgeInsets get _capsuleInset => axis == Axis.horizontal
+      ? const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 1)
+      : const EdgeInsets.symmetric(
+          horizontal: GlassNavigationRail.barInset,
+          vertical: 2,
+        );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final indicator =
-        theme.navigationRailTheme.indicatorColor ?? scheme.secondaryContainer;
+    final dark = theme.brightness == Brightness.dark;
+    // The selected destination is a capsule of brighter glass behind its
+    // icon and label together, lifted off the bar by a soft shadow, the
+    // way iOS 26's floating tab bar marks the current tab. A Material
+    // indicator pill behind the icon alone read as Android (Kelly,
+    // 2026-09-12).
+    final fill = scheme.surfaceBright.withValues(alpha: dark ? 0.26 : 0.85);
+    // The neutral slate theme's primary (#575f6b light) is all but the
+    // same value as onSurfaceVariant (#474648), so tinting the selected
+    // glyph carries no signal. The capsule and the glyph's own weight do
+    // the work instead: selected is full-strength onSurface and semibold,
+    // unselected is dimmed.
+    final tint = selected
+        ? scheme.onSurface
+        : scheme.onSurfaceVariant.withValues(alpha: 0.7);
+    final radius = BorderRadius.circular(Radii.pill);
     final labelStyle = theme.textTheme.labelMedium?.copyWith(
-      color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-      fontWeight: selected ? FontWeight.w600 : null,
+      color: tint,
+      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+    );
+    // Painted behind the destination rather than around it: a decoration
+    // wrapping the content added its border to the rail's own width and
+    // height (72 became 80).
+    final capsule = Positioned.fill(
+      child: Padding(
+        padding: _capsuleInset,
+        child: AnimatedContainer(
+          duration: Durations.fast,
+          decoration: BoxDecoration(
+            color: selected ? fill : Colors.transparent,
+            borderRadius: radius,
+            border: Border.all(
+              color: selected
+                  ? scheme.outlineVariant.withValues(alpha: dark ? 0.35 : 0.45)
+                  : Colors.transparent,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: scheme.shadow.withValues(
+                        alpha: dark ? 0.22 : 0.10,
+                      ),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+        ),
+      ),
     );
     return Semantics(
       selected: selected,
       child: Tooltip(
         message: destination.label,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(Radii.lg),
-            child: SizedBox(
+        // The slot's width is set on the content, not on the Stack: a
+        // Stack hands its non-positioned child loose constraints, so a
+        // width on the Stack let the icon and label shrink to their own
+        // size and pin to the left of the slot.
+        child: Stack(
+          children: [
+            capsule,
+            SizedBox(
               width: width,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedContainer(
-                      duration: Durations.fast,
-                      width: 56,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: selected ? indicator : Colors.transparent,
-                        borderRadius: BorderRadius.circular(Radii.pill),
-                      ),
-                      child: Icon(
-                        selected ? destination.selectedIcon : destination.icon,
-                        color: selected
-                            ? scheme.onSecondaryContainer
-                            : scheme.onSurfaceVariant,
-                      ),
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: radius,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: GlassNavigationRail.itemPadY,
                     ),
-                    const SizedBox(height: Spacing.xs),
-                    // The rail grows with the text scale only as far as
-                    // [GlassNavigationRail.maxScale], so the label is held
-                    // to the same factor, and scaled down inside that if a
-                    // longer word still will not fit — whole and smaller
-                    // rather than "Pipelin…".
-                    MediaQuery.withClampedTextScaling(
-                      maxScaleFactor: GlassNavigationRail.maxScale,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          destination.label,
-                          style: labelStyle,
-                          maxLines: 1,
-                          softWrap: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: GlassNavigationRail.iconBox,
+                          child: Icon(
+                            selected
+                                ? destination.selectedIcon
+                                : destination.icon,
+                            size: GlassNavigationRail.iconBox,
+                            color: tint,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: GlassNavigationRail.iconGap),
+                        // Held to an exact line box so the bar measures
+                        // [GlassNavigationRail.thicknessFor] whatever the
+                        // font reports. The rail follows the text scale
+                        // only as far as [GlassNavigationRail.maxScale], so
+                        // the label is held to the same factor and scaled
+                        // down inside that if a longer word still will not
+                        // fit — whole and smaller rather than "Pipelin…".
+                        SizedBox(
+                          height: GlassNavigationRail.labelLineFor(context),
+                          child: MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: GlassNavigationRail.maxScale,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                destination.label,
+                                style: labelStyle,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -174,7 +174,7 @@ void main() {
     );
   });
 
-  testWidgets('portrait phone: the same bar, narrower, and whole at xxxL', (
+  testWidgets('portrait phone: a tab bar Apple\'s size, low on the screen', (
     tester,
   ) async {
     // iPhone 17 in portrait: status bar and home indicator only.
@@ -182,15 +182,23 @@ void main() {
     const portraitInsets = EdgeInsets.fromLTRB(0, 62, 0, 34);
     await pump(tester, size: portraitPhone, insets: portraitInsets);
     final r = rail(tester);
-    expect(
-      r.width,
-      closeTo(portraitPhone.width * GlassShellLayout.heightFactor, 0.5),
-    );
-    expect(r.bottom, portraitPhone.height - 34 - GlassShellLayout.margin);
+    // A phone keeps Apple's fixed side margin, not a fraction of the
+    // width, and the bar is 56 pt tall like Apple's own.
+    expect(r.width, portraitPhone.width - 2 * GlassShellLayout.barSideMargin);
+    expect(r.height, GlassNavigationRail.thickness);
+    expect(r.bottom, portraitPhone.height - GlassShellLayout.barBottomMargin);
+    // The point of that margin: the bar sits over the home-indicator
+    // band rather than above it, which left it floating far too high
+    // (Kelly, 2026-09-12).
+    expect(r.bottom, greaterThan(portraitPhone.height - portraitInsets.bottom));
+    // The page's bottom padding is measured from the screen's edge, so it
+    // replaces the home-indicator inset instead of adding to it, and it
+    // clears the whole bar.
     expect(
       seen,
-      const EdgeInsets.only(top: 62, bottom: 34 + GlassShellLayout.barGutter),
+      const EdgeInsets.only(top: 62, bottom: GlassShellLayout.barGutter),
     );
+    expect(portraitPhone.height - seen!.bottom, lessThan(r.top));
 
     // At the largest accessibility size four scaled items would be wider
     // than the bar: they share its width instead of overflowing.
@@ -201,7 +209,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       rail(tester).width,
-      closeTo(portraitPhone.width * GlassShellLayout.heightFactor, 0.5),
+      portraitPhone.width - 2 * GlassShellLayout.barSideMargin,
     );
     for (final label in ['Home', 'Work', 'Repos', 'Pipelines']) {
       expect(find.text(label), findsOneWidget);
@@ -213,15 +221,17 @@ void main() {
   ) async {
     await pump(tester, size: tablet, insets: tabletInsets);
     final r = rail(tester);
+    // A tablet keeps the fraction of the width: a bar 22 pt off each side
+    // of an iPad reads as a slab.
     expect(r.width, closeTo(tablet.width * GlassShellLayout.heightFactor, 0.5));
     expect(r.height, GlassNavigationRail.thickness);
-    expect(r.bottom, tablet.height - 20 - GlassShellLayout.margin);
+    expect(r.bottom, tablet.height - GlassShellLayout.barBottomMargin);
     final b = body(tester);
     expect(b.left, 0);
     expect(b.right, tablet.width);
     expect(
       seen,
-      const EdgeInsets.only(top: 24, bottom: 20 + GlassShellLayout.barGutter),
+      const EdgeInsets.only(top: 24, bottom: GlassShellLayout.barGutter),
     );
   });
 }

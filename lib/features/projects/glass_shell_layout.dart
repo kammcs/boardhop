@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/display_cutout.dart';
+import '../../theme/layout.dart';
 import '../../theme/tokens.dart';
 import '../shared/widgets/glass_navigation_rail.dart';
 
@@ -30,13 +31,15 @@ import '../shared/widgets/glass_navigation_rail.dart';
 ///   whose content scrolls sideways ([bleedsUnderRail], the board) get the
 ///   gutter as safe-area padding instead, so their columns rest clear of
 ///   the rail and slide under it when scrolled.
-/// * In portrait the rail lies along the bottom and pages get its height
-///   as bottom safe-area padding ([barGutter]), so vertical content
-///   scrolls under the bar and its end still clears it, the usual
+/// * In portrait the rail lies along the bottom as a tab bar the size and
+///   place of Apple's own: 56 pt tall, [barBottomMargin] off the bottom
+///   edge of the screen and, on a phone, [barSideMargin] off each side.
+///   Pages get [barGutter] as bottom safe-area padding, so vertical
+///   content scrolls under the bar and its end still clears it, the usual
 ///   home-indicator mechanism.
-/// * The rail spans [heightFactor] of the safe height (or width in
-///   portrait), centered, destinations spread along it; only larger text
-///   can make it longer.
+/// * In landscape the rail spans [heightFactor] of the safe height,
+///   centered, destinations spread along it; only larger text can make it
+///   longer.
 class GlassShellLayout extends StatelessWidget {
   const GlassShellLayout({
     super.key,
@@ -63,9 +66,28 @@ class GlassShellLayout extends StatelessWidget {
   /// Which side of the screen holds the display cutout in landscape.
   final CutoutSide cutoutSide;
 
-  /// Share of the safe height (landscape) or width (portrait) the rail
-  /// spans, centered.
+  /// Share of the safe height (landscape) the rail spans, centered, and of
+  /// the width on a tablet in portrait.
   static const double heightFactor = 0.8;
+
+  /// What the bar along the bottom keeps clear of the screen's bottom
+  /// edge in portrait. Apple's floating tab bar sits *inside* the
+  /// home-indicator band: 20 pt off the edge on an iPhone 17, measured
+  /// off an App Store screenshot (Kelly, 2026-09-12). Clearing the 34 pt
+  /// inset and a 24 pt margin on top of it left ours floating far too
+  /// high, so the bar ignores the bottom inset and takes this instead.
+  static const double barBottomMargin = 20;
+
+  /// What the bar keeps clear of each side of a phone in portrait, again
+  /// Apple's own. A tablet keeps the [heightFactor] fraction instead: a
+  /// bar that wide across an iPad reads as a slab.
+  static const double barSideMargin = 22;
+
+  /// The bar's width in portrait for a screen this wide.
+  static double barWidthFor(double screenWidth) =>
+      Breakpoint.fromWidth(screenWidth).isCompact
+      ? screenWidth - 2 * barSideMargin
+      : screenWidth * heightFactor;
 
   /// Room between the safe edge and the rail for its shadow to fade (its
   /// blur radius).
@@ -81,13 +103,15 @@ class GlassShellLayout extends StatelessWidget {
   static double railGutterFor(BuildContext context) =>
       margin + GlassNavigationRail.widthFor(context) + Spacing.lg;
 
-  /// What a page keeps clear above the bar in portrait, at the ordinary
-  /// text size; [barGutterFor] follows the bar when the text is larger.
+  /// What a page keeps clear at the bottom in portrait, at the ordinary
+  /// text size, measured from the screen's bottom edge: the bar overlaps
+  /// the home-indicator inset, so this replaces that inset rather than
+  /// adding to it. [barGutterFor] follows the bar when the text is larger.
   static const double barGutter =
-      margin + GlassNavigationRail.thickness + Spacing.lg;
+      barBottomMargin + GlassNavigationRail.thickness + Spacing.sm;
 
   static double barGutterFor(BuildContext context) =>
-      margin + GlassNavigationRail.thicknessFor(context) + Spacing.lg;
+      barBottomMargin + GlassNavigationRail.thicknessFor(context) + Spacing.sm;
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +132,9 @@ class GlassShellLayout extends StatelessWidget {
                     padding: inset.copyWith(
                       left: 0,
                       right: 0,
-                      bottom: inset.bottom + barGutterFor(context),
+                      // Measured from the screen's edge, so it already
+                      // covers the home indicator the bar sits over.
+                      bottom: math.max(inset.bottom, barGutterFor(context)),
                     ),
                   ),
                   child: body,
@@ -118,14 +144,13 @@ class GlassShellLayout extends StatelessWidget {
             Positioned(
               left: 0,
               right: 0,
-              bottom: margin,
-              child: SafeArea(
-                top: false,
-                child: Center(
-                  child: FractionallySizedBox(
-                    widthFactor: heightFactor,
-                    child: _rail(Axis.horizontal),
-                  ),
+              // No SafeArea: like Apple's tab bar the glass sits over the
+              // home-indicator band, not above it.
+              bottom: barBottomMargin,
+              child: Center(
+                child: SizedBox(
+                  width: barWidthFor(mq.size.width),
+                  child: _rail(Axis.horizontal),
                 ),
               ),
             ),

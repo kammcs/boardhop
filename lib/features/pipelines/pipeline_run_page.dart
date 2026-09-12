@@ -291,7 +291,7 @@ class _PipelineRunPageState extends State<PipelineRunPage> {
                     child: ContentColumn(
                       child: ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(bottom: Spacing.xxl),
+                        padding: scrollEndPadding(context),
                         children: [
                           _RunHeader(run: run),
                           for (final stage in timeline.stages) ...[

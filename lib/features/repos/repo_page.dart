@@ -238,7 +238,7 @@ class _RepoPageState extends State<RepoPage> {
         child: ContentColumn(
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: Spacing.xxl),
+            padding: scrollEndPadding(context),
             children: [
               if (_loading) const LinearProgressIndicator(),
               if (_error != null)
