@@ -13,6 +13,8 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'form/new_work_item_button.dart';
+import 'form/type_chooser.dart';
 import 'form/work_item_form_page.dart';
 import 'widgets/rich_text_view.dart';
 import 'widgets/work_item_actions.dart';
@@ -65,6 +67,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   /// s32).
   FormSpec? _spec;
 
+  /// The item's linked work items, resolved through the batch read: the
+  /// parent and the children the compact Links row lists (phase 5 builds
+  /// the full Links page).
+  WorkItem? _parent;
+  List<WorkItem> _children = const [];
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +99,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         widget.id,
       );
       _spec = await _formSpec(item);
+      await _loadLinks(repo, item);
       final comments = await repo.comments(
         widget.org,
         widget.project,
@@ -110,6 +119,109 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// Resolves the parent and the children of [item] in one batch read.
+  /// Links are a nicety: a refusal leaves the row off rather than failing
+  /// the page.
+  Future<void> _loadLinks(WorkItemRepository repo, WorkItem item) async {
+    final parentId = item.parentRelation?.targetId;
+    final childIds = <int>[
+      for (final r in item.childRelations)
+        if (r.targetId != null) r.targetId!,
+    ];
+    final ids = <int>[?parentId, ...childIds];
+    if (ids.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _parent = null;
+          _children = const [];
+        });
+      }
+      return;
+    }
+    try {
+      final linked = await repo.batch(widget.org, widget.project, ids);
+      final byId = {for (final w in linked) w.id: w};
+      if (!mounted) return;
+      setState(() {
+        _parent = parentId == null ? null : byId[parentId];
+        _children = [
+          for (final id in childIds)
+            if (byId[id] != null) byId[id]!,
+        ];
+      });
+    } on AdoException {
+      // Keep whatever was shown before; the links row is not the page.
+    }
+  }
+
+  /// "Add child" and "Add related" from the overflow: the child's type
+  /// comes from the backlog level below the parent's (research/11 4.1);
+  /// a related item may be of any type, so the full chooser is shown.
+  Future<void> _addLinked({required bool related}) async {
+    final item = await context
+        .read<WorkItemRepository>()
+        .watchItem(widget.org, widget.id)
+        .first;
+    if (item == null || !mounted) return;
+    final forms = context.read<WorkItemFormRepository>();
+    setState(() => _writing = true);
+    try {
+      Set<String>? limitTo;
+      if (!related) {
+        final backlog = await forms.backlogTypes(widget.org, widget.project);
+        limitTo = backlog.childTypeNames(item.type).toSet();
+      }
+      if (!mounted) return;
+      final data = await loadTypeChooserData(
+        context,
+        org: widget.org,
+        project: widget.project,
+        limitTo: limitTo,
+      );
+      if (!mounted) return;
+      String? typeName = data.model.all.length == 1
+          ? data.model.all.first.name
+          : null;
+      WorkItemTemplate? template;
+      if (typeName == null) {
+        if (data.model.all.isEmpty) return;
+        final choice = await showTypeChooser(
+          context,
+          model: data.model,
+          templates: data.templates,
+        );
+        if (choice == null || !mounted) return;
+        typeName = choice.typeName;
+        template = choice.template;
+      }
+      if (!mounted) return;
+      setState(() => _writing = false);
+      await openWorkItemForm(
+        context,
+        org: widget.org,
+        project: widget.project,
+        typeName: typeName,
+        parentId: widget.id,
+        relation: related ? 'related' : 'child',
+        templateId: template?.id,
+      );
+      if (mounted) await _refresh();
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _writing = false);
     }
   }
 
@@ -294,6 +406,11 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     }
   }
 
+  void _openLinked(WorkItem item) => context.push(
+    '${orgRoute(context, widget.org)}/projects/'
+    '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -321,6 +438,15 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
             tooltip: 'Edit',
             icon: const Icon(Icons.edit_outlined),
             onPressed: _refreshing || _writing ? null : _edit,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            enabled: !_refreshing && !_writing,
+            onSelected: (value) => _addLinked(related: value == 'related'),
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'child', child: Text('Add child')),
+              PopupMenuItem(value: 'related', child: Text('Add related')),
+            ],
           ),
         ],
       ),
@@ -361,6 +487,16 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                           : () => _changeAssignment(item),
                     ),
                     _Facts(item: item),
+                    if (_parent != null || _children.isNotEmpty)
+                      _Section(
+                        title: 'Links',
+                        child: _Links(
+                          parent: _parent,
+                          children: _children,
+                          visuals: _visuals,
+                          onOpen: _openLinked,
+                        ),
+                      ),
                     for (final entry in _longTextFields.entries)
                       if ((item.field<String>(entry.key) ?? '')
                           .trim()
@@ -615,6 +751,73 @@ class _Discussion extends StatelessWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// The compact Links row: the parent and the children with their titles,
+/// each opening that item. The full Links page (add, remove, other link
+/// types) is phase 5.
+class _Links extends StatelessWidget {
+  const _Links({
+    required this.parent,
+    required this.children,
+    required this.visuals,
+    required this.onOpen,
+  });
+
+  final WorkItem? parent;
+  final List<WorkItem> children;
+  final WorkItemVisuals visuals;
+  final ValueChanged<WorkItem> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    Widget row(String caption, WorkItem item) => InkWell(
+      onTap: () => onOpen(item),
+      borderRadius: Radii.chip,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 88,
+              child: Text(
+                caption,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Icon(
+              visuals.typeIcon(item),
+              size: 16,
+              color: visuals.typeColor(context, item),
+            ),
+            const SizedBox(width: Spacing.xs),
+            Expanded(
+              child: Text(
+                '#${item.id} ${item.title}',
+                style: theme.textTheme.bodyMedium,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (parent != null) row('Parent', parent!),
+        for (var i = 0; i < children.length; i++)
+          row(i == 0 ? 'Children (${children.length})' : '', children[i]),
       ],
     );
   }

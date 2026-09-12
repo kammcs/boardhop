@@ -264,6 +264,31 @@ Map<String, String> formatsFromItem(FormSpec spec, WorkItem item) => {
     if (entry.value.type.isMultiline) entry.key: item.formatOf(entry.key),
 };
 
+/// The item a new one is being linked to: the parent of an "Add child", or
+/// the other end of an "Add related" (research/11 §4.1). The header shows it
+/// as one line under the type chip.
+@immutable
+class FormLinkTarget {
+  const FormLinkTarget({
+    required this.id,
+    required this.title,
+    required this.rel,
+    this.url,
+  });
+
+  final int id;
+  final String title;
+
+  /// `System.LinkTypes.Hierarchy-Reverse` (the target is the parent) or
+  /// `System.LinkTypes.Related`.
+  final String rel;
+  final String? url;
+
+  bool get isParent => rel == WorkItemRelation.parentRel;
+
+  String get label => isParent ? 'Child of #$id' : 'Related to #$id';
+}
+
 /// Values, dirty set, errors and the debounced dry run of one create form.
 ///
 /// The widgets read and write through this notifier only, so the same state
@@ -276,8 +301,10 @@ class WorkItemFormState extends ChangeNotifier {
     this.isCreate = true,
     this.original,
     this.readOnly = false,
+    this.link,
     Map<String, String> formats = const {},
     Set<String> dirtyFields = const {},
+    Set<String> richFields = const {},
   }) : pages = pageViewsFor(
          spec,
          renders: isCreate
@@ -288,6 +315,7 @@ class WorkItemFormState extends ChangeNotifier {
        ),
        _formats = {...formats},
        _dirty = {...dirtyFields},
+       _richFields = {...richFields},
        _values = {...initialValues} {
     fieldRefs = fieldRefsFor(groups, withReason: !isCreate);
     for (final group in groups) {
@@ -336,6 +364,9 @@ class WorkItemFormState extends ChangeNotifier {
   /// without a connection (research/11 §4.6, online only).
   final bool readOnly;
 
+  /// The parent (or related item) this new item is being created under.
+  final FormLinkTarget? link;
+
   /// The state the item was loaded in; Reason appears once the user moves
   /// away from it.
   String _originalState = '';
@@ -373,7 +404,7 @@ class WorkItemFormState extends ChangeNotifier {
 
   /// Long-text fields the rich editor filled: their value is already HTML
   /// (or Markdown) and is sent as it stands, never escaped.
-  final Set<String> _richFields = {};
+  final Set<String> _richFields;
 
   /// Controls the layout or the process marks read-only: shown as text on an
   /// existing item, never validated and never sent.
@@ -388,6 +419,11 @@ class WorkItemFormState extends ChangeNotifier {
   /// Errors the server raised for fields this form does not show, and other
   /// refusals: a banner under the header.
   String? bannerError;
+
+  /// One action the banner offers, "Keep draft" after a save that could not
+  /// reach the server (research/11 §4.6).
+  String? bannerActionLabel;
+  VoidCallback? onBannerAction;
 
   bool saving = false;
 
@@ -548,10 +584,30 @@ class WorkItemFormState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setBanner(String? message) {
+  void setBanner(String? message, {String? actionLabel, VoidCallback? action}) {
     bannerError = message;
+    bannerActionLabel = message == null ? null : actionLabel;
+    onBannerAction = message == null ? null : action;
     notifyListeners();
   }
+
+  /// The values a draft keeps: everything the patch would send, encoded the
+  /// way the patch encodes it (identities as `"Name <unique>"`, tags
+  /// joined, dates ISO), so the draft is plain JSON.
+  Map<String, Object?> draftValues() {
+    final out = <String, Object?>{};
+    for (final reference in fieldRefs) {
+      if (isCreate && _neverSentOnCreate.contains(reference)) continue;
+      if (FieldSpec.isBookkeeping(reference)) continue;
+      final raw = _sendable(reference);
+      if (raw == null) continue;
+      out[reference] = WorkItemFormRepository.encodeValue(reference, raw);
+    }
+    return out;
+  }
+
+  /// `html` or `markdown` per field the user chose a format for.
+  Map<String, String> get formats => Map.unmodifiable(_formats);
 
   /// Required and allowed-value checks, run as the user types and before the
   /// dry run. The server stays the authority on everything else.

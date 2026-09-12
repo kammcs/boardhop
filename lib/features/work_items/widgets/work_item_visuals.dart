@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Durations;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/util/format.dart';
@@ -160,11 +160,16 @@ class WorkItemCard extends StatelessWidget {
     required this.visuals,
     this.dragging = false,
     this.badge,
+    this.flash = false,
   });
 
   final WorkItem item;
   final WorkItemVisuals visuals;
   final bool dragging;
+
+  /// Tinted for a moment after the card was just created, the way the
+  /// favorites toast tints the row it scrolled to.
+  final bool flash;
 
   /// Small trailing label, e.g. the swimlane when all lanes are shown.
   final String? badge;
@@ -183,8 +188,10 @@ class WorkItemCard extends StatelessWidget {
       shadowColor: scheme.shadow,
       borderRadius: Radii.card,
       clipBehavior: Clip.antiAlias,
-      child: DecoratedBox(
+      child: AnimatedContainer(
+        duration: Durations.slow,
         decoration: BoxDecoration(
+          color: flash ? scheme.primaryContainer : null,
           border: Border(left: BorderSide(color: typeColor, width: 4)),
         ),
         child: Padding(

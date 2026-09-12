@@ -148,6 +148,56 @@ class IdentityRef extends Equatable {
 
 /// One work item as returned by `wit/workitems` or `workitemsbatch`. Keeps
 /// the raw field map so every screen can read what it needs.
+/// One entry of a work item's `relations[]`: a link to another item, an
+/// attachment or a hyperlink. Only present on a read made with
+/// `$expand=all` or `$expand=relations` (the detail read and a create).
+class WorkItemRelation extends Equatable {
+  const WorkItemRelation({
+    required this.rel,
+    required this.url,
+    this.attributes = const {},
+  });
+
+  factory WorkItemRelation.fromJson(Map<String, dynamic> json) =>
+      WorkItemRelation(
+        rel: json['rel'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        attributes:
+            (json['attributes'] as Map?)?.cast<String, dynamic>() ?? const {},
+      );
+
+  final String rel;
+  final String url;
+  final Map<String, dynamic> attributes;
+
+  Map<String, dynamic> toJson() => {
+    'rel': rel,
+    'url': url,
+    if (attributes.isNotEmpty) 'attributes': attributes,
+  };
+
+  static const parentRel = 'System.LinkTypes.Hierarchy-Reverse';
+  static const childRel = 'System.LinkTypes.Hierarchy-Forward';
+  static const relatedRel = 'System.LinkTypes.Related';
+
+  bool get isParent => rel == parentRel;
+  bool get isChild => rel == childRel;
+  bool get isRelated => rel == relatedRel;
+
+  /// The work item this link points at, or null when it points at anything
+  /// else (an attachment, a commit, a hyperlink).
+  int? get targetId {
+    if (!url.contains('/_apis/wit/workItems/') &&
+        !url.contains('/_apis/wit/workitems/')) {
+      return null;
+    }
+    return int.tryParse(Uri.parse(url).pathSegments.last);
+  }
+
+  @override
+  List<Object?> get props => [rel, url];
+}
+
 class WorkItem extends Equatable {
   const WorkItem({
     required this.id,
@@ -155,6 +205,7 @@ class WorkItem extends Equatable {
     required this.fields,
     this.url,
     this.multilineFieldsFormat = const {},
+    this.relations = const [],
   });
 
   factory WorkItem.fromJson(Map<String, dynamic> json) => WorkItem(
@@ -167,6 +218,10 @@ class WorkItem extends Equatable {
           (k, v) => MapEntry(k.toString(), v.toString()),
         ) ??
         const {},
+    relations: [
+      for (final r in (json['relations'] as List?) ?? const [])
+        if (r is Map) WorkItemRelation.fromJson(r.cast<String, dynamic>()),
+    ],
   );
 
   Map<String, dynamic> toJson() => {
@@ -175,6 +230,8 @@ class WorkItem extends Equatable {
     if (url != null) 'url': url,
     'fields': fields,
     'multilineFieldsFormat': multilineFieldsFormat,
+    if (relations.isNotEmpty)
+      'relations': [for (final r in relations) r.toJson()],
   };
 
   final int id;
@@ -185,6 +242,19 @@ class WorkItem extends Equatable {
   /// `System.Description` → `html` | `markdown`, only present on reads made
   /// without a `fields` filter (spike S5b).
   final Map<String, String> multilineFieldsFormat;
+
+  /// Links to other items, attachments and hyperlinks; empty on a list read
+  /// (only `$expand` brings them back).
+  final List<WorkItemRelation> relations;
+
+  /// The parent link, when the item has one.
+  WorkItemRelation? get parentRelation =>
+      relations.where((r) => r.isParent).firstOrNull;
+
+  List<WorkItemRelation> get childRelations => [
+    for (final r in relations)
+      if (r.isChild) r,
+  ];
 
   T? field<T>(String referenceName) {
     final v = fields[referenceName];
@@ -231,6 +301,7 @@ class WorkItem extends Equatable {
     url: url,
     fields: {...fields, ...updates},
     multilineFieldsFormat: multilineFieldsFormat,
+    relations: relations,
   );
 
   @override

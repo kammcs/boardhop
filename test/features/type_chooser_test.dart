@@ -186,5 +186,130 @@ void main() {
       expect(picked?.typeName, 'Bug');
       expect(picked?.template?.id, 'abc');
     });
+
+    testWidgets('the scratch team template sits under Task with its note', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final model = buildTypeChooserModel(types: _types(), backlog: _backlog());
+      // The template spike w20 created on the scratch team.
+      const template = WorkItemTemplate(
+        id: 'edae8a24-9850-401b-9d0c-7df212025c56',
+        name: 'Boardhop spike task',
+        workItemTypeName: 'Task',
+        description: 'Scratch template for the Boardhop type chooser',
+      );
+      TypeChoice? picked;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async => picked = await showTypeChooser(
+                  context,
+                  model: model,
+                  templates: const {
+                    'Task': [template],
+                  },
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Blank'), findsOneWidget);
+      expect(find.text('Boardhop spike task'), findsOneWidget);
+      expect(
+        find.text('Scratch template for the Boardhop type chooser'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Boardhop spike task'));
+      await tester.pumpAndSettle();
+      expect(picked?.typeName, 'Task');
+      expect(picked?.template?.id, 'edae8a24-9850-401b-9d0c-7df212025c56');
+      expect(picked?.resumesDraft, isFalse);
+    });
+
+    testWidgets('a draft leads the sheet and can be resumed or deleted', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final model = buildTypeChooserModel(types: _types(), backlog: _backlog());
+      final draft = WorkItemDraft(
+        project: 'DevOps Mobile App',
+        type: 'Task',
+        savedAt: DateTime.now().subtract(const Duration(minutes: 5)),
+        values: const {'System.Title': 'Half typed'},
+      );
+      final untitled = WorkItemDraft(
+        project: 'DevOps Mobile App',
+        type: 'Bug',
+        savedAt: DateTime.now().subtract(const Duration(minutes: 9)),
+        values: const {'Microsoft.VSTS.Common.Priority': 1},
+      );
+      TypeChoice? picked;
+      final deleted = <WorkItemDraft>[];
+      Future<void> open(WidgetTester tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: BoardhopTheme.light(),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async => picked = await showTypeChooser(
+                    context,
+                    model: model,
+                    drafts: [draft, untitled],
+                    onDeleteDraft: deleted.add,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+      }
+
+      await open(tester);
+      expect(
+        find.text('Resume draft: Task - Half typed - 5m ago'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Resume draft: Bug - (untitled) - 9m ago'),
+        findsOneWidget,
+      );
+
+      // The trailing delete icon drops the row without closing the sheet.
+      await tester.tap(find.byIcon(Icons.delete_outline).last);
+      await tester.pumpAndSettle();
+      expect(deleted.single.type, 'Bug');
+      expect(
+        find.text('Resume draft: Bug - (untitled) - 9m ago'),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('Resume draft: Task - Half typed - 5m ago'));
+      await tester.pumpAndSettle();
+      expect(picked?.typeName, 'Task');
+      expect(picked?.resumesDraft, isTrue);
+      expect(picked?.draft?.title, 'Half typed');
+    });
   });
 }

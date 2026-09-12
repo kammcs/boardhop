@@ -252,6 +252,9 @@ class WorkItemRepository {
         multilineFieldsFormat: item.multilineFieldsFormat.isEmpty
             ? old.multilineFieldsFormat
             : item.multilineFieldsFormat,
+        // A list read carries no relations either; keep the ones the detail
+        // read stored for this revision.
+        relations: item.relations.isEmpty ? old.relations : item.relations,
       );
     }
     await _db

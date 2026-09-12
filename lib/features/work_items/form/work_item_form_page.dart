@@ -43,7 +43,9 @@ class WorkItemFormPage extends StatefulWidget {
     this.lane,
     this.laneField,
     this.parentId,
+    this.relation,
     this.templateId,
+    this.resumeDraft = false,
     this.asDialog = false,
   }) : itemId = null;
 
@@ -63,7 +65,9 @@ class WorkItemFormPage extends StatefulWidget {
        lane = null,
        laneField = null,
        parentId = null,
-       templateId = null;
+       relation = null,
+       templateId = null,
+       resumeDraft = false;
 
   final String org;
   final String project;
@@ -87,8 +91,19 @@ class WorkItemFormPage extends StatefulWidget {
 
   final String? lane;
   final String? laneField;
+
+  /// The item the new one is linked to: its parent by default, or the other
+  /// end of a Related link when [relation] is `related` (research/11 §4.1).
   final int? parentId;
+
+  /// `related` for "Add related"; null or `child` for "Add child".
+  final String? relation;
+
   final String? templateId;
+
+  /// Opens with the project's saved draft for this type applied and dirty
+  /// (the chooser's "Resume draft" row).
+  final bool resumeDraft;
 
   /// Shown inside `showDialog` rather than as a route: the form pops the
   /// dialog itself and the view behind it stays visible.
@@ -98,10 +113,41 @@ class WorkItemFormPage extends StatefulWidget {
   State<WorkItemFormPage> createState() => _WorkItemFormPageState();
 }
 
+/// What a board column's `+` asked for and the create could not carry: only
+/// the type's initial state is legal on a create (spike w18), and the
+/// board's lane field is not part of the form's layout, so both are written
+/// by a second, `test /rev`-guarded patch (research/11 4.1).
+List<Map<String, Object?>> boardFollowUpOps(
+  WorkItem created, {
+  String? stateName,
+  String? laneField,
+  String? lane,
+}) {
+  final ops = <Map<String, Object?>>[];
+  if (stateName != null && stateName.isNotEmpty && created.state != stateName) {
+    ops.add({'op': 'add', 'path': '/fields/System.State', 'value': stateName});
+  }
+  if (laneField != null &&
+      laneField.isNotEmpty &&
+      lane != null &&
+      lane.isNotEmpty &&
+      created.field<String>(laneField) != lane) {
+    ops.add({'op': 'add', 'path': '/fields/$laneField', 'value': lane});
+  }
+  return ops;
+}
+
+/// What the discard dialog of a new item answers.
+enum _DraftChoice { cancel, discard, keep }
+
 class _WorkItemFormPageState extends State<WorkItemFormPage> {
   WorkItemFormState? _form;
   FormSources? _sources;
-  String? _parentUrl;
+
+  /// The parent (or related item) a create form was opened from, once it
+  /// has been read: the header's "Child of #..." line and the relation the
+  /// create patch carries.
+  FormLinkTarget? _link;
   String? _error;
   bool _loading = true;
 
@@ -304,16 +350,24 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       if (defaults.iterationPath != null) {
         prefill['System.IterationPath'] = defaults.iterationPath;
       }
-      if (widget.laneField != null && widget.lane != null) {
-        prefill[widget.laneField!] = widget.lane;
-      }
+      // The board's lane is a WEF field the layout does not carry, so it
+      // never rides in the create patch; the follow-up patch writes it
+      // beside the column's state (spike w18).
       if (widget.parentId != null) {
         final parents = await workItems.batch(widget.org, widget.project, [
           widget.parentId!,
         ]);
         final parent = parents.isEmpty ? null : parents.first;
         if (parent != null) {
-          _parentUrl = parent.url;
+          _link = FormLinkTarget(
+            id: parent.id,
+            title: parent.title,
+            rel: widget.relation == 'related'
+                ? WorkItemRelation.relatedRel
+                : WorkItemRelation.parentRel,
+            url: parent.url,
+          );
+          // A child starts where its parent lives (research/11 4.7).
           if (parent.areaPath != null) {
             prefill['System.AreaPath'] = parent.areaPath;
           }
@@ -332,19 +386,41 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         prefill.addAll(template.fields);
       }
 
+      // The project's saved draft for this type, applied last and dirty
+      // from the start, so Create is live and closing offers to keep it
+      // again (research/11 4.6).
+      final draft = widget.resumeDraft
+          ? await repo.draft(widget.org, widget.project, widget.typeName)
+          : null;
+
       final values = await _initialValues(spec, prefill);
+      final dirty = <String>{};
+      final rich = <String>{};
+      if (draft != null) {
+        for (final entry in draft.values.entries) {
+          values[entry.key] = decodeFieldValue(spec, entry.key, entry.value);
+          dirty.add(entry.key);
+          // A draft keeps long text exactly as the patch would send it, so
+          // it is never escaped a second time on the way back out.
+          if (spec.fields[entry.key]?.type == FieldType.html) {
+            rich.add(entry.key);
+          }
+        }
+      }
       final sources = await _pickerSources(team: team, defaults: defaults);
-      final format = await FormPrefs.descriptionFormat(
-        widget.org,
-        widget.project,
-      );
+      final format =
+          draft?.formats['System.Description'] ??
+          await FormPrefs.descriptionFormat(widget.org, widget.project);
 
       if (!mounted) return;
       final form = WorkItemFormState(
         spec: spec,
         initialValues: values,
         onDependentFieldChanged: _dryRun,
-        formats: {'System.Description': format},
+        formats: {...?draft?.formats, 'System.Description': format},
+        dirtyFields: dirty,
+        richFields: rich,
+        link: _link,
       );
       _disposeForm();
       form.addListener(_onFormChanged);
@@ -453,7 +529,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
           widget.org,
           widget.project,
           widget.typeName,
-          form.buildOps(parentUrl: _parentUrl),
+          _createOps(form),
         );
       }
       form.clearServerErrors();
@@ -520,7 +596,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         WorkItemFormRepository.buildCreateOps({
           ...prefill,
           'System.Title': prefill['System.Title'] ?? 'New ${widget.typeName}',
-        }, parentUrl: _parentUrl),
+        }, parentUrl: (_link?.isParent ?? false) ? _link!.url : null),
       );
       for (final reference in references) {
         if (reference == 'System.Title') continue;
@@ -541,8 +617,57 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     for (final entry in prefill.entries) {
       values[entry.key] = decodeFieldValue(spec, entry.key, entry.value);
     }
-    if (widget.stateName != null) values['System.State'] = spec.initialState;
+    // A board column's `+` shows where the card will land, not where the
+    // server starts it: the state is read-only on create and is patched in
+    // as soon as the item exists (spike w18).
+    if (widget.stateName != null) values['System.State'] = widget.stateName;
     return values;
+  }
+
+  /// The create patch: the form's fields plus the link the form was opened
+  /// from -- a parent as the `Hierarchy-Reverse` relation, anything else as
+  /// a plain relation (spike w16: both ride in the create call).
+  List<Map<String, Object?>> _createOps(WorkItemFormState form) {
+    final link = _link;
+    final url = link?.url;
+    if (link == null || url == null || url.isEmpty) return form.buildOps();
+    return link.isParent
+        ? form.buildOps(parentUrl: url)
+        : form.buildOps(
+            relations: [
+              {'rel': link.rel, 'url': url},
+            ],
+          );
+  }
+
+  /// Keeps what has been typed as the project's draft for this type, so the
+  /// chooser can offer it again (research/11 4.6). Never for an edit.
+  Future<void> _keepDraft() async {
+    final form = _form;
+    if (form == null || widget.isEdit) return;
+    final link = _link;
+    await _repo.saveDraft(
+      widget.org,
+      WorkItemDraft(
+        project: widget.project,
+        type: widget.typeName,
+        savedAt: DateTime.now(),
+        values: form.draftValues(),
+        formats: form.formats,
+        relations: [
+          if (link?.url != null) {'rel': link!.rel, 'url': link.url},
+        ],
+        prefill: {
+          if (widget.teamId != null) 'team': widget.teamId,
+          if (widget.stateName != null) 'state': widget.stateName,
+          if (widget.lane != null) 'lane': widget.lane,
+          if (widget.laneField != null) 'laneField': widget.laneField,
+          if (widget.parentId != null) 'parent': '${widget.parentId}',
+          if (widget.relation != null) 'rel': widget.relation,
+          if (widget.templateId != null) 'template': widget.templateId,
+        },
+      ),
+    );
   }
 
   /// The dialog pops itself; the route goes through go_router.
@@ -554,33 +679,67 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     }
   }
 
+  /// Closing a dirty form. An edit asks to discard; a new item offers to
+  /// keep what has been typed as a draft first (research/11 4.6).
   Future<bool> _confirmDiscard() async {
     final form = _form;
     if (form == null || !form.isDirty) return true;
-    final leave = await showDialog<bool>(
+    if (widget.isEdit) {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog.adaptive(
+          title: const Text('Discard your changes?'),
+          content: const Text(
+            'The item keeps the values it has on the server.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep editing'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      );
+      return leave ?? false;
+    }
+    final choice = await showDialog<_DraftChoice>(
       context: context,
       builder: (context) => AlertDialog.adaptive(
-        title: Text(
-          widget.isEdit ? 'Discard your changes?' : 'Discard this work item?',
-        ),
-        content: Text(
-          widget.isEdit
-              ? 'The item keeps the values it has on the server.'
-              : 'It has not been created yet.',
+        title: const Text('Keep this work item as a draft?'),
+        content: const Text(
+          'It has not been created yet. A draft is offered again in the '
+          'type chooser.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep editing'),
+            onPressed: () => Navigator.of(context).pop(_DraftChoice.cancel),
+            child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(context).pop(_DraftChoice.discard),
             child: const Text('Discard'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(_DraftChoice.keep),
+            child: const Text('Keep draft'),
           ),
         ],
       ),
     );
-    return leave ?? false;
+    switch (choice) {
+      case null:
+      case _DraftChoice.cancel:
+        return false;
+      case _DraftChoice.discard:
+        return true;
+      case _DraftChoice.keep:
+        await _keepDraft();
+        return true;
+    }
   }
 
   /// Saves an edit: the dry run with `test /rev`, then the real patch with
@@ -649,19 +808,63 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     }
     form.setSaving(true);
     final repo = _repo;
-    final ops = form.buildOps(parentUrl: _parentUrl);
+    final workItems = context.read<WorkItemRepository>();
+    final ops = _createOps(form);
     final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
     final base = projectRoute(context, widget.org, widget.project);
+    void openAction(int id) => router.push('$base/work-items/$id');
     try {
       await repo.validate(widget.org, widget.project, widget.typeName, ops);
-      final item = await repo.create(
+      var item = await repo.create(
         widget.org,
         widget.project,
         widget.typeName,
         ops,
       );
       await FormPrefs.setLastType(widget.org, widget.project, widget.typeName);
+      await _repo.clearDraft(widget.org, widget.project, widget.typeName);
+      // A board column's state and lane are a second call: a new item can
+      // only start in the type's initial state (spike w18).
+      final followUp = boardFollowUpOps(
+        item,
+        stateName: widget.stateName,
+        laneField: widget.laneField,
+        lane: widget.lane,
+      );
+      if (followUp.isNotEmpty) {
+        try {
+          item = await workItems.patch(
+            widget.org,
+            widget.project,
+            item,
+            followUp,
+          );
+        } on AdoException catch (e) {
+          // The item exists; only the move failed. Say so and leave it
+          // open to the user rather than pretending nothing happened.
+          if (!mounted) return;
+          final created = item;
+          _close(created.id);
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${widget.typeName} #${created.id} created in '
+                  '${created.state} (could not move to ${widget.stateName}): '
+                  '${e.message}',
+                ),
+                action: SnackBarAction(
+                  label: 'Open',
+                  onPressed: () => openAction(created.id),
+                ),
+                persist: false,
+              ),
+            );
+          return;
+        }
+      }
       if (!mounted) return;
       _close(item.id);
       messenger
@@ -671,7 +874,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
             content: Text('${widget.typeName} #${item.id} created'),
             action: SnackBarAction(
               label: 'Open',
-              onPressed: () => router.push('$base/work-items/${item.id}'),
+              onPressed: () => openAction(item.id),
             ),
             // Flutter 3.47 keeps a snackbar with an action open until it is
             // dismissed and queues every later one behind it.
@@ -691,11 +894,34 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       form
         ..applyRuleErrors(e)
         ..revealFirstError();
+    } on AdoNetworkException {
+      // Nothing is queued (research/11 4.6), but what was typed need not be
+      // lost: the banner offers to keep it as a draft.
+      form.setBanner(
+        'Creating a work item needs a connection',
+        actionLabel: 'Keep draft',
+        action: _keepDraftFromBanner,
+      );
     } on AdoException catch (e) {
-      form.setBanner(e.message);
+      form.setBanner(
+        e.message,
+        actionLabel: 'Keep draft',
+        action: _keepDraftFromBanner,
+      );
     } finally {
       if (mounted) form.setSaving(false);
     }
+  }
+
+  /// The banner's "Keep draft": saves and closes the form, as the discard
+  /// dialog's Keep draft does.
+  Future<void> _keepDraftFromBanner() async {
+    await _keepDraft();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Draft kept')));
+    _close();
   }
 
   @override

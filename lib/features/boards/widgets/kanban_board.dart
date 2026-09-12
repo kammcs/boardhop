@@ -74,6 +74,7 @@ class KanbanBoard<T extends Object> extends StatefulWidget {
     this.onCardTap,
     this.onDragStart,
     this.onDragEnd,
+    this.columnFooterBuilder,
     this.canDrag = true,
   });
 
@@ -87,6 +88,12 @@ class KanbanBoard<T extends Object> extends StatefulWidget {
   final ValueChanged<T>? onCardTap;
   final VoidCallback? onDragStart;
   final VoidCallback? onDragEnd;
+
+  /// Sits at the bottom of a column, under the last card: the board's
+  /// "New item" row (research/11 4.1). Return null for a column that does
+  /// not offer one.
+  final Widget? Function(BuildContext context, int column)? columnFooterBuilder;
+
   final bool canDrag;
 
   @override
@@ -295,8 +302,20 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>> {
                 itemCount: column.cards.length + 1,
                 itemBuilder: (context, i) {
                   if (i == column.cards.length) {
-                    // Trailing drop zone so the end of a column is reachable.
-                    return _Gap(open: candidates.isNotEmpty, minHeight: 72);
+                    final footer = widget.columnFooterBuilder?.call(context, c);
+                    // Trailing drop zone so the end of a column is
+                    // reachable, then the column's own "New item" row.
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Gap(
+                          open: candidates.isNotEmpty,
+                          minHeight: footer == null ? 72 : 0,
+                        ),
+                        ?footer,
+                        if (footer != null) const SizedBox(height: 72),
+                      ],
+                    );
                   }
                   return _slot(c, i, column.cards[i]);
                 },

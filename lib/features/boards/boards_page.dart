@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,15 +9,19 @@ import '../../core/http/ado_exceptions.dart';
 import '../../core/util/format.dart';
 import '../../data/models/board.dart';
 import '../../data/models/work_item.dart';
+import '../../data/models/work_item_form.dart';
 import '../../data/repositories/board_repository.dart';
+import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
-import '../work_items/form/new_work_item_button.dart';
-import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
+import '../work_items/form/new_work_item_button.dart';
+import '../work_items/form/type_chooser.dart';
+import '../work_items/widgets/work_item_visuals.dart';
 import '../work_items/widgets/work_view_switch.dart';
 import 'widgets/kanban_board.dart';
+import 'widgets/new_card_row.dart';
 
 /// The team's Kanban board. Columns become drop slots (a split column is two
 /// slots, Doing and Done); swimlanes are a filter chip row, with every lane
@@ -45,6 +51,20 @@ class _BoardsPageState extends State<BoardsPage> {
   bool _loading = false;
   int _movesInFlight = 0;
 
+  /// The team the board belongs to, which the create form takes its area
+  /// and iteration defaults from (research/11 4.7).
+  String? _teamId;
+
+  /// A card just created from a column's `+`, tinted for a moment.
+  int? _flashId;
+  Timer? _flashTimer;
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +81,9 @@ class _BoardsPageState extends State<BoardsPage> {
     try {
       final types = await workItems.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
+      // The board is read without a team segment, so it is the project's
+      // default team's board; the create form needs that team by id.
+      _teamId ??= await boards.defaultTeamId(widget.org, widget.project);
       if (_boards.isEmpty) {
         _boards = await boards.boards(widget.org, widget.project);
       }
@@ -239,6 +262,94 @@ class _BoardsPageState extends State<BoardsPage> {
     }
   }
 
+  /// The `+` at the bottom of a column: the board's types only, the
+  /// column's state and the lane on screen pre-filled, and the card lands
+  /// in that column once the follow-up patch has run (research/11 4.1).
+  Future<void> _newCard(int slotIndex) async {
+    final board = _board;
+    if (board == null || slotIndex >= board.slots.length) return;
+    final slot = board.slots[slotIndex];
+    final column = slot.column;
+    final offered = <String>{
+      for (final type in board.workItemTypes)
+        if (column.stateMappings.containsKey(type)) type,
+    };
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final data = await loadTypeChooserData(
+        context,
+        org: widget.org,
+        project: widget.project,
+        teamId: _teamId,
+        limitTo: offered.isEmpty ? board.workItemTypes : offered,
+      );
+      if (!mounted) return;
+      var typeName = data.model.all.isEmpty ? null : data.model.all.first.name;
+      WorkItemTemplate? template;
+      WorkItemDraft? draft;
+      if (data.model.all.length > 1 || data.drafts.isNotEmpty) {
+        final choice = await showTypeChooser(
+          context,
+          model: data.model,
+          templates: data.templates,
+          drafts: data.drafts,
+          onDeleteDraft: (d) => context
+              .read<WorkItemFormRepository>()
+              .clearDraft(widget.org, widget.project, d.type),
+        );
+        if (choice == null || !mounted) return;
+        typeName = choice.typeName;
+        template = choice.template;
+        draft = choice.draft;
+      }
+      if (typeName == null) return;
+      final params = BoardRepository.newCardParams(
+        board,
+        column,
+        typeName,
+        lane: _lane,
+      );
+      final id = await openWorkItemForm(
+        context,
+        org: widget.org,
+        project: widget.project,
+        typeName: typeName,
+        teamId: _teamId,
+        stateName: params.state,
+        laneField: params.laneField,
+        lane: params.lane,
+        templateId: template?.id ?? draft?.prefill['template'],
+        parentId: int.tryParse(draft?.prefill['parent'] ?? ''),
+        relation: draft?.prefill['rel'],
+        resumeDraft: draft != null,
+      );
+      if (!mounted) return;
+      await _load();
+      if (id != null && mounted) _flash(id);
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Tints the new card for a moment, the way the repository list tints the
+  /// row a favorites toast scrolled to.
+  void _flash(int id) {
+    _flashTimer?.cancel();
+    setState(() => _flashId = id);
+    _flashTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _flashId = null);
+    });
+  }
+
   void _open(WorkItem item) => context.push(
     '${orgRoute(context, widget.org)}/projects/'
     '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
@@ -296,9 +407,11 @@ class _BoardsPageState extends State<BoardsPage> {
           NewWorkItemButton(
             org: widget.org,
             project: widget.project,
-            // The board itself loads with the project's default team;
-            // phase 4 passes the board's team here.
-            onCreated: () => _load(),
+            teamId: _teamId,
+            onCreated: (id) async {
+              await _load();
+              if (id != null && mounted) _flash(id);
+            },
           ),
           // The switch stays rightmost so it never moves when an action
           // appears next to it.
@@ -398,10 +511,19 @@ class _BoardsPageState extends State<BoardsPage> {
                       // (spike S10); a move the user may not make fails as a
                       // work item write and is reverted with the message.
                       canDrag: true,
+                      columnFooterBuilder: (context, i) =>
+                          // One row per column: the Done half of a split
+                          // column shares the column's state mapping.
+                          board.slots[i].done == true
+                          ? null
+                          : NewCardRow(
+                              onTap: _loading ? null : () => _newCard(i),
+                            ),
                       cardBuilder: (context, item, dragging) => WorkItemCard(
                         item: item,
                         visuals: _visuals,
                         dragging: dragging,
+                        flash: item.id == _flashId,
                         badge: board.hasLanes && _lane == null
                             ? (BoardRepository.laneOf(board, item).isEmpty
                                   ? null

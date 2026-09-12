@@ -162,7 +162,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           NewWorkItemButton(
             org: widget.org,
             project: widget.project,
-            onCreated: _refresh,
+            onCreated: (_) => _refresh(),
           ),
           // The switch stays rightmost so it never moves when an action
           // appears next to it.

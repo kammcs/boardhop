@@ -258,6 +258,25 @@ class BoardRepository {
     return out;
   }
 
+  /// What a column's `+` pre-fills on the create form (research/11 4.1):
+  /// the state the column maps for that type, and the board's row field
+  /// with the lane when one lane is on screen. The default lane carries no
+  /// value, so it is skipped.
+  static ({String? state, String? laneField, String? lane}) newCardParams(
+    Board board,
+    BoardColumn column,
+    String typeName, {
+    String? lane,
+  }) {
+    final rowField = board.fields.rowField;
+    final named = lane != null && lane.isNotEmpty && rowField != null;
+    return (
+      state: column.stateMappings[typeName],
+      laneField: named ? rowField : null,
+      lane: named ? lane : null,
+    );
+  }
+
   /// The JSON Patch for a move: the WEF column field plus the mapped state
   /// (both, the settled safe default from spike w02), and the Done flag only
   /// for a split column.

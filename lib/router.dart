@@ -143,7 +143,9 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                                 lane: query['lane'],
                                 laneField: query['laneField'],
                                 parentId: int.tryParse(query['parent'] ?? ''),
+                                relation: query['rel'],
                                 templateId: query['template'],
+                                resumeDraft: query['draft'] == '1',
                               );
                             },
                           ),

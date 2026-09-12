@@ -545,8 +545,15 @@ class FormHeader extends StatefulWidget {
 }
 
 class _FormHeaderState extends State<FormHeader> {
-  late final TextEditingController _title = TextEditingController(
-    text: widget.state.title,
+  /// The raw value, not `state.title`: a template's leading text
+  /// ("[template] ") keeps its trailing space and the caret sits after it.
+  late final TextEditingController _title = TextEditingController.fromValue(
+    TextEditingValue(
+      text: widget.state.value('System.Title') as String? ?? '',
+      selection: TextSelection.collapsed(
+        offset: (widget.state.value('System.Title') as String? ?? '').length,
+      ),
+    ),
   );
 
   @override
@@ -590,11 +597,50 @@ class _FormHeaderState extends State<FormHeader> {
       label: Text(state.spec.type.name),
       visualDensity: VisualDensity.compact,
     );
+    // "Add child" and "Add related" say what the new item hangs off, since
+    // the link itself is only visible after the item exists (phase 5).
+    final link = state.link;
+    final linkLine = link == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: Spacing.xs),
+            child: Row(
+              children: [
+                Icon(
+                  link.isParent
+                      ? Icons.account_tree_outlined
+                      : Icons.link_outlined,
+                  size: 14,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: Spacing.xs),
+                Flexible(
+                  child: Text(
+                    link.title.isEmpty
+                        ? link.label
+                        : '${link.label} - ${link.title}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
     // On a new item the server owns the state (spike w16); on an existing
     // one the chip opens the legal transitions (research/11 §4.3).
+    final initialState = state.spec.initialState;
+    final moves =
+        state.isCreate &&
+        initialState != null &&
+        initialState.isNotEmpty &&
+        initialState != state.stateName;
     final stateChip = state.isCreate
         ? Tooltip(
-            message: 'A new item starts in its first state',
+            message: moves
+                ? 'Created in $initialState, then moved to ${state.stateName}'
+                : 'A new item starts in its first state',
             child: Chip(
               avatar: StateDot(
                 color: visuals.stateColorFor(context, probe, state.stateName),
@@ -759,6 +805,13 @@ class _FormHeaderState extends State<FormHeader> {
                         ),
                       ),
                     ),
+                    if (state.bannerActionLabel != null) ...[
+                      const SizedBox(width: Spacing.sm),
+                      TextButton(
+                        onPressed: state.saving ? null : state.onBannerAction,
+                        child: Text(state.bannerActionLabel!),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -799,6 +852,7 @@ class _FormHeaderState extends State<FormHeader> {
                 ),
               ],
             ),
+            ?linkLine,
             Wrap(
               spacing: Spacing.sm,
               runSpacing: Spacing.sm,
@@ -815,6 +869,7 @@ class _FormHeaderState extends State<FormHeader> {
                 ],
               ],
             ),
+            ?linkLine,
             const SizedBox(height: Spacing.sm),
             titleSlot,
             Wrap(

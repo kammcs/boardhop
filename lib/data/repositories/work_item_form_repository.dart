@@ -490,8 +490,15 @@ class WorkItemFormRepository {
     refresh: refresh,
   );
 
+  /// Teams that answered with no templates at all. An empty list is the
+  /// answer that ages worst -- a team's first template would otherwise stay
+  /// invisible for a day (spike w20 added one to the scratch team and the
+  /// chooser kept the empty day-old copy) -- so it is re-read once per
+  /// session before the chooser gives up on templates.
+  final Set<String> _emptyTemplates = {};
+
   /// The team's templates, optionally for one type. The list read carries
-  /// no `fields` map; [template] fetches one with its values.
+  /// no `fields` map (spike w20); [template] fetches one with its values.
   Future<List<WorkItemTemplate>> templates(
     String org,
     String project,
@@ -499,20 +506,28 @@ class WorkItemFormRepository {
     String? typeName,
     bool refresh = false,
   }) async {
-    final all = await _cached<List<WorkItemTemplate>>(
-      templatesKey(org, project, team),
-      () async => _list(
-        await _client.getJson(
-          org: org,
-          project: project,
-          team: team,
-          path: '_apis/wit/templates',
-          apiVersion: apiVersion,
-        ),
-      ),
-      (json) => [for (final t in _asMaps(json)) WorkItemTemplate.fromJson(t)],
-      refresh: refresh,
-    );
+    final key = templatesKey(org, project, team);
+    Future<List<WorkItemTemplate>> read({required bool fresh}) =>
+        _cached<List<WorkItemTemplate>>(
+          key,
+          () async => _list(
+            await _client.getJson(
+              org: org,
+              project: project,
+              team: team,
+              path: '_apis/wit/templates',
+              apiVersion: apiVersion,
+            ),
+          ),
+          (json) => [
+            for (final t in _asMaps(json)) WorkItemTemplate.fromJson(t),
+          ],
+          refresh: fresh,
+        );
+    var all = await read(fresh: refresh);
+    if (all.isEmpty && !refresh && _emptyTemplates.add(key)) {
+      all = await read(fresh: true);
+    }
     if (typeName == null) return all;
     return [
       for (final t in all)
@@ -853,10 +868,35 @@ class WorkItemFormRepository {
   Future<void> saveDraft(String org, WorkItemDraft draft) =>
       _cache.put(draftKey(org, draft.project, draft.type), draft.toJson());
 
+  /// The draft of one type, or null when there is none. A draft older than
+  /// [WorkItemDraft.maxAge] is dropped on read rather than offered.
   Future<WorkItemDraft?> draft(String org, String project, String type) async {
     final entry = await _cache.get(draftKey(org, project, type));
     if (entry == null || entry.json is! Map) return null;
-    return WorkItemDraft.fromJson((entry.json as Map).cast<String, dynamic>());
+    final draft = WorkItemDraft.fromJson(
+      (entry.json as Map).cast<String, dynamic>(),
+    );
+    if (draft.isExpired()) {
+      await clearDraft(org, project, type);
+      return null;
+    }
+    return draft;
+  }
+
+  /// Every draft of one project, newest first, expired ones dropped: the
+  /// type chooser's "Resume draft" rows.
+  Future<List<WorkItemDraft>> drafts(String org, String project) async {
+    final prefix = draftKey(org, project, '');
+    final keys = await _cache.keysWithPrefix(prefix);
+    final out = <WorkItemDraft>[];
+    for (final key in keys) {
+      final type = key.substring(prefix.length);
+      if (type.isEmpty) continue;
+      final draft = await this.draft(org, project, type);
+      if (draft != null && !draft.isEmpty) out.add(draft);
+    }
+    out.sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    return out;
   }
 
   Future<void> clearDraft(String org, String project, String type) =>

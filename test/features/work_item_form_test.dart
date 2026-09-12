@@ -82,6 +82,77 @@ void main() {
       state.dispose();
     });
 
+    testWidgets('a board column shows the state the card will land in', (
+      tester,
+    ) async {
+      // The form opens with the column's state, which stays read-only: only
+      // the initial state is legal on a create (spike w18).
+      final state = newState(values: {'System.State': 'Active'});
+      await _pump(tester, state);
+      expect(find.text('Active'), findsOneWidget);
+      expect(
+        find.byTooltip('Created in New, then moved to Active'),
+        findsOneWidget,
+      );
+      expect(
+        state.buildOps().any((op) => '${op['path']}'.endsWith('System.State')),
+        isFalse,
+      );
+      state.dispose();
+    });
+
+    testWidgets('Add child names the parent under the type chip', (
+      tester,
+    ) async {
+      final state = WorkItemFormState(
+        spec: spec,
+        initialValues: {'System.State': spec.initialState},
+        link: const FormLinkTarget(
+          id: 15546,
+          title: 'Phase 2 story',
+          rel: WorkItemRelation.parentRel,
+          url: 'https://dev.azure.com/o/p/_apis/wit/workItems/15546',
+        ),
+      );
+      await _pump(tester, state);
+      expect(find.text('Child of #15546 - Phase 2 story'), findsOneWidget);
+      state.dispose();
+    });
+
+    testWidgets('Add related says so instead', (tester) async {
+      final state = WorkItemFormState(
+        spec: spec,
+        initialValues: {'System.State': spec.initialState},
+        link: const FormLinkTarget(
+          id: 15503,
+          title: 'Login fails',
+          rel: WorkItemRelation.relatedRel,
+          url: 'https://dev.azure.com/o/p/_apis/wit/workItems/15503',
+        ),
+      );
+      await _pump(tester, state);
+      expect(find.text('Related to #15503 - Login fails'), findsOneWidget);
+      state.dispose();
+    });
+
+    testWidgets('a template fills the title and keeps its trailing space', (
+      tester,
+    ) async {
+      // Spike w20's template: `System.Title` is "[template] ", which the
+      // user types on the end of.
+      final state = newState(
+        values: {
+          'System.Title': '[template] ',
+          'Microsoft.VSTS.Common.Priority': '1',
+        },
+      );
+      await _pump(tester, state);
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.controller?.text, '[template] ');
+      expect(field.controller?.selection.baseOffset, '[template] '.length);
+      state.dispose();
+    });
+
     test('the groups follow the web, all columns flattened top-down', () {
       final state = newState();
       expect(state.groups.map((g) => g.label).toList(), const [

@@ -1061,6 +1061,32 @@ class BacklogTypes extends Equatable {
     ];
   }
 
+  /// Bug sits on the requirement level (`asRequirements`) or the task level
+  /// (`asTasks`); `off` keeps it off the backlogs altogether. The service
+  /// already places it in the right level's `workItemTypes`, so this is
+  /// only what the value is called.
+  bool get bugsAreRequirements => bugsBehavior == 'asRequirements';
+  bool get bugsAreTasks => bugsBehavior == 'asTasks';
+
+  /// The types a child of [parentType] may take: the level below the
+  /// parent's (Epic → Feature → User Story → Task), or the parent's own
+  /// level when it is already the last one, which is where a Task's or an
+  /// `asTasks` Bug's child belongs (research/11 §4.1).
+  ///
+  /// A type that is on no backlog at all (Issue, Test Case, or a Bug in a
+  /// project with `bugsBehavior: off`) gets the task level.
+  List<String> childTypeNames(String parentType) {
+    if (levels.isEmpty) return const [];
+    final index = levels.indexWhere((l) => l.typeNames.contains(parentType));
+    final level = index < 0
+        ? levels.last
+        : levels[index + 1 < levels.length ? index + 1 : index];
+    return [
+      for (final name in level.typeNames)
+        if (!hiddenTypes.contains(name)) name,
+    ];
+  }
+
   Map<String, dynamic> toJson() => {
     'levels': [for (final l in levels) l.toJson()],
     'hiddenTypes': hiddenTypes.toList(),
@@ -1198,6 +1224,8 @@ class WorkItemDraft extends Equatable {
     required this.savedAt,
     this.values = const {},
     this.relations = const [],
+    this.formats = const {},
+    this.prefill = const {},
   });
 
   factory WorkItemDraft.fromJson(Map<String, dynamic> json) => WorkItemDraft(
@@ -1214,11 +1242,37 @@ class WorkItemDraft extends Equatable {
       for (final r in (json['relations'] as List?) ?? const [])
         if (r is Map) r.cast<String, Object?>(),
     ],
+    formats:
+        (json['formats'] as Map?)?.map(
+          (k, v) => MapEntry(k.toString(), '$v'),
+        ) ??
+        const {},
+    prefill:
+        (json['prefill'] as Map?)?.map(
+          (k, v) => MapEntry(k.toString(), v == null ? null : '$v'),
+        ) ??
+        const {},
   );
+
+  /// A draft the chooser stops offering: a month is long enough that the
+  /// item was either created another way or forgotten (research/11 §4.6).
+  static const maxAge = Duration(days: 30);
 
   final String project;
   final String type;
   final DateTime savedAt;
+
+  /// `html` or `markdown` per long-text field, so a Markdown description
+  /// comes back as Markdown.
+  final Map<String, String> formats;
+
+  /// The context the form was opened with — `team`, `state`, `lane`,
+  /// `laneField`, `parent`, `rel`, `template` — so resuming lands in the
+  /// same column, lane or parent it was started from.
+  final Map<String, String?> prefill;
+
+  bool isExpired([DateTime? now]) =>
+      (now ?? DateTime.now()).difference(savedAt) > maxAge;
 
   /// Field reference name → value, as the patch would send it.
   final Map<String, Object?> values;
@@ -1241,6 +1295,12 @@ class WorkItemDraft extends Equatable {
     'savedAt': savedAt.toUtc().toIso8601String(),
     'values': {for (final e in values.entries) e.key: _encodable(e.value)},
     'relations': relations,
+    if (formats.isNotEmpty) 'formats': formats,
+    if (prefill.isNotEmpty)
+      'prefill': {
+        for (final e in prefill.entries)
+          if (e.value != null) e.key: e.value,
+      },
   };
 
   static Object? _encodable(Object? value) => value is DateTime
@@ -1250,7 +1310,15 @@ class WorkItemDraft extends Equatable {
       : value;
 
   @override
-  List<Object?> get props => [project, type, savedAt, values, relations];
+  List<Object?> get props => [
+    project,
+    type,
+    savedAt,
+    values,
+    relations,
+    formats,
+    prefill,
+  ];
 }
 
 /// An uploaded attachment: what `wit/attachments` answers, plus the file

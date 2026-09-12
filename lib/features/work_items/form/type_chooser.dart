@@ -6,13 +6,28 @@ import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
 import '../../boards/widgets/kanban_board.dart' show tintApiColor;
 
-/// What the user picked: a type, and the template to pre-fill it with when
-/// the team has any (null is "Blank").
+/// What the user picked: a type, and either the template to pre-fill it
+/// with (null is "Blank") or the draft to resume.
 class TypeChoice {
-  const TypeChoice(this.typeName, {this.template});
+  const TypeChoice(this.typeName, {this.template, this.draft});
 
   final String typeName;
   final WorkItemTemplate? template;
+
+  /// The project's saved draft of this type, when the user picked its
+  /// "Resume draft" row (research/11 4.6).
+  final WorkItemDraft? draft;
+
+  bool get resumesDraft => draft != null;
+}
+
+/// How one draft reads in the chooser: `Task - Login fails - 5m ago`. The
+/// age uses the app's own relative wording (`5m`, `3h`, `Sep 3`).
+String draftRowLabel(WorkItemDraft draft) {
+  final title = (draft.title ?? '').trim();
+  final age = relativeTime(draft.savedAt);
+  return '${draft.type} - ${title.isEmpty ? '(untitled)' : title} - '
+      '${age == 'just now' ? age : '$age ago'}';
 }
 
 /// The chooser's rows: the backlog levels top-down, then everything else
@@ -78,6 +93,8 @@ Future<TypeChoice?> showTypeChooser(
   BuildContext context, {
   required TypeChooserModel model,
   Map<String, List<WorkItemTemplate>> templates = const {},
+  List<WorkItemDraft> drafts = const [],
+  ValueChanged<WorkItemDraft>? onDeleteDraft,
   RenderBox? anchor,
 }) {
   if (context.breakpoint.isCompact || anchor == null) {
@@ -86,7 +103,12 @@ Future<TypeChoice?> showTypeChooser(
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => _TypeSheet(model: model, templates: templates),
+      builder: (context) => _TypeSheet(
+        model: model,
+        templates: templates,
+        drafts: drafts,
+        onDeleteDraft: onDeleteDraft,
+      ),
     );
   }
   final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
@@ -106,7 +128,7 @@ Future<TypeChoice?> showTypeChooser(
       overlay.size.width - bottomRight.dx,
       0,
     ),
-    items: _menuItems(context, model, templates),
+    items: _menuItems(context, model, templates, drafts, onDeleteDraft),
   );
 }
 
@@ -114,6 +136,8 @@ List<PopupMenuEntry<TypeChoice>> _menuItems(
   BuildContext context,
   TypeChooserModel model,
   Map<String, List<WorkItemTemplate>> templates,
+  List<WorkItemDraft> drafts,
+  ValueChanged<WorkItemDraft>? onDeleteDraft,
 ) {
   final items = <PopupMenuEntry<TypeChoice>>[];
   void addType(WorkItemType type, {String? caption}) {
@@ -151,6 +175,35 @@ List<PopupMenuEntry<TypeChoice>> _menuItems(
     }
   }
 
+  for (final draft in drafts) {
+    items.add(
+      PopupMenuItem<TypeChoice>(
+        value: TypeChoice(draft.type, draft: draft),
+        child: Row(
+          children: [
+            const Icon(Icons.history_outlined, size: 20),
+            const SizedBox(width: Spacing.md),
+            Flexible(
+              child: Text(
+                'Resume draft: ${draftRowLabel(draft)}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (onDeleteDraft != null)
+              IconButton(
+                tooltip: 'Delete draft',
+                icon: const Icon(Icons.delete_outline, size: 20),
+                onPressed: () {
+                  onDeleteDraft(draft);
+                  Navigator.of(context).pop();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+  if (drafts.isNotEmpty) items.add(const PopupMenuDivider());
   if (model.recent != null) {
     addType(model.recent!, caption: 'Recent');
     items.add(const PopupMenuDivider());
@@ -167,14 +220,30 @@ List<PopupMenuEntry<TypeChoice>> _menuItems(
   return items;
 }
 
-class _TypeSheet extends StatelessWidget {
-  const _TypeSheet({required this.model, required this.templates});
+class _TypeSheet extends StatefulWidget {
+  const _TypeSheet({
+    required this.model,
+    required this.templates,
+    this.drafts = const [],
+    this.onDeleteDraft,
+  });
 
   final TypeChooserModel model;
   final Map<String, List<WorkItemTemplate>> templates;
+  final List<WorkItemDraft> drafts;
+  final ValueChanged<WorkItemDraft>? onDeleteDraft;
+
+  @override
+  State<_TypeSheet> createState() => _TypeSheetState();
+}
+
+class _TypeSheetState extends State<_TypeSheet> {
+  late final List<WorkItemDraft> _drafts = [...widget.drafts];
 
   @override
   Widget build(BuildContext context) {
+    final model = widget.model;
+    final templates = widget.templates;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return SizedBox(
@@ -190,6 +259,25 @@ class _TypeSheet extends StatelessWidget {
             ),
             child: Text('New work item', style: theme.textTheme.titleMedium),
           ),
+          for (final draft in _drafts)
+            ListTile(
+              leading: const Icon(Icons.history_outlined),
+              title: Text('Resume draft: ${draftRowLabel(draft)}'),
+              trailing: widget.onDeleteDraft == null
+                  ? null
+                  : IconButton(
+                      tooltip: 'Delete draft',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () {
+                        widget.onDeleteDraft!(draft);
+                        setState(() => _drafts.remove(draft));
+                      },
+                    ),
+              onTap: () =>
+                  Navigator.of(context)
+                      .pop(TypeChoice(draft.type, draft: draft)),
+            ),
+          if (_drafts.isNotEmpty) const Divider(height: 1),
           if (model.recent != null) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(
