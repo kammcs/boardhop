@@ -23,6 +23,12 @@ import 'work_item_form_state.dart';
 /// the type plus the pre-fills answers with State, Reason, Area and
 /// Iteration (spike w16) — merged over the field defaults and under
 /// whatever the caller pre-filled (a board column, a parent, a template).
+///
+/// Arrangement: full screen on a phone; a centered box up to 960 dp wide and
+/// 90% of the height from medium up (research/11 §4.5). The `+` of the Work
+/// app bar shows that box as a real dialog over the list or board
+/// ([asDialog]); the route renders the same box centered on its own page, so
+/// a deep link works at any width.
 class WorkItemFormPage extends StatefulWidget {
   const WorkItemFormPage({
     super.key,
@@ -35,6 +41,7 @@ class WorkItemFormPage extends StatefulWidget {
     this.laneField,
     this.parentId,
     this.templateId,
+    this.asDialog = false,
   });
 
   final String org;
@@ -54,6 +61,10 @@ class WorkItemFormPage extends StatefulWidget {
   final String? laneField;
   final int? parentId;
   final String? templateId;
+
+  /// Shown inside `showDialog` rather than as a route: the form pops the
+  /// dialog itself and the view behind it stays visible.
+  final bool asDialog;
 
   @override
   State<WorkItemFormPage> createState() => _WorkItemFormPageState();
@@ -139,8 +150,16 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       }
 
       final values = await _initialValues(spec, prefill);
-      final members = await _teamMembers(team);
+      // The Graph reads take the project **id**; the route carries the name
+      // and `graph/descriptors/{name}` answers HTTP 400, which used to send
+      // the people search org-wide (spike s30).
+      final projectId = await _projectId(repo);
+      final members = await _teamMembers(projectId, team);
       final recent = await FormPrefs.recentAssignees(
+        widget.org,
+        widget.project,
+      );
+      final format = await FormPrefs.descriptionFormat(
         widget.org,
         widget.project,
       );
@@ -150,6 +169,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         spec: spec,
         initialValues: values,
         onDependentFieldChanged: _dryRun,
+        formats: {'System.Description': format},
       );
       _form?.dispose();
       setState(() {
@@ -157,8 +177,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
         _sources = FormSources(
           identities: IdentitySource(
             members: () async => members,
-            search: (query) =>
-                repo.searchPeople(widget.org, widget.project, query),
+            search: (query) => repo.searchPeople(widget.org, projectId, query),
             resolve: (person) => repo.resolveIdentityId(widget.org, person),
             me: _meAmong(members, me),
             recent: recent,
@@ -171,10 +190,21 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
               widget.project,
               areas: areas,
             ),
+            teamIterations: () =>
+                repo.teamIterations(widget.org, widget.project, team: team),
             currentIterationPath: defaults.currentIterationPath,
             backlogIterationPath: defaults.backlogIterationPath,
           ),
           tags: () => repo.tags(widget.org, widget.project),
+          onFormatChosen: (reference, chosen) {
+            if (reference == 'System.Description') {
+              FormPrefs.setDescriptionFormat(
+                widget.org,
+                widget.project,
+                chosen,
+              );
+            }
+          },
         );
       });
     } on AdoAuthException catch (e) {
@@ -214,9 +244,19 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     }
   }
 
-  Future<List<IdentityRef>> _teamMembers(String team) async {
+  /// The project's id, falling back to the name when the read fails: the
+  /// search then behaves as it did before, org-wide.
+  Future<String> _projectId(WorkItemFormRepository repo) async {
     try {
-      return await _repo.teamMembers(widget.org, widget.project, team);
+      return await repo.projectId(widget.org, widget.project);
+    } on AdoException {
+      return widget.project;
+    }
+  }
+
+  Future<List<IdentityRef>> _teamMembers(String projectId, String team) async {
+    try {
+      return await _repo.teamMembers(widget.org, projectId, team);
     } on AdoException {
       // The picker still has "Me", the search and the recents.
       return const [];
@@ -298,6 +338,15 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     return value;
   }
 
+  /// The dialog pops itself; the route goes through go_router.
+  void _close([Object? result]) {
+    if (widget.asDialog) {
+      Navigator.of(context).pop(result);
+    } else {
+      context.pop(result);
+    }
+  }
+
   Future<bool> _confirmDiscard() async {
     final form = _form;
     if (form == null || !form.isDirty) return true;
@@ -345,7 +394,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       );
       await FormPrefs.setLastType(widget.org, widget.project, widget.typeName);
       if (!mounted) return;
-      context.pop(item.id);
+      _close(item.id);
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -382,79 +431,124 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final form = _form;
     final saving = form?.saving ?? false;
+    final boxed = widget.asDialog || !context.breakpoint.isCompact;
     return PopScope(
       canPop: !(form?.isDirty ?? false) && !saving,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop || saving) return;
-        if (await _confirmDiscard() && context.mounted) context.pop();
+        if (await _confirmDiscard() && mounted) _close();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: 'Close',
-            icon: const Icon(Icons.close),
-            onPressed: saving ? null : () => context.pop(),
-          ),
-          title: Text('New ${widget.typeName}'),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Spacing.sm),
-              child: FilledButton(
-                onPressed: form == null || saving ? null : _create,
-                child: saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Create'),
-              ),
-            ),
-          ],
+      child: boxed ? _box(context) : _fullScreen(context),
+    );
+  }
+
+  /// Phone: a route of its own.
+  Widget _fullScreen(BuildContext context) =>
+      Scaffold(appBar: _appBar(primary: true), body: _content(context));
+
+  /// Tablet: the centered box, either as the dialog the `+` shows or
+  /// centered on this route's own page (research/11 §4.5).
+  Widget _box(BuildContext context) {
+    final box = Dialog(
+      insetPadding: const EdgeInsets.all(Spacing.xl),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 960,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
         ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_loading || saving) const LinearProgressIndicator(),
-            if (_error != null)
-              Material(
-                color: scheme.errorContainer,
-                child: ListTile(
-                  leading: Icon(
-                    Icons.error_outline,
-                    color: scheme.onErrorContainer,
-                  ),
-                  title: Text(
-                    _error!,
-                    style: TextStyle(color: scheme.onErrorContainer),
-                  ),
-                  trailing: TextButton(
-                    onPressed: _loading ? null : _load,
-                    child: const Text('Retry'),
-                  ),
-                ),
-              ),
-            if (form == null)
-              Expanded(
-                child: Center(
-                  child: _loading
-                      ? const CircularProgressIndicator.adaptive()
-                      : const SizedBox.shrink(),
-                ),
-              )
-            else
-              Expanded(
-                child: ContentColumn(
-                  child: WorkItemFormBody(state: form, sources: _sources),
-                ),
-              ),
-          ],
+        // Fill the width the box is allowed, rather than shrink-wrapping
+        // whatever the form happens to measure.
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _appBar(primary: false),
+              Expanded(child: _content(context)),
+            ],
+          ),
         ),
       ),
+    );
+    return widget.asDialog ? box : Scaffold(body: Center(child: box));
+  }
+
+  PreferredSizeWidget _appBar({required bool primary}) {
+    final saving = _form?.saving ?? false;
+    return AppBar(
+      primary: primary,
+      leading: IconButton(
+        tooltip: 'Close',
+        icon: const Icon(Icons.close),
+        onPressed: saving
+            ? null
+            : () async {
+                if (await _confirmDiscard() && mounted) _close();
+              },
+      ),
+      title: Text('New ${widget.typeName}'),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Spacing.sm),
+          child: FilledButton(
+            onPressed: _form == null || saving ? null : _create,
+            child: saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Create'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final form = _form;
+    final saving = form?.saving ?? false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_loading || saving) const LinearProgressIndicator(),
+        if (_error != null)
+          Material(
+            color: scheme.errorContainer,
+            child: ListTile(
+              leading: Icon(
+                Icons.error_outline,
+                color: scheme.onErrorContainer,
+              ),
+              title: Text(
+                _error!,
+                style: TextStyle(color: scheme.onErrorContainer),
+              ),
+              trailing: TextButton(
+                onPressed: _loading ? null : _load,
+                child: const Text('Retry'),
+              ),
+            ),
+          ),
+        if (form == null)
+          Expanded(
+            child: Center(
+              child: _loading
+                  ? const CircularProgressIndicator.adaptive()
+                  : const SizedBox.shrink(),
+            ),
+          )
+        else
+          Expanded(
+            child: ContentColumn(
+              child: WorkItemFormBody(state: form, sources: _sources),
+            ),
+          ),
+      ],
     );
   }
 }

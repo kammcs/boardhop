@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../data/models/work_item_form.dart';
@@ -10,12 +12,17 @@ import 'form_field_slot.dart';
 class ClassificationSource {
   const ClassificationSource({
     required this.nodes,
+    this.teamIterations,
     this.currentIterationPath,
     this.backlogIterationPath,
   });
 
   /// The root node of the areas or the iterations, ten levels deep.
   final Future<ClassificationNode?> Function({required bool areas}) nodes;
+
+  /// Every iteration of the team, for the picker's "Team" section (spike
+  /// s30). Null in a test, which falls back to the two paths below.
+  final Future<List<TeamIteration>> Function()? teamIterations;
 
   /// The team's sprint, marked in the list (spike s25).
   final String? currentIterationPath;
@@ -31,6 +38,24 @@ Future<String?> pickClassificationPath(
   required bool areas,
   String? current,
 }) {
+  // A tablet gets the same tree in a centered dialog (research/11 §4.5).
+  if (!context.breakpoint.isCompact) {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: _TreeSheet(
+            title: title,
+            source: source,
+            areas: areas,
+            current: current,
+            dialog: true,
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
@@ -51,12 +76,16 @@ class _TreeSheet extends StatefulWidget {
     required this.source,
     required this.areas,
     this.current,
+    this.dialog = false,
   });
 
   final String title;
   final ClassificationSource source;
   final bool areas;
   final String? current;
+
+  /// Centered dialog rather than a bottom sheet.
+  final bool dialog;
 
   @override
   State<_TreeSheet> createState() => _TreeSheetState();
@@ -65,6 +94,7 @@ class _TreeSheet extends StatefulWidget {
 class _TreeSheetState extends State<_TreeSheet> {
   final _query = TextEditingController();
   ClassificationNode? _root;
+  List<TeamIteration> _iterations = const [];
   bool _loading = true;
   String? _error;
 
@@ -72,6 +102,7 @@ class _TreeSheetState extends State<_TreeSheet> {
   void initState() {
     super.initState();
     _load();
+    _loadIterations();
   }
 
   Future<void> _load() async {
@@ -85,20 +116,50 @@ class _TreeSheetState extends State<_TreeSheet> {
     }
   }
 
+  /// The team's own iterations head the list; a failure just leaves the
+  /// section on the current and backlog paths.
+  Future<void> _loadIterations() async {
+    final read = widget.source.teamIterations;
+    if (widget.areas || read == null) return;
+    try {
+      final rows = await read();
+      if (mounted) setState(() => _iterations = rows);
+    } catch (_) {
+      // The whole tree is still there.
+    }
+  }
+
   @override
   void dispose() {
     _query.dispose();
     super.dispose();
   }
 
-  List<String> get _teamPaths => widget.areas
-      ? const []
-      : <String>{
-          if (widget.source.currentIterationPath != null)
-            widget.source.currentIterationPath!,
-          if (widget.source.backlogIterationPath != null)
-            widget.source.backlogIterationPath!,
-        }.toList();
+  /// The team's iterations in wire order, the current one marked; the
+  /// backlog iteration follows when it is not one of them.
+  List<({String path, String? badge})> get _teamPaths {
+    if (widget.areas) return const [];
+    final out = <({String path, String? badge})>[];
+    final seen = <String>{};
+    for (final iteration in _iterations) {
+      if (iteration.path.isEmpty || !seen.add(iteration.path)) continue;
+      out.add((
+        path: iteration.path,
+        badge: iteration.isCurrent ? 'Current' : null,
+      ));
+    }
+    if (out.isEmpty) {
+      final current = widget.source.currentIterationPath;
+      if (current != null && seen.add(current)) {
+        out.add((path: current, badge: 'Current'));
+      }
+    }
+    final backlog = widget.source.backlogIterationPath;
+    if (backlog != null && seen.add(backlog)) {
+      out.add((path: backlog, badge: 'Backlog'));
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,17 +173,18 @@ class _TreeSheetState extends State<_TreeSheet> {
               if (n.path.toLowerCase().contains(query)) n,
           ];
     final teamPaths = _teamPaths;
+    final height = MediaQuery.sizeOf(context).height;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.85,
+        height: widget.dialog ? math.min(560, height * 0.8) : height * 0.85,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 Spacing.lg,
-                0,
+                widget.dialog ? Spacing.lg : 0,
                 Spacing.lg,
                 Spacing.sm,
               ),
@@ -171,14 +233,12 @@ class _TreeSheetState extends State<_TreeSheet> {
                         style: theme.textTheme.labelMedium,
                         color: scheme.onSurfaceVariant,
                       ),
-                      for (final path in teamPaths)
+                      for (final row in teamPaths)
                         _PathTile(
-                          path: path,
-                          selected: path == widget.current,
-                          badge: path == widget.source.currentIterationPath
-                              ? 'Current'
-                              : null,
-                          onTap: () => Navigator.of(context).pop(path),
+                          path: row.path,
+                          selected: row.path == widget.current,
+                          badge: row.badge,
+                          onTap: () => Navigator.of(context).pop(row.path),
                         ),
                       const Divider(height: 1),
                       _Caption(
@@ -241,11 +301,21 @@ class _PathTile extends StatelessWidget {
   Widget build(BuildContext context) => ListTile(
     dense: true,
     title: Text(path, overflow: TextOverflow.ellipsis),
-    trailing: selected
-        ? const Icon(Icons.check)
-        : badge == null
+    // The badge and the tick sit together: the current iteration is
+    // usually the one already picked.
+    trailing: badge == null && !selected
         ? null
-        : Chip(label: Text(badge!), visualDensity: VisualDensity.compact),
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (badge != null)
+                Chip(label: Text(badge!), visualDensity: VisualDensity.compact),
+              if (selected) ...[
+                const SizedBox(width: Spacing.sm),
+                const Icon(Icons.check),
+              ],
+            ],
+          ),
     onTap: onTap,
   );
 }

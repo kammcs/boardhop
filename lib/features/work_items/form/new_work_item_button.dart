@@ -11,6 +11,7 @@ import '../../../theme/theme.dart';
 import '../../shared/account_scope.dart';
 import 'form_prefs.dart';
 import 'type_chooser.dart';
+import 'work_item_form_page.dart';
 
 /// The `+` of the Work app bar, immediately left of the Items/Board pill on
 /// both views (research/11 §4.1). Icon only on a phone, icon and label from
@@ -73,15 +74,38 @@ class _NewWorkItemButtonState extends State<NewWorkItemButton> {
         anchor: anchor,
       );
       if (choice == null || !mounted) return;
-      final base = projectRoute(context, widget.org, widget.project);
-      final query = {
-        'type': choice.typeName,
-        if (choice.template != null) 'template': choice.template!.id,
-        if (widget.teamId != null) 'team': widget.teamId!,
-      };
-      await context.push(
-        Uri(path: '$base/work-items/new', queryParameters: query).toString(),
-      );
+      // From medium up the form is a centered dialog over the list or the
+      // board, which stays visible around it (research/11 §4.5); a phone
+      // pushes the route.
+      if (context.breakpoint.isCompact) {
+        final base = projectRoute(context, widget.org, widget.project);
+        final query = {
+          'type': choice.typeName,
+          if (choice.template != null) 'template': choice.template!.id,
+          if (widget.teamId != null) 'team': widget.teamId!,
+        };
+        await context.push(
+          Uri(path: '$base/work-items/new', queryParameters: query).toString(),
+        );
+      } else {
+        await showDialog<int>(
+          context: context,
+          // The account's repositories are provided by the `/a/:account`
+          // shell route, so the dialog has to live in the navigator below
+          // it; the root navigator is above them and `context.read` there
+          // throws.
+          useRootNavigator: false,
+          builder: (_) => WorkItemFormPage(
+            org: widget.org,
+            project: widget.project,
+            typeName: choice.typeName,
+            teamId: widget.teamId,
+            templateId: choice.template?.id,
+            asDialog: true,
+          ),
+        );
+      }
+      if (!mounted) return;
       widget.onCreated?.call();
     } on AdoAuthException catch (e) {
       if (mounted) {

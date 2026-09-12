@@ -7,6 +7,7 @@ import 'package:boardhop/data/repositories/work_item_form_repository.dart';
 import 'package:boardhop/features/work_items/form/controls/boolean_control.dart';
 import 'package:boardhop/features/work_items/form/controls/date_control.dart';
 import 'package:boardhop/features/work_items/form/controls/picklist_control.dart';
+import 'package:boardhop/features/work_items/form/controls/rich_text_control.dart';
 import 'package:boardhop/features/work_items/form/controls/text_control.dart';
 import 'package:boardhop/features/work_items/form/work_item_form_body.dart';
 import 'package:boardhop/features/work_items/form/work_item_form_state.dart';
@@ -259,4 +260,184 @@ void main() {
       state.dispose();
     });
   });
+
+  group('the tablet arrangement', () {
+    final storySpec = _specFor('user_story');
+
+    test('the layout keeps the web sections as columns', () {
+      final state = WorkItemFormState(spec: spec);
+      expect(state.pages.length, 1);
+      final columns = state.pages.first.columns;
+      expect(columns.map((c) => c.percentWidth).toList(), const [50, 50]);
+      expect(columns.first.groups.map((g) => g.label).toList(), const [
+        'Repro Steps',
+        'System Info',
+      ]);
+      expect(columns.last.groups.map((g) => g.label).toList(), const [
+        'Planning',
+        'Effort (Hours)',
+        'Deployment',
+        'Development',
+        'Related Work',
+        'System Info',
+      ]);
+      // The phone order is those columns flattened, as phase 1 settled.
+      expect(state.groups.map((g) => g.label).toList(), [
+        ...columns.first.groups.map((g) => g.label),
+        ...columns.last.groups.map((g) => g.label),
+      ]);
+      state.dispose();
+    });
+
+    testWidgets('1000 dp wide puts the sections next to each other', (
+      tester,
+    ) async {
+      final state = newState();
+      await _pump(tester, state, size: const Size(1000, 800));
+
+      final left = tester.getTopLeft(find.text('Repro Steps').first);
+      final right = tester.getTopLeft(find.text('Planning').first);
+      expect(right.dx, greaterThan(left.dx + 200));
+      // The first card of each column starts on the same line.
+      expect((right.dy - left.dy).abs(), lessThan(1));
+      state.dispose();
+    });
+
+    testWidgets('500 dp wide keeps one column', (tester) async {
+      final state = newState();
+      await _pump(tester, state, size: const Size(500, 2400));
+
+      final left = tester.getTopLeft(find.text('Repro Steps').first);
+      final planning = tester.getTopLeft(find.text('Planning').first);
+      expect(planning.dx, left.dx);
+      expect(planning.dy, greaterThan(left.dy));
+      state.dispose();
+    });
+
+    testWidgets('a custom page becomes a tab', (tester) async {
+      final state = WorkItemFormState(spec: _withCustomPage(storySpec));
+      await _pump(tester, state, size: const Size(1000, 800));
+
+      expect(find.byType(TabBar), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Details'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'QA'), findsOneWidget);
+      state.dispose();
+    });
+  });
+
+  group('the rich text control', () {
+    final storySpec = _specFor('user_story');
+
+    WorkItemFormState storyState({Map<String, String> formats = const {}}) =>
+        WorkItemFormState(
+          spec: storySpec,
+          initialValues: {'System.State': storySpec.initialState},
+          formats: formats,
+        );
+
+    testWidgets('an empty description shows the placeholder once', (
+      tester,
+    ) async {
+      final state = storyState();
+      await _pump(tester, state);
+
+      expect(find.byType(RichTextControl), findsWidgets);
+      expect(find.text('Add description…'), findsOneWidget);
+      // The card title says "Description"; the control does not repeat it.
+      expect(find.text('Description'), findsOneWidget);
+      state.dispose();
+    });
+
+    testWidgets('Done writes the editor content back into the form', (
+      tester,
+    ) async {
+      // Markdown, so the test never has to boot the editor's WebView; the
+      // Done path is the same one the HTML editor takes.
+      final state = storyState(formats: {'System.Description': 'markdown'});
+      await _pump(tester, state);
+
+      await tester.tap(find.text('Add description…'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RichTextEditor), findsOneWidget);
+      // The format choice is offered on a new item's description.
+      expect(
+        find.widgetWithText(SegmentedButton<String>, 'Markdown'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(RichTextEditor),
+          matching: find.byType(TextField),
+        ),
+        '**bold** list',
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      expect(state.value('System.Description'), '**bold** list');
+      expect(state.isMarkdown('System.Description'), isTrue);
+      final ops = state.buildOps();
+      Object? valueOf(String path) => ops.firstWhere(
+        (op) => op['path'] == path,
+        orElse: () => const {},
+      )['value'];
+      // Markdown rides on the create patch as the format op (spike w01)
+      // and the text is never escaped into HTML.
+      expect(valueOf('/fields/System.Description'), '**bold** list');
+      expect(valueOf('/multilineFieldsFormat/System.Description'), 'Markdown');
+      state.dispose();
+    });
+
+    test('HTML from the editor goes into the patch as it stands', () {
+      final state = storyState();
+      state.setRichValue(
+        'System.Description',
+        '<div>a &amp; b<br><b>bold</b></div>',
+      );
+      final ops = state.buildOps();
+      Object? valueOf(String path) => ops.firstWhere(
+        (op) => op['path'] == path,
+        orElse: () => const {},
+      )['value'];
+      expect(
+        valueOf('/fields/System.Description'),
+        '<div>a &amp; b<br><b>bold</b></div>',
+      );
+      // No format op: HTML is the default (spike w01).
+      expect(ops.every((op) => '${op['path']}'.startsWith('/fields/')), isTrue);
+      state.dispose();
+    });
+  });
+}
+
+/// The stock scratch types have one page; this adds a custom one so the
+/// tablet tab bar can be checked.
+FormSpec _withCustomPage(FormSpec spec) {
+  final json = spec.toJson();
+  (json['layout'] as Map)['pages'] = [
+    ...(spec.layout.toJson()['pages'] as List),
+    {
+      'label': 'QA',
+      'kind': 'custom',
+      'sections': [
+        {
+          'percentWidth': 100,
+          'groups': [
+            {
+              'label': 'QA',
+              'controls': [
+                {
+                  'field': 'Microsoft.VSTS.Common.Risk',
+                  'label': 'Risk',
+                  'type': 'FieldControl',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  return FormSpec.fromJson(json.cast<String, dynamic>());
 }

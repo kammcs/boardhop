@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -13,10 +11,11 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import 'widgets/html_field_editor.dart';
 
 /// Edit the title and the description of a work item. HTML descriptions go
-/// through `html_editor_enhanced` (spike F3: content is injected through
-/// the WebView with a JSON string literal, and the editor keeps a stable
+/// through the shared [HtmlFieldEditor] (spike F3: content is injected into
+/// the WebView as a JSON string literal, and the editor keeps a stable
 /// slot); Markdown descriptions are edited as text. Saved with `test /rev`
 /// so a stale copy is refused, not overwritten.
 class WorkItemEditPage extends StatefulWidget {
@@ -41,42 +40,9 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
   final _title = TextEditingController();
   final _markdown = TextEditingController();
   final _html = HtmlEditorController();
-  late final Widget _editor = HtmlEditor(
-    controller: _html,
-    htmlEditorOptions: const HtmlEditorOptions(
-      hint: 'Description',
-      adjustHeightForKeyboard: false,
-    ),
-    htmlToolbarOptions: const HtmlToolbarOptions(
-      toolbarPosition: ToolbarPosition.aboveEditor,
-      toolbarType: ToolbarType.nativeScrollable,
-      defaultToolbarButtons: [
-        StyleButtons(),
-        FontButtons(clearAll: false, subscript: false, superscript: false),
-        ListButtons(listStyles: false),
-        ParagraphButtons(
-          textDirection: false,
-          lineHeight: false,
-          caseConverter: false,
-        ),
-        InsertButtons(
-          picture: false,
-          audio: false,
-          video: false,
-          otherFile: false,
-          table: true,
-          hr: true,
-        ),
-      ],
-    ),
-    otherOptions: const OtherOptions(height: 380),
-    callbacks: Callbacks(onInit: () => _editorReady = true),
-  );
 
   WorkItem? _item;
   String _format = 'html';
-  bool _editorReady = false;
-  bool _contentPushed = false;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -112,7 +78,6 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
         }
         _loading = false;
       });
-      _pushHtmlWhenReady();
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -129,43 +94,6 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
           _loading = false;
         });
       }
-    }
-  }
-
-  /// The plugin's `setText` mangles backslashes and newlines; inject the
-  /// HTML as a JSON string literal once the WebView reports ready.
-  Future<void> _pushHtmlWhenReady() async {
-    if (_format != 'html' || _contentPushed) return;
-    for (var i = 0; i < 40 && !_editorReady; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    if (!mounted || _contentPushed) return;
-    final html = _item?.description ?? '';
-    if (html.isEmpty) {
-      _contentPushed = true;
-      return;
-    }
-    // The WebView channel can lag onInit by a few frames; retry briefly.
-    for (var attempt = 0; attempt < 10 && mounted; attempt++) {
-      final dynamic web = _html.editorController;
-      try {
-        if (web == null) {
-          _html.setText(html);
-        } else {
-          await web.evaluateJavascript(
-            source:
-                "(function(){ try { \$('#summernote-2').summernote('code', ${jsonEncode(html)}); "
-                "return 'ok'; } catch (e) { return 'js error: ' + e; } })()",
-          );
-        }
-        _contentPushed = true;
-        return;
-      } on MissingPluginException {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-      }
-    }
-    if (mounted) {
-      setState(() => _error = 'The editor did not load; try again.');
     }
   }
 
@@ -338,7 +266,13 @@ class _WorkItemEditPageState extends State<WorkItemEditPage> {
               Padding(
                 key: const ValueKey('description-editor'),
                 padding: Spacing.pageHorizontal,
-                child: _editor,
+                child: HtmlFieldEditor(
+                  controller: _html,
+                  html: _loading ? null : (_item?.description ?? ''),
+                  onError: (message) {
+                    if (mounted) setState(() => _error = message);
+                  },
+                ),
               ),
           ],
         ),

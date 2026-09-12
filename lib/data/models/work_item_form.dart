@@ -856,6 +856,37 @@ class ClassificationNode extends Equatable {
   List<Object?> get props => [id, path, children];
 }
 
+/// One row of `work/teamsettings/iterations` read without `$timeframe`: the
+/// whole iteration list of a team, which the iteration picker shows under
+/// "Team" ahead of the project's tree (spike s30).
+class TeamIteration extends Equatable {
+  const TeamIteration({
+    required this.id,
+    required this.name,
+    required this.path,
+    this.timeFrame,
+    this.startDate,
+    this.finishDate,
+  });
+
+  final String id;
+  final String name;
+
+  /// Project-relative in the wire (`DevOps Mobile App\Iteration 1` in the
+  /// scratch project, spike s30); the field value wants the same form.
+  final String path;
+
+  /// `past`, `current` or `future`.
+  final String? timeFrame;
+  final DateTime? startDate;
+  final DateTime? finishDate;
+
+  bool get isCurrent => (timeFrame ?? '').toLowerCase() == 'current';
+
+  @override
+  List<Object?> get props => [id, name, path, timeFrame];
+}
+
 /// The defaults a new item inherits from the team on screen (research/11
 /// §4.7).
 class TeamDefaults extends Equatable {

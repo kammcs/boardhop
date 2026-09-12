@@ -330,6 +330,57 @@ void main() {
       expect(TeamDefaults.fromJson(defaults.toJson()), defaults);
     });
 
+    test('the team iteration list keeps wire order and marks the current', () {
+      // Shape from spike s30 (scratch team, three iterations).
+      final iterations = WorkItemFormRepository.parseTeamIterations(
+        'DevOps Mobile App',
+        const {
+          'count': 3,
+          'value': [
+            {
+              'id': 'aa9f2381',
+              'name': 'Iteration 1',
+              'path': r'DevOps Mobile App\Iteration 1',
+              'attributes': {
+                'startDate': null,
+                'finishDate': null,
+                'timeFrame': 'current',
+              },
+            },
+            {
+              'id': 'd24c4cbe',
+              'name': 'Iteration 2',
+              'path': r'Iteration 2',
+              'attributes': {'timeFrame': 'future'},
+            },
+            {
+              'id': 'a9cb9d0a',
+              'name': 'Iteration 3',
+              'path': r'\Iteration 3',
+              'attributes': {
+                'startDate': '2026-10-01T00:00:00Z',
+                'timeFrame': 'future',
+              },
+            },
+          ],
+        },
+      );
+      expect(iterations.map((i) => i.name).toList(), const [
+        'Iteration 1',
+        'Iteration 2',
+        'Iteration 3',
+      ]);
+      // Every path comes back project-rooted, however the wire spelled it.
+      expect(iterations.map((i) => i.path).toList(), const [
+        r'DevOps Mobile App\Iteration 1',
+        r'DevOps Mobile App\Iteration 2',
+        r'DevOps Mobile App\Iteration 3',
+      ]);
+      expect(iterations.first.isCurrent, isTrue);
+      expect(iterations[1].isCurrent, isFalse);
+      expect(iterations.last.startDate?.toUtc().month, 10);
+    });
+
     test('backlog levels come back top-down with the hidden types', () {
       final types = WorkItemFormRepository.parseBacklogTypes(
         config: _fixture('scratch_backlogconfiguration.json'),

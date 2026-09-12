@@ -68,21 +68,57 @@ bool rendersOnCreate(FormSpec spec, FormControl control) {
   return field.type != FieldType.history;
 }
 
-/// The Details page's groups in web order (every column flattened top-down),
-/// then the custom pages under their own heading. History, Links and
-/// Attachments pages are not part of the create form (research/11 §4.4).
-List<FormGroupView> groupViewsFor(FormSpec spec) {
-  final out = <FormGroupView>[];
+/// One column of a page: a layout section with the groups a new item can
+/// fill. [percentWidth] is the web's own share of the row, which the tablet
+/// arrangement turns into flexes (research/11 §4.5).
+@immutable
+class FormColumnView {
+  const FormColumnView({required this.percentWidth, required this.groups});
 
-  void addPage(FormPage page, {String? pageLabel}) {
+  final int percentWidth;
+  final List<FormGroupView> groups;
+}
+
+/// One tab of the create form: the Details page, then any custom page.
+/// History, Links and Attachments are not part of it (research/11 §4.4).
+@immutable
+class FormPageView {
+  const FormPageView({
+    required this.label,
+    required this.columns,
+    this.isDetails = false,
+  });
+
+  final String label;
+  final List<FormColumnView> columns;
+  final bool isDetails;
+
+  /// Every group of the page, columns flattened left to right: the phone
+  /// arrangement and the group order phase 1 settled.
+  List<FormGroupView> get groups => [
+    for (final column in columns) ...column.groups,
+  ];
+
+  bool get isEmpty => columns.isEmpty;
+}
+
+/// The create form's pages: Details first, then the custom pages.
+///
+/// Each page keeps the layout's own columns, so the tablet arrangement can
+/// put them next to each other; the phone arrangement flattens them
+/// top-down through [FormPageView.groups].
+List<FormPageView> pageViewsFor(FormSpec spec) {
+  FormPageView? viewOf(FormPage page, {String? pageLabel}) {
+    final columns = <FormColumnView>[];
     for (final section in page.sections) {
+      final groups = <FormGroupView>[];
       for (final group in section.groups) {
         final controls = [
           for (final c in group.controls)
             if (rendersOnCreate(spec, c)) c,
         ];
         if (controls.isNotEmpty) {
-          out.add(
+          groups.add(
             FormGroupView(
               label: group.label,
               controls: controls,
@@ -93,7 +129,7 @@ List<FormGroupView> groupViewsFor(FormSpec spec) {
         }
         final panels = group.controls.where((c) => c.isPanel).length;
         if (panels > 0 && panels == group.controls.length) {
-          out.add(
+          groups.add(
             FormGroupView(
               label: group.label.isEmpty
                   ? (group.controls.first.label ?? 'Links')
@@ -105,18 +141,49 @@ List<FormGroupView> groupViewsFor(FormSpec spec) {
           );
         }
       }
+      if (groups.isNotEmpty) {
+        columns.add(
+          FormColumnView(percentWidth: section.percentWidth, groups: groups),
+        );
+      }
     }
+    if (columns.isEmpty) return null;
+    return FormPageView(
+      label: page.label,
+      columns: columns,
+      isDetails: pageLabel == null,
+    );
   }
 
+  final out = <FormPageView>[];
   final details = spec.layout.detailsPage;
-  if (details != null) addPage(details);
+  if (details != null) {
+    final view = viewOf(details);
+    if (view != null) {
+      out.add(
+        FormPageView(
+          label: view.label.isEmpty ? 'Details' : view.label,
+          columns: view.columns,
+          isDetails: true,
+        ),
+      );
+    }
+  }
   for (final page in spec.layout.pages) {
     if (page.kind == FormPageKind.custom && page != details) {
-      addPage(page, pageLabel: page.label);
+      final view = viewOf(page, pageLabel: page.label);
+      if (view != null) out.add(view);
     }
   }
   return out;
 }
+
+/// The Details page's groups in web order (every column flattened top-down),
+/// then the custom pages under their own heading. History, Links and
+/// Attachments pages are not part of the create form (research/11 §4.4).
+List<FormGroupView> groupViewsFor(FormSpec spec) => [
+  for (final page in pageViewsFor(spec)) ...page.groups,
+];
 
 /// Every field the form owns: the header's, the state chip's and the field
 /// controls of the group cards, in that order.
@@ -136,7 +203,10 @@ class WorkItemFormState extends ChangeNotifier {
     required this.spec,
     Map<String, Object?> initialValues = const {},
     this.onDependentFieldChanged,
-  }) : groups = groupViewsFor(spec),
+    this.isCreate = true,
+    Map<String, String> formats = const {},
+  }) : pages = pageViewsFor(spec),
+       _formats = {...formats},
        _values = {...initialValues} {
     fieldRefs = fieldRefsFor(groups);
   }
@@ -148,7 +218,19 @@ class WorkItemFormState extends ChangeNotifier {
   static const dependentDebounce = Duration(milliseconds: 800);
 
   final FormSpec spec;
-  final List<FormGroupView> groups;
+
+  /// A new item. Phase 3 edits an existing one, where the format is the
+  /// item's own and is never chosen in the editor (spike w01).
+  final bool isCreate;
+
+  /// Details first, then the custom pages: tabs on a tablet, stacked
+  /// sections on a phone.
+  final List<FormPageView> pages;
+
+  /// Every page's groups flattened, in web order.
+  late final List<FormGroupView> groups = [
+    for (final page in pages) ...page.groups,
+  ];
 
   /// Every field the form owns, header first, then the cards in web order.
   late final Set<String> fieldRefs;
@@ -161,6 +243,15 @@ class WorkItemFormState extends ChangeNotifier {
   final Map<String, String> _errors = {};
   final Map<String, String> _parseErrors = {};
   final Set<String> _dirty = {};
+
+  /// Long-text fields the rich editor filled: their value is already HTML
+  /// (or Markdown) and is sent as it stands, never escaped.
+  final Set<String> _richFields = {};
+
+  /// `html` or `markdown` per multiline field, for the
+  /// `/multilineFieldsFormat` ops of the create patch (spike w01). Only a
+  /// field the user switched to Markdown is in here.
+  final Map<String, String> _formats;
   Timer? _debounce;
 
   /// Errors the server raised for fields this form does not show, and other
@@ -227,6 +318,40 @@ class WorkItemFormState extends ChangeNotifier {
         () => onDependentFieldChanged?.call(),
       );
     }
+  }
+
+  /// The rich editor's answer for a long-text field: the value is content
+  /// in [format] and goes into the patch verbatim.
+  void setRichValue(
+    String reference,
+    String content, {
+    String format = 'html',
+  }) {
+    _richFields.add(reference);
+    setFormat(reference, format);
+    setValue(reference, content);
+  }
+
+  /// `html` or `markdown` for a multiline field; html unless the user chose
+  /// otherwise on this new item.
+  String formatOf(String reference) => _formats[reference] ?? 'html';
+
+  bool isMarkdown(String reference) => formatOf(reference) == 'markdown';
+
+  /// Markdown is only offered for the description of a new item (spike
+  /// w01); everything else follows the item's format map.
+  bool canChooseFormat(String reference) =>
+      isCreate && reference == 'System.Description';
+
+  /// Switches a long-text field between the rich editor and Markdown. The
+  /// content is never converted (research/00 §0, "Rich text"): the field is
+  /// cleared when the format changes with content in the old one, so no
+  /// HTML is ever stored as Markdown or the other way round.
+  void setFormat(String reference, String format) {
+    final next = format == 'markdown' ? 'markdown' : 'html';
+    if (formatOf(reference) == next) return;
+    _formats[reference] = next;
+    notifyListeners();
   }
 
   /// A value the user typed that is not a number yet: kept apart from the
@@ -332,15 +457,22 @@ class WorkItemFormState extends ChangeNotifier {
       if (raw is String) {
         final text = raw.trim();
         if (text.isEmpty) continue;
-        out[reference] = spec.fields[reference]?.type == FieldType.html
+        final isHtmlField = spec.fields[reference]?.type == FieldType.html;
+        out[reference] = isHtmlField && !_richFields.contains(reference)
             ? htmlFromPlainText(text)
             : text;
         continue;
       }
       out[reference] = raw;
     }
+    final markdown = <String>{
+      for (final entry in _formats.entries)
+        if (entry.value == 'markdown' && out.containsKey(entry.key)) entry.key,
+    };
     return WorkItemFormRepository.buildCreateOps(
       out,
+      markdownDescription: markdown.contains('System.Description'),
+      markdownFields: markdown.difference(const {'System.Description'}),
       parentUrl: parentUrl,
       relations: relations,
     );
@@ -353,9 +485,9 @@ class WorkItemFormState extends ChangeNotifier {
   static bool allowsFreeText(FieldSpec field) =>
       !field.isPicklist && !field.type.isPicklistType;
 
-  /// Phase 1 stores an HTML field as escaped text in one `<div>`; phase 2
-  /// swaps in `html_editor_enhanced` (research/11 §8).
-  // TODO(phase2): replace with the rich editor and keep the user's HTML.
+  /// An HTML field filled as plain text (a widget test, or a control the
+  /// rich editor never opened) is escaped into one `<div>`; content the
+  /// rich editor produced goes through [setRichValue] and is sent as it is.
   static String htmlFromPlainText(String text) {
     final escaped = text
         .replaceAll('&', '&amp;')

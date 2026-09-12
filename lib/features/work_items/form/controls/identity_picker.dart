@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -53,6 +54,24 @@ Future<IdentityChoice?> pickIdentity(
   required IdentitySource source,
   IdentityRef? current,
 }) {
+  // A tablet gets the same content in a centered dialog instead of a
+  // full-height sheet (research/11 §4.5).
+  if (!context.breakpoint.isCompact) {
+    return showDialog<IdentityChoice>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: _IdentitySheet(
+            title: title,
+            source: source,
+            current: current,
+            dialog: true,
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<IdentityChoice>(
     context: context,
     isScrollControlled: true,
@@ -68,11 +87,16 @@ class _IdentitySheet extends StatefulWidget {
     required this.title,
     required this.source,
     this.current,
+    this.dialog = false,
   });
 
   final String title;
   final IdentitySource source;
   final IdentityRef? current;
+
+  /// Centered dialog rather than a bottom sheet: a shorter box and its own
+  /// title padding, since there is no drag handle above it.
+  final bool dialog;
 
   @override
   State<_IdentitySheet> createState() => _IdentitySheetState();
@@ -169,8 +193,11 @@ class _IdentitySheetState extends State<_IdentitySheet> {
     final scheme = theme.colorScheme;
     final query = _query.text.trim();
     final seen = <String>{};
+    // The unique name first: a team member carries an identity id and the
+    // same person from the Graph search carries only a descriptor, so
+    // keying on the id would list them twice.
     String key(IdentityRef p) =>
-        (p.id ?? p.uniqueName ?? p.displayName).toLowerCase();
+        (p.uniqueName ?? p.id ?? p.displayName).toLowerCase();
 
     final local = <IdentityRef>[
       for (final p in [...widget.source.recent, ..._members])
@@ -181,17 +208,18 @@ class _IdentitySheetState extends State<_IdentitySheet> {
         if (!seen.contains(key(p))) p,
     ];
 
+    final height = MediaQuery.sizeOf(context).height;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.85,
+        height: widget.dialog ? math.min(560, height * 0.8) : height * 0.85,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 Spacing.lg,
-                0,
+                widget.dialog ? Spacing.lg : 0,
                 Spacing.lg,
                 Spacing.sm,
               ),

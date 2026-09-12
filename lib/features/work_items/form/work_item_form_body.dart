@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Durations;
 
 import '../../../data/models/work_item.dart';
@@ -9,6 +11,7 @@ import 'controls/date_control.dart';
 import 'controls/form_field_slot.dart';
 import 'controls/identity_picker.dart';
 import 'controls/picklist_control.dart';
+import 'controls/rich_text_control.dart';
 import 'controls/tags_field.dart';
 import 'controls/text_control.dart';
 import 'controls/tree_picker.dart';
@@ -21,21 +24,31 @@ class FormSources {
     required this.identities,
     required this.classifications,
     required this.tags,
+    this.onFormatChosen,
   });
 
   final IdentitySource identities;
   final ClassificationSource classifications;
   final Future<List<String>> Function() tags;
+
+  /// Remembers the Markdown-or-HTML choice per project (`FormPrefs`).
+  final void Function(String reference, String format)? onFormatChosen;
 }
 
 /// The create form itself: the pinned header (type, title and the core
-/// chips) above a scrolling list of the layout's groups as cards.
+/// chips) above the layout's groups as cards.
 ///
 /// It is a plain widget over a [WorkItemFormState], so the phone route and
-/// the tablet dialog (phase 2) render the same thing; the arrangement
-/// follows [Breakpoint], never the platform.
+/// the tablet dialog render the same thing; the arrangement follows the
+/// width it is given, never the platform. Under [wideMin] the groups stack
+/// in one column (a phone, or a small tablet in portrait); above it the
+/// layout's own sections become columns and the custom pages become tabs
+/// (research/11 §4.5).
 class WorkItemFormBody extends StatefulWidget {
   const WorkItemFormBody({super.key, required this.state, this.sources});
+
+  /// The width from which the form lays its sections out in columns.
+  static const double wideMin = 640;
 
   final WorkItemFormState state;
   final FormSources? sources;
@@ -45,7 +58,11 @@ class WorkItemFormBody extends StatefulWidget {
 }
 
 class _WorkItemFormBodyState extends State<WorkItemFormBody> {
+  /// One key per control slot, and the slot each field was last built in:
+  /// the legacy layout may put the same field in two places, and two
+  /// `GlobalKey`s with the same name in one frame would be an error.
   final _keys = <String, GlobalKey>{};
+  final _slots = <String, String>{};
   int _revealTick = 0;
 
   @override
@@ -65,7 +82,7 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
     if (widget.state.revealTick == _revealTick) return;
     _revealTick = widget.state.revealTick;
     final reference = widget.state.firstErrorField;
-    final key = reference == null ? null : _keys[reference];
+    final key = reference == null ? null : _keys[_slots[reference] ?? ''];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final context = key?.currentContext;
       if (context == null || !mounted) return;
@@ -77,8 +94,10 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
     });
   }
 
-  GlobalKey _keyFor(String reference) =>
-      _keys.putIfAbsent(reference, GlobalKey.new);
+  GlobalKey _keyFor(String slot, String reference) {
+    _slots[reference] = slot;
+    return _keys.putIfAbsent(slot, GlobalKey.new);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,30 +108,167 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
         top: false,
         bottom: false,
         child: LayoutBuilder(
-          builder: (context, constraints) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: constraints.maxHeight * 0.55,
-                ),
-                child: SingleChildScrollView(
-                  child: FormHeader(state: state, sources: widget.sources),
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.only(bottom: Spacing.xxl),
-                  children: _cards(context, state),
-                ),
-              ),
-            ],
-          ),
+          builder: (context, constraints) =>
+              constraints.maxWidth >= WorkItemFormBody.wideMin
+              ? _wide(context, state, constraints)
+              : _stacked(context, state, constraints),
         ),
       ),
+    );
+  }
+
+  /// Phone (and a narrow dialog): the header above one scrolling column of
+  /// cards, every page's groups under its own heading.
+  Widget _stacked(
+    BuildContext context,
+    WorkItemFormState state,
+    BoxConstraints constraints,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.55),
+          child: SingleChildScrollView(
+            child: FormHeader(state: state, sources: widget.sources),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.only(bottom: Spacing.xxl),
+            children: _cards(context, state),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Tablet: the header on two rows, the pages as tabs and each page's
+  /// sections next to each other (research/11 §4.5).
+  Widget _wide(
+    BuildContext context,
+    WorkItemFormState state,
+    BoxConstraints constraints,
+  ) {
+    final pages = state.pages;
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.55),
+          child: SingleChildScrollView(
+            child: FormHeader(
+              state: state,
+              sources: widget.sources,
+              wide: true,
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+    if (pages.length < 2) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          Expanded(
+            child: pages.isEmpty
+                ? const SizedBox.shrink()
+                : _pageColumns(context, state, pages.first),
+          ),
+        ],
+      );
+    }
+    return DefaultTabController(
+      length: pages.length,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [for (final page in pages) Tab(text: page.label)],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                for (final page in pages) _pageColumns(context, state, page),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One page's sections as columns. The web's own `percentWidth` drives
+  /// the split (50/50 on a stock type); three sections put the first in 60%
+  /// and stack the other two in 40%, and a fourth spans the width beneath.
+  Widget _pageColumns(
+    BuildContext context,
+    WorkItemFormState state,
+    FormPageView page,
+  ) {
+    final columns = page.columns;
+    Widget groupsOf(Iterable<FormColumnView> sections) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in sections)
+          for (final (index, group) in section.groups.indexed)
+            _GroupCard(
+              group: group,
+              body: _groupBody(
+                state,
+                group,
+                '${page.label}/${columns.indexOf(section)}/$index',
+              ),
+              padding: const EdgeInsets.only(bottom: Spacing.md),
+            ),
+      ],
+    );
+
+    final Widget body;
+    if (columns.length < 2) {
+      body = groupsOf(columns);
+    } else {
+      final right = columns.sublist(1, math.min(3, columns.length));
+      final below = columns.length > 3
+          ? columns.sublist(3)
+          : const <FormColumnView>[];
+      final twoWay = right.length == 1;
+      final leftFlex = twoWay ? columns.first.percentWidth : 60;
+      final rightFlex = twoWay ? right.first.percentWidth : 40;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: math.max(1, leftFlex),
+                child: groupsOf([columns.first]),
+              ),
+              const SizedBox(width: Spacing.lg),
+              Expanded(flex: math.max(1, rightFlex), child: groupsOf(right)),
+            ],
+          ),
+          if (below.isNotEmpty) groupsOf(below),
+        ],
+      );
+    }
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(
+        Spacing.lg,
+        Spacing.md,
+        Spacing.lg,
+        Spacing.xxl,
+      ),
+      child: body,
     );
   }
 
@@ -120,6 +276,7 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
     final theme = Theme.of(context);
     final out = <Widget>[];
     String? page;
+    var index = 0;
     for (final group in state.groups) {
       if (group.pageLabel != null && group.pageLabel != page) {
         page = group.pageLabel;
@@ -135,15 +292,27 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
           ),
         );
       }
-      out.add(_GroupCard(group: group, body: _groupBody(state, group)));
+      out.add(
+        _GroupCard(
+          group: group,
+          body: _groupBody(state, group, 'stacked/${index++}'),
+        ),
+      );
     }
     return out;
   }
 
-  List<Widget> _groupBody(WorkItemFormState state, FormGroupView group) => [
+  List<Widget> _groupBody(
+    WorkItemFormState state,
+    FormGroupView group,
+    String slot,
+  ) => [
     for (final control in group.controls)
       KeyedSubtree(
-        key: _keyFor(control.fieldReferenceName!),
+        key: _keyFor(
+          '$slot/${control.fieldReferenceName}',
+          control.fieldReferenceName!,
+        ),
         child: buildControl(
           state: state,
           control: control,
@@ -157,17 +326,27 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
 /// One group of the layout as a card, or the disabled placeholder for the
 /// panels that need an id (links, attachments, deployments).
 class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.group, required this.body});
+  const _GroupCard({
+    required this.group,
+    required this.body,
+    this.padding = const EdgeInsets.fromLTRB(
+      Spacing.lg,
+      Spacing.md,
+      Spacing.lg,
+      0,
+    ),
+  });
 
   final FormGroupView group;
   final List<Widget> body;
+  final EdgeInsets padding;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.md, Spacing.lg, 0),
+      padding: padding,
       child: Card(
         margin: EdgeInsets.zero,
         child: Padding(
@@ -222,7 +401,7 @@ Widget buildControl({
   // The legacy layout leaves the label off a control that is alone under a
   // group of the same name ("Description", "Repro Steps"); the card title
   // already says it.
-  final label = named == groupLabel ? '' : named;
+  final label = _sameLabel(named, groupLabel) ? '' : named;
   final enabled = !state.saving;
   if (field.isIdentity || field.type == FieldType.identity) {
     return IdentityControl(
@@ -260,6 +439,16 @@ Widget buildControl({
       enabled: enabled,
     );
   }
+  if (field.type == FieldType.html ||
+      control.controlType == FormControlType.html) {
+    return RichTextControl(
+      state: state,
+      field: field,
+      label: label,
+      enabled: enabled,
+      onFormatChosen: sources?.onFormatChosen,
+    );
+  }
   if (field.allowedValues.isNotEmpty) {
     return PicklistControl(
       state: state,
@@ -277,13 +466,30 @@ Widget buildControl({
   );
 }
 
-/// Type, title and the core chips: the web's header row folded to phone
-/// width (research/11 §3).
+/// A control label and its group label are the same thing to the reader
+/// even when the process spells one with a colon or another case.
+bool _sameLabel(String a, String b) {
+  String normal(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'[:*]+$'), '').trim();
+  final left = normal(a);
+  return left.isNotEmpty && left == normal(b);
+}
+
+/// Type, title and the core chips: the web's header row, folded to phone
+/// width or laid out on two rows on a tablet (research/11 §3).
 class FormHeader extends StatefulWidget {
-  const FormHeader({super.key, required this.state, this.sources});
+  const FormHeader({
+    super.key,
+    required this.state,
+    this.sources,
+    this.wide = false,
+  });
 
   final WorkItemFormState state;
   final FormSources? sources;
+
+  /// Title, State and Assigned to on one row, the paths and tags below.
+  final bool wide;
 
   @override
   State<FormHeader> createState() => _FormHeaderState();
@@ -322,6 +528,126 @@ class _FormHeaderState extends State<FormHeader> {
     final iteration = state.value('System.IterationPath') as String?;
     final assignee = state.assignedTo;
     final tags = state.tags;
+
+    final typeChip = Chip(
+      avatar: Icon(
+        visuals.typeIcon(probe),
+        size: 18,
+        color: visuals.typeColor(context, probe),
+      ),
+      label: Text(state.spec.type.name),
+      visualDensity: VisualDensity.compact,
+    );
+    final stateChip = Tooltip(
+      message: 'A new item starts in its first state',
+      child: Chip(
+        avatar: StateDot(
+          color: visuals.stateColorFor(context, probe, state.stateName),
+        ),
+        label: Text(state.stateName),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+    final assigneeChip = ActionChip(
+      avatar: IdentityAvatar(identity: assignee, radius: 10),
+      label: Text(
+        assignee?.displayName ?? 'Assigned to',
+        overflow: TextOverflow.ellipsis,
+      ),
+      tooltip: 'Assigned to',
+      visualDensity: VisualDensity.compact,
+      onPressed: state.saving || widget.sources == null
+          ? null
+          : () => _pickAssignee(assignee),
+    );
+    final areaChip = ActionChip(
+      avatar: const Icon(Icons.dashboard_outlined, size: 16),
+      label: Text(_leaf(area) ?? 'Area', overflow: TextOverflow.ellipsis),
+      tooltip: area ?? 'Area',
+      visualDensity: VisualDensity.compact,
+      onPressed: state.saving || widget.sources == null
+          ? null
+          : () => _pickPath(areas: true, current: area),
+    );
+    final iterationChip = ActionChip(
+      avatar: const Icon(Icons.timelapse_outlined, size: 16),
+      label: Text(
+        _leaf(iteration) ?? 'Iteration',
+        overflow: TextOverflow.ellipsis,
+      ),
+      tooltip: iteration ?? 'Iteration',
+      visualDensity: VisualDensity.compact,
+      onPressed: state.saving || widget.sources == null
+          ? null
+          : () => _pickPath(areas: false, current: iteration),
+    );
+    final tagsChip = ActionChip(
+      avatar: const Icon(Icons.label_outline, size: 16),
+      label: Text(
+        tags.isEmpty ? 'Tags' : tags.join(', '),
+        overflow: TextOverflow.ellipsis,
+      ),
+      tooltip: 'Tags',
+      visualDensity: VisualDensity.compact,
+      onPressed: state.saving || widget.sources == null
+          ? null
+          : () => _pickTags(tags),
+    );
+
+    final titleSlot = FormFieldSlot(
+      label: titleField?.name ?? 'Title',
+      required: titleField?.alwaysRequired ?? true,
+      error: titleError,
+      child: TextField(
+        controller: _title,
+        enabled: !state.saving,
+        minLines: 1,
+        maxLines: 3,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Enter title here',
+          errorText: titleError == null ? null : '',
+          errorStyle: const TextStyle(height: 0, fontSize: 0),
+        ),
+        onChanged: (text) => state.setValue('System.Title', text),
+      ),
+    );
+
+    final banner = state.bannerError == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.only(top: Spacing.md),
+            child: Material(
+              color: scheme.errorContainer,
+              borderRadius: Radii.card,
+              child: Padding(
+                padding: Spacing.card,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 18,
+                      color: scheme.onErrorContainer,
+                    ),
+                    const SizedBox(width: Spacing.sm),
+                    Expanded(
+                      child: Text(
+                        state.bannerError!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onErrorContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+
+    const chipDrop = EdgeInsets.only(bottom: Spacing.md);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Spacing.lg,
@@ -332,127 +658,46 @@ class _FormHeaderState extends State<FormHeader> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Chip(
-                avatar: Icon(
-                  visuals.typeIcon(probe),
-                  size: 18,
-                  color: visuals.typeColor(context, probe),
+          if (widget.wide) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Padding(padding: chipDrop, child: typeChip),
+                const SizedBox(width: Spacing.md),
+                Expanded(child: titleSlot),
+                const SizedBox(width: Spacing.md),
+                Padding(padding: chipDrop, child: stateChip),
+                const SizedBox(width: Spacing.sm),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Padding(padding: chipDrop, child: assigneeChip),
                 ),
-                label: Text(state.spec.type.name),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          const SizedBox(height: Spacing.sm),
-          FormFieldSlot(
-            label: titleField?.name ?? 'Title',
-            required: titleField?.alwaysRequired ?? true,
-            error: titleError,
-            child: TextField(
-              controller: _title,
-              enabled: !state.saving,
-              minLines: 1,
-              maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Enter title here',
-                errorText: titleError == null ? null : '',
-                errorStyle: const TextStyle(height: 0, fontSize: 0),
-              ),
-              onChanged: (text) => state.setValue('System.Title', text),
+              ],
             ),
-          ),
-          Wrap(
-            spacing: Spacing.sm,
-            runSpacing: Spacing.sm,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Tooltip(
-                message: 'A new item starts in its first state',
-                child: Chip(
-                  avatar: StateDot(
-                    color: visuals.stateColorFor(
-                      context,
-                      probe,
-                      state.stateName,
-                    ),
-                  ),
-                  label: Text(state.stateName),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-              ActionChip(
-                avatar: IdentityAvatar(identity: assignee, radius: 10),
-                label: Text(assignee?.displayName ?? 'Assigned to'),
-                tooltip: 'Assigned to',
-                visualDensity: VisualDensity.compact,
-                onPressed: state.saving || widget.sources == null
-                    ? null
-                    : () => _pickAssignee(assignee),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.dashboard_outlined, size: 16),
-                label: Text(_leaf(area) ?? 'Area'),
-                tooltip: area ?? 'Area',
-                visualDensity: VisualDensity.compact,
-                onPressed: state.saving || widget.sources == null
-                    ? null
-                    : () => _pickPath(areas: true, current: area),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.timelapse_outlined, size: 16),
-                label: Text(_leaf(iteration) ?? 'Iteration'),
-                tooltip: iteration ?? 'Iteration',
-                visualDensity: VisualDensity.compact,
-                onPressed: state.saving || widget.sources == null
-                    ? null
-                    : () => _pickPath(areas: false, current: iteration),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.label_outline, size: 16),
-                label: Text(tags.isEmpty ? 'Tags' : tags.join(', ')),
-                tooltip: 'Tags',
-                visualDensity: VisualDensity.compact,
-                onPressed: state.saving || widget.sources == null
-                    ? null
-                    : () => _pickTags(tags),
-              ),
-            ],
-          ),
-          if (state.bannerError != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Spacing.md),
-              child: Material(
-                color: scheme.errorContainer,
-                borderRadius: Radii.card,
-                child: Padding(
-                  padding: Spacing.card,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 18,
-                        color: scheme.onErrorContainer,
-                      ),
-                      const SizedBox(width: Spacing.sm),
-                      Expanded(
-                        child: Text(
-                          state.bannerError!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            Wrap(
+              spacing: Spacing.sm,
+              runSpacing: Spacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [areaChip, iterationChip, tagsChip],
             ),
+          ] else ...[
+            Row(children: [typeChip]),
+            const SizedBox(height: Spacing.sm),
+            titleSlot,
+            Wrap(
+              spacing: Spacing.sm,
+              runSpacing: Spacing.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                stateChip,
+                assigneeChip,
+                areaChip,
+                iterationChip,
+                tagsChip,
+              ],
+            ),
+          ],
+          ?banner,
         ],
       ),
     );

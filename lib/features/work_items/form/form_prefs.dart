@@ -14,6 +14,7 @@ import '../../../data/models/work_item.dart';
 abstract final class FormPrefs {
   static const _typeKey = 'form_last_type';
   static const _assigneeKey = 'form_recent_assignees';
+  static const _formatKey = 'form_description_format';
   static const maxRecentAssignees = 5;
 
   static Future<SharedPreferences?> _prefs() async {
@@ -38,6 +39,26 @@ abstract final class FormPrefs {
     await (await _prefs())?.setString(
       '$_typeKey:${_scope(org, project)}',
       typeName,
+    );
+  }
+
+  /// The description format last chosen for a new item in this project,
+  /// `html` or `markdown` (spike w01: the choice is only offered on create).
+  static Future<String> descriptionFormat(String org, String project) async {
+    final stored = (await _prefs())?.getString(
+      '$_formatKey:${_scope(org, project)}',
+    );
+    return stored == 'markdown' ? 'markdown' : 'html';
+  }
+
+  static Future<void> setDescriptionFormat(
+    String org,
+    String project,
+    String format,
+  ) async {
+    await (await _prefs())?.setString(
+      '$_formatKey:${_scope(org, project)}',
+      format == 'markdown' ? 'markdown' : 'html',
     );
   }
 

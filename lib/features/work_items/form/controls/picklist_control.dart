@@ -30,18 +30,57 @@ class PicklistControl extends StatelessWidget {
     final reference = field.referenceName;
     final raw = state.value(reference);
     final text = raw == null ? '' : '$raw';
+    final tile = PickerTile(
+      text: text.isEmpty ? 'Not set' : text,
+      placeholder: text.isEmpty,
+      enabled: enabled,
+      hasError: state.errorFor(reference) != null,
+      onTap: () => _pick(context, text),
+    );
     return FormFieldSlot(
       label: label,
       required: field.alwaysRequired,
       helpText: field.helpText,
       error: state.errorFor(reference),
-      child: PickerTile(
-        text: text.isEmpty ? 'Not set' : text,
-        placeholder: text.isEmpty,
-        enabled: enabled,
-        hasError: state.errorFor(reference) != null,
-        onTap: () => _pick(context, text),
-      ),
+      // From medium up the list drops from the tile as a menu, as the web
+      // does; a phone opens the bottom sheet (research/11 §4.5).
+      child: context.breakpoint.isCompact
+          ? tile
+          : MenuAnchor(
+              style: const MenuStyle(
+                maximumSize: WidgetStatePropertyAll(Size(320, 420)),
+              ),
+              menuChildren: [
+                if (!field.alwaysRequired)
+                  MenuItemButton(
+                    leadingIcon: const Icon(Icons.clear),
+                    onPressed: () => state.setValue(reference, null),
+                    child: const Text('Clear'),
+                  ),
+                for (final value in field.allowedValues)
+                  MenuItemButton(
+                    trailingIcon: value == text
+                        ? const Icon(Icons.check)
+                        : null,
+                    onPressed: () => state.setValue(reference, value),
+                    child: Text(value),
+                  ),
+                if (WorkItemFormState.allowsFreeText(field))
+                  MenuItemButton(
+                    leadingIcon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _pick(context, text),
+                    child: const Text('Other value…'),
+                  ),
+              ],
+              builder: (context, controller, child) => PickerTile(
+                text: text.isEmpty ? 'Not set' : text,
+                placeholder: text.isEmpty,
+                enabled: enabled,
+                hasError: state.errorFor(reference) != null,
+                onTap: () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+              ),
+            ),
     );
   }
 
@@ -74,6 +113,26 @@ Future<AllowedValueChoice?> pickAllowedValue(
   bool allowFreeText = false,
   bool allowClear = true,
 }) {
+  if (!context.breakpoint.isCompact) {
+    return showDialog<AllowedValueChoice>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+            child: _AllowedValueSheet(
+              title: title,
+              values: values,
+              current: current,
+              allowFreeText: allowFreeText,
+              allowClear: allowClear,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<AllowedValueChoice>(
     context: context,
     showDragHandle: true,

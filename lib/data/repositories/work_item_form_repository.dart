@@ -55,8 +55,11 @@ class WorkItemFormRepository {
       'form:descriptor:$org:$projectId';
   static String draftKey(String org, String project, String type) =>
       'form:draft:$org:$project:$type';
+  static String teamIterationsKey(String org, String project, String team) =>
+      'form:iterations:$org:$project:$team';
 
   final Map<String, String> _defaultTeams = {};
+  final Map<String, String> _projectIds = {};
 
   // ---------------------------------------------------------------- reads
 
@@ -285,17 +288,97 @@ class WorkItemFormRepository {
     final key = '$org/$project';
     final cached = _defaultTeams[key];
     if (cached != null) return cached;
+    await _readProject(org, project);
+    final id = _defaultTeams[key];
+    if (id == null) {
+      throw AdoServerException('Project $project has no default team');
+    }
+    return id;
+  }
+
+  /// The project's **id**. `graph/descriptors/{project}` and the team
+  /// member read take the id, not the name: the name answers HTTP 400 and
+  /// the people search silently falls back to the whole organization
+  /// (spike s30). The routes carry the name, so the form resolves it here,
+  /// through the same single project read `defaultTeamId` already makes.
+  Future<String> projectId(String org, String project) async {
+    final key = '$org/$project';
+    final cached = _projectIds[key];
+    if (cached != null) return cached;
+    if (_looksLikeGuid(project)) return _projectIds[key] = project;
+    await _readProject(org, project);
+    return _projectIds[key] ?? project;
+  }
+
+  /// `GET _apis/projects/{project}`, filling both memory caches at once.
+  Future<void> _readProject(String org, String project) async {
     final json = await _client.getJson(
       org: org,
       path: '_apis/projects/$project',
       apiVersion: apiVersion,
     );
-    final id = (json['defaultTeam'] as Map?)?['id'] as String?;
-    if (id == null) {
-      throw AdoServerException('Project $project has no default team');
-    }
-    return _defaultTeams[key] = id;
+    final key = '$org/$project';
+    final id = json['id'] as String?;
+    if (id != null && id.isNotEmpty) _projectIds[key] = id;
+    final team = (json['defaultTeam'] as Map?)?['id'] as String?;
+    if (team != null && team.isNotEmpty) _defaultTeams[key] = team;
   }
+
+  static final _guid = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false,
+  );
+
+  static bool _looksLikeGuid(String value) => _guid.hasMatch(value);
+
+  /// Every iteration of one team (`work/teamsettings/iterations` without
+  /// `$timeframe`, spike s30), cached for a day: the iteration picker lists
+  /// these under "Team" with the current one marked, ahead of the project's
+  /// whole tree.
+  Future<List<TeamIteration>> teamIterations(
+    String org,
+    String project, {
+    String? team,
+    bool refresh = false,
+  }) async {
+    final teamId = team ?? await defaultTeamId(org, project);
+    return _cached<List<TeamIteration>>(
+      teamIterationsKey(org, project, teamId),
+      () async => await _client.getJson(
+        org: org,
+        project: project,
+        team: teamId,
+        path: '_apis/work/teamsettings/iterations',
+        apiVersion: apiVersion,
+      ),
+      (json) => parseTeamIterations(
+        project,
+        json is Map ? json.cast<String, dynamic>() : const {},
+      ),
+      refresh: refresh,
+    );
+  }
+
+  /// Rows in wire order (Azure DevOps returns them by start date), with the
+  /// path normalized to the project-rooted form the field takes.
+  static List<TeamIteration> parseTeamIterations(
+    String project,
+    Map<String, dynamic> json,
+  ) => [
+    for (final row in _list(json))
+      TeamIteration(
+        id: row['id'] as String? ?? '',
+        name: row['name'] as String? ?? '',
+        path: iterationPath(project, row) ?? (row['name'] as String? ?? ''),
+        timeFrame: ((row['attributes'] as Map?)?['timeFrame']) as String?,
+        startDate: DateTime.tryParse(
+          ((row['attributes'] as Map?)?['startDate'] as String?) ?? '',
+        ),
+        finishDate: DateTime.tryParse(
+          ((row['attributes'] as Map?)?['finishDate'] as String?) ?? '',
+        ),
+      ),
+  ];
 
   /// Area and iteration defaults for a team: `teamfieldvalues`,
   /// `teamsettings` and the current sprint (spike s25).
