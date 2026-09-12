@@ -19,6 +19,7 @@ Start with **[00-feasibility-summary.md](00-feasibility-summary.md)**. It holds 
 | [08b-flutter-evaluation.md](08b-flutter-evaluation.md) | Flutter evaluation: `msal_auth`, packages, the Az DevOps competitor, ecosystem |
 | [08c-react-native-and-other-stacks.md](08c-react-native-and-other-stacks.md) | React Native MSAL re-check; Kotlin Multiplatform, Capacitor, Uno, Avalonia, native, Tauri |
 | [09-entra-app-registration.md](09-entra-app-registration.md) | Hand-off instructions: register Boardhop in the kammcs tenant, enable it in a customer tenant |
+| [11-work-item-forms.md](11-work-item-forms.md) | Work item create and edit forms: process layout, field controls, phone and tablet designs, decisions and phases |
 | [verification/](verification/) | Reproducible anonymous API probes and captured results |
 
 Re-run the probes with:
