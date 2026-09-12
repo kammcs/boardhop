@@ -73,8 +73,22 @@ class IdentityRef extends Equatable {
       // The Graph avatar link takes a size and answers with the token;
       // `imageUrl` may be the legacy identityImage form.
       imageUrl: avatar ?? json['imageUrl'] as String?,
-      descriptor: json['descriptor'] as String?,
+      descriptor: json['descriptor'] as String? ?? descriptorFromAvatar(avatar),
     );
+  }
+
+  /// Pull request reviewers and pipeline approvers carry no `descriptor`
+  /// field (spike s23), only an avatar link that ends with one:
+  /// `…/_apis/GraphProfile/MemberAvatars/aad.Njg…`. Without it the app
+  /// falls back to that link, which the Entra token cannot fetch (401),
+  /// and the person shows as initials next to their own photo elsewhere.
+  static String? descriptorFromAvatar(String? href) {
+    if (href == null || href.isEmpty) return null;
+    final segments = Uri.tryParse(href)?.pathSegments ?? const <String>[];
+    final at = segments.indexOf('MemberAvatars');
+    if (at < 0 || at + 1 >= segments.length) return null;
+    final descriptor = segments[at + 1];
+    return descriptor.isEmpty ? null : descriptor;
   }
 
   /// Fields carry an object; older payloads carry `"Name <email>"`.

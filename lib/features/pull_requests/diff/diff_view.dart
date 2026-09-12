@@ -86,6 +86,10 @@ class _DiffViewState extends State<DiffView> {
 
   final _listController = ListController();
   final _vertical = ScrollController();
+
+  /// Long lines pan sideways under one scroll view; the line numbers and
+  /// the comment cards follow it back so they stay where they were.
+  final _horizontal = ScrollController();
   List<_Row> _rows = const [];
   double _charWidth = 7;
 
@@ -112,6 +116,7 @@ class _DiffViewState extends State<DiffView> {
   void dispose() {
     _listController.dispose();
     _vertical.dispose();
+    _horizontal.dispose();
     super.dispose();
   }
 
@@ -183,6 +188,7 @@ class _DiffViewState extends State<DiffView> {
       builder: (context, constraints) {
         final contentWidth = max(width, constraints.maxWidth);
         return SingleChildScrollView(
+          controller: _horizontal,
           scrollDirection: Axis.horizontal,
           child: SizedBox(
             width: contentWidth,
@@ -190,7 +196,8 @@ class _DiffViewState extends State<DiffView> {
               controller: _vertical,
               listController: _listController,
               itemCount: _rows.length,
-              itemBuilder: (context, i) => _buildRow(context, _rows[i]),
+              itemBuilder: (context, i) =>
+                  _buildRow(context, _rows[i], constraints.maxWidth),
             ),
           ),
         );
@@ -198,42 +205,67 @@ class _DiffViewState extends State<DiffView> {
     );
   }
 
-  Widget _buildRow(BuildContext context, _Row row) => switch (row) {
-    _LineRow() => _DiffLineView(
-      row: row,
-      style: _codeStyle(context),
-      gutterWidth: _gutterWidth,
-      onGutterTap: row.line.newNo == null || widget.onGutterTap == null
-          ? null
-          : () => widget.onGutterTap!(row.line.newNo!),
+  Widget _buildRow(BuildContext context, _Row row, double viewportWidth) =>
+      switch (row) {
+        _LineRow() => _DiffLineView(
+          row: row,
+          style: _codeStyle(context),
+          gutterWidth: _gutterWidth,
+          horizontal: _horizontal,
+          onGutterTap: row.line.newNo == null || widget.onGutterTap == null
+              ? null
+              : () => widget.onGutterTap!(row.line.newNo!),
+        ),
+        _ThreadRow() => _ThreadView(
+          key: ValueKey('thread-${row.thread.id}'),
+          thread: row.thread,
+          gutterWidth: _gutterWidth,
+          horizontal: _horizontal,
+          viewportWidth: viewportWidth,
+          canAct: widget.canAct,
+          busy: widget.posting,
+          onReply: widget.onReply == null
+              ? null
+              : (text) => widget.onReply!(row.thread, text),
+          onSetStatus: widget.onSetThreadStatus == null
+              ? null
+              : (status) => widget.onSetThreadStatus!(row.thread, status),
+          onApplySuggestion: widget.onApplySuggestion == null
+              ? null
+              : (comment, suggestion) =>
+                    widget.onApplySuggestion!(row.thread, comment, suggestion),
+        ),
+        _ComposerRow() => _ComposerView(
+          line: row.line,
+          gutterWidth: _gutterWidth,
+          horizontal: _horizontal,
+          viewportWidth: viewportWidth,
+          posting: widget.posting,
+          onCancel: widget.onCancelComposer,
+          onPost: widget.onPost == null
+              ? null
+              : (text) => widget.onPost!(row.line, text),
+        ),
+      };
+}
+
+/// Holds [child] at the same place on screen while the diff pans
+/// sideways, by moving it with the scroll offset.
+class _Pinned extends StatelessWidget {
+  const _Pinned({required this.horizontal, required this.child});
+
+  final ScrollController horizontal;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: horizontal,
+    builder: (context, pinned) => Transform.translate(
+      offset: Offset(horizontal.hasClients ? horizontal.offset : 0, 0),
+      child: pinned,
     ),
-    _ThreadRow() => _ThreadView(
-      key: ValueKey('thread-${row.thread.id}'),
-      thread: row.thread,
-      gutterWidth: _gutterWidth,
-      canAct: widget.canAct,
-      busy: widget.posting,
-      onReply: widget.onReply == null
-          ? null
-          : (text) => widget.onReply!(row.thread, text),
-      onSetStatus: widget.onSetThreadStatus == null
-          ? null
-          : (status) => widget.onSetThreadStatus!(row.thread, status),
-      onApplySuggestion: widget.onApplySuggestion == null
-          ? null
-          : (comment, suggestion) =>
-                widget.onApplySuggestion!(row.thread, comment, suggestion),
-    ),
-    _ComposerRow() => _ComposerView(
-      line: row.line,
-      gutterWidth: _gutterWidth,
-      posting: widget.posting,
-      onCancel: widget.onCancelComposer,
-      onPost: widget.onPost == null
-          ? null
-          : (text) => widget.onPost!(row.line, text),
-    ),
-  };
+    child: child,
+  );
 }
 
 class _DiffLineView extends StatelessWidget {
@@ -241,12 +273,14 @@ class _DiffLineView extends StatelessWidget {
     required this.row,
     required this.style,
     required this.gutterWidth,
+    required this.horizontal,
     required this.onGutterTap,
   });
 
   final _LineRow row;
   final TextStyle style;
   final double gutterWidth;
+  final ScrollController horizontal;
   final VoidCallback? onGutterTap;
 
   @override
@@ -268,62 +302,67 @@ class _DiffLineView extends StatelessWidget {
       DiffKind.context => (null, ' ', scheme.onSurfaceVariant),
     };
     final numberStyle = style.copyWith(color: scheme.onSurfaceVariant);
+    // The code sits under the gutter, which is painted last and moved
+    // with the horizontal scroll, so the line numbers never leave.
     return ColoredBox(
       color: background ?? Colors.transparent,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          InkWell(
-            onTap: onGutterTap,
-            child: SizedBox(
-              width: gutterWidth,
-              child: Row(
+          Padding(
+            padding: EdgeInsets.only(left: gutterWidth, right: Spacing.lg),
+            child: Text.rich(
+              TextSpan(
+                style: style,
                 children: [
-                  SizedBox(
-                    width: 36,
-                    child: Text(
-                      line.oldNo?.toString() ?? '',
-                      textAlign: TextAlign.right,
-                      style: numberStyle,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 36,
-                    child: Text(
-                      line.newNo?.toString() ?? '',
-                      textAlign: TextAlign.right,
-                      style: numberStyle,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 16,
-                    child: Text(
-                      marker,
-                      textAlign: TextAlign.center,
-                      style: style.copyWith(
-                        color: markerColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                  for (final r in row.runs)
+                    TextSpan(text: r.text, style: r.style),
+                  if (row.runs.isEmpty) const TextSpan(text: ' '),
                 ],
               ),
+              softWrap: false,
+              overflow: TextOverflow.visible,
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: Spacing.lg),
-              child: Text.rich(
-                TextSpan(
-                  style: style,
-                  children: [
-                    for (final r in row.runs)
-                      TextSpan(text: r.text, style: r.style),
-                    if (row.runs.isEmpty) const TextSpan(text: ' '),
-                  ],
+          _Pinned(
+            horizontal: horizontal,
+            child: InkWell(
+              onTap: onGutterTap,
+              child: ColoredBox(
+                color: background ?? scheme.surface,
+                child: SizedBox(
+                  width: gutterWidth,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        child: Text(
+                          line.oldNo?.toString() ?? '',
+                          textAlign: TextAlign.right,
+                          style: numberStyle,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 36,
+                        child: Text(
+                          line.newNo?.toString() ?? '',
+                          textAlign: TextAlign.right,
+                          style: numberStyle,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 16,
+                        child: Text(
+                          marker,
+                          textAlign: TextAlign.center,
+                          style: style.copyWith(
+                            color: markerColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                softWrap: false,
-                overflow: TextOverflow.visible,
               ),
             ),
           ),
@@ -338,6 +377,8 @@ class _ThreadView extends StatelessWidget {
     super.key,
     required this.thread,
     required this.gutterWidth,
+    required this.horizontal,
+    required this.viewportWidth,
     required this.canAct,
     required this.busy,
     required this.onReply,
@@ -347,6 +388,8 @@ class _ThreadView extends StatelessWidget {
 
   final PrThread thread;
   final double gutterWidth;
+  final ScrollController horizontal;
+  final double viewportWidth;
   final bool canAct;
   final bool busy;
   final Future<bool> Function(String text)? onReply;
@@ -357,25 +400,35 @@ class _ThreadView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        gutterWidth,
-        Spacing.xs,
-        Spacing.lg,
-        Spacing.xs,
-      ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: ThreadCard(
-            thread: thread,
-            canAct: canAct,
-            busy: busy,
-            onReply: onReply,
-            onSetStatus: onSetStatus,
-            onApplySuggestion: onApplySuggestion,
-            color: scheme.surfaceContainerHigh,
+    // A comment is prose, not code: it stays where it is while the code
+    // beside it pans.
+    return _Pinned(
+      horizontal: horizontal,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          gutterWidth,
+          Spacing.xs,
+          Spacing.lg,
+          Spacing.xs,
+        ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: max(
+                240,
+                min(520, viewportWidth - gutterWidth - Spacing.lg),
+              ),
+            ),
+            child: ThreadCard(
+              thread: thread,
+              canAct: canAct,
+              busy: busy,
+              onReply: onReply,
+              onSetStatus: onSetStatus,
+              onApplySuggestion: onApplySuggestion,
+              color: scheme.surfaceContainerHigh,
+            ),
           ),
         ),
       ),
@@ -387,6 +440,8 @@ class _ComposerView extends StatefulWidget {
   const _ComposerView({
     required this.line,
     required this.gutterWidth,
+    required this.horizontal,
+    required this.viewportWidth,
     required this.posting,
     required this.onCancel,
     required this.onPost,
@@ -394,6 +449,8 @@ class _ComposerView extends StatefulWidget {
 
   final int line;
   final double gutterWidth;
+  final ScrollController horizontal;
+  final double viewportWidth;
   final bool posting;
   final VoidCallback? onCancel;
   final Future<void> Function(String text)? onPost;
@@ -414,59 +471,67 @@ class _ComposerViewState extends State<_ComposerView> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        widget.gutterWidth,
-        Spacing.xs,
-        Spacing.lg,
-        Spacing.xs,
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Material(
-          color: scheme.surfaceContainerHigh,
-          borderRadius: Radii.card,
-          child: Padding(
-            padding: Spacing.card,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Comment on line ${widget.line}',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: Spacing.xs),
-                TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  maxLines: 5,
-                  minLines: 2,
-                  enabled: !widget.posting,
-                  decoration: const InputDecoration(
-                    hintText: 'Markdown, or a ```suggestion block',
+    return _Pinned(
+      horizontal: widget.horizontal,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          widget.gutterWidth,
+          Spacing.xs,
+          Spacing.lg,
+          Spacing.xs,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: max(
+              240,
+              min(520, widget.viewportWidth - widget.gutterWidth - Spacing.lg),
+            ),
+          ),
+          child: Material(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: Radii.card,
+            child: Padding(
+              padding: Spacing.card,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Comment on line ${widget.line}',
+                    style: Theme.of(context).textTheme.labelLarge,
                   ),
-                ),
-                const SizedBox(height: Spacing.sm),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: widget.posting ? null : widget.onCancel,
-                      child: const Text('Cancel'),
+                  const SizedBox(height: Spacing.xs),
+                  TextField(
+                    controller: _controller,
+                    autofocus: true,
+                    maxLines: 5,
+                    minLines: 2,
+                    enabled: !widget.posting,
+                    decoration: const InputDecoration(
+                      hintText: 'Markdown, or a ```suggestion block',
                     ),
-                    const SizedBox(width: Spacing.sm),
-                    FilledButton(
-                      onPressed: widget.posting || widget.onPost == null
-                          ? null
-                          : () {
-                              final text = _controller.text.trim();
-                              if (text.isNotEmpty) widget.onPost!(text);
-                            },
-                      child: Text(widget.posting ? 'Posting…' : 'Post'),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: Spacing.sm),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: widget.posting ? null : widget.onCancel,
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: Spacing.sm),
+                      FilledButton(
+                        onPressed: widget.posting || widget.onPost == null
+                            ? null
+                            : () {
+                                final text = _controller.text.trim();
+                                if (text.isNotEmpty) widget.onPost!(text);
+                              },
+                        child: Text(widget.posting ? 'Posting…' : 'Post'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
