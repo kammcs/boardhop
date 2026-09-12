@@ -17,8 +17,10 @@ import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
 import 'form/type_chooser.dart';
 import 'form/work_item_form_page.dart';
+import 'form/work_item_form_state.dart';
 import 'widgets/rich_text_view.dart';
 import 'widgets/work_item_actions.dart';
+import 'widgets/work_item_field_groups.dart';
 import 'widgets/work_item_visuals.dart';
 
 /// One work item: header, key fields, long-text fields rendered as HTML or
@@ -46,6 +48,10 @@ class WorkItemDetailPage extends StatefulWidget {
 }
 
 class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
+  /// The fallback rendering, for an item whose type's layout is not there
+  /// yet (the first open of a cached item without a connection): the
+  /// long-text fields of the stock types. Once the spec arrives, the
+  /// layout decides what is shown.
   static const _longTextFields = <String, String>{
     'System.Description': 'Description',
     'Microsoft.VSTS.TCM.ReproSteps': 'Repro steps',
@@ -397,6 +403,40 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
   );
 
+  /// The item's own fields, the way the web's read view shows them: the
+  /// type's form layout decides which groups appear and in which order
+  /// (Kelly's report on #15303, whose custom fields were invisible).
+  ///
+  /// Until the spec is there — the first open of a cached item without a
+  /// connection, or a refused read — the stock long-text fields stand in,
+  /// so nothing is lost while the layout is on its way.
+  List<Widget> _fields(WorkItem item) {
+    final spec = _spec;
+    final groups = spec == null
+        ? const <FormGroupView>[]
+        : detailGroupsFor(spec, item);
+    if (groups.isEmpty) {
+      return [
+        for (final entry in _longTextFields.entries)
+          if ((item.field<String>(entry.key) ?? '').trim().isNotEmpty)
+            DetailSection(
+              title: entry.value,
+              child: RichTextView(
+                content: item.field<String>(entry.key)!,
+                format: item.formatOf(entry.key),
+                headers: _headers,
+              ),
+            ),
+      ];
+    }
+    return workItemFieldSections(
+      spec: spec!,
+      item: item,
+      groups: groups,
+      headers: _headers,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -473,8 +513,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                           : () => _changeAssignment(item),
                     ),
                     _Facts(item: item),
+                    ..._fields(item),
                     if (item.linkRelations.isNotEmpty)
-                      _Section(
+                      DetailSection(
                         title: 'Links',
                         child: _Links(
                           relations: item.linkRelations,
@@ -483,19 +524,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                           onOpen: _openLinked,
                         ),
                       ),
-                    for (final entry in _longTextFields.entries)
-                      if ((item.field<String>(entry.key) ?? '')
-                          .trim()
-                          .isNotEmpty)
-                        _Section(
-                          title: entry.value,
-                          child: RichTextView(
-                            content: item.field<String>(entry.key)!,
-                            format: item.formatOf(entry.key),
-                            headers: _headers,
-                          ),
-                        ),
-                    _Section(
+                    DetailSection(
                       title: _comments == null
                           ? 'Discussion'
                           : 'Discussion (${_comments!.length})',
@@ -598,8 +627,6 @@ class _Facts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final rows = <(String, String)>[
       ('Area', item.areaPath ?? ''),
       ('Iteration', item.iterationPath ?? ''),
@@ -624,50 +651,7 @@ class _Facts extends StatelessWidget {
       child: Column(
         children: [
           for (final (label, value) in rows)
-            if (value.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 88,
-                      child: Text(
-                        label,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Text(value, style: theme.textTheme.bodyMedium),
-                    ),
-                  ],
-                ),
-              ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Spacing.lg, Spacing.xl, Spacing.lg, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: Spacing.sm),
-          child,
+            if (value.isNotEmpty) DetailFactRow(label: label, value: value),
         ],
       ),
     );
@@ -782,7 +766,7 @@ class _Links extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 88,
+                width: DetailFactRow.labelWidth,
                 child: Text(
                   caption,
                   style: theme.textTheme.labelMedium?.copyWith(

@@ -212,6 +212,44 @@ The board column `+`, "Add child" / "Add related", team templates and drafts. Wh
 - **The chooser from a column or from Add child is a sheet at every width.** `showTypeChooser` hangs its menu on the widget that opened it, and neither a column's `+` (inside a lazy list) nor an overflow item is a stable anchor, so both pass none and get the bottom sheet even on a tablet. The Work app bar's `+` still drops its menu under the button.
 - **One helper opens the form everywhere.** `openWorkItemForm` and `loadTypeChooserData` (in `new_work_item_button.dart`) are now shared by the Work app bar `+`, the board column `+` and the detail page's Add child / Add related, so all three follow the same rule: route on a phone, dialog from medium up.
 
+### Follow-up: the detail page reads the layout too (2026-09-12)
+
+Kelly: CloudCover 2.0 User Story **#15303** carries `Custom.TestingPlan`, `Custom.QAStoryPoints`
+and `Custom.QAAssignee`, and none of them were on the detail page — it rendered a fixed set (Area,
+Iteration, Reason, Attachments, Created, Changed, then Description / Repro steps / Acceptance
+criteria), so every custom field of every customized process was invisible although the page
+already loaded the type's `FormSpec` for the state sheet.
+
+- **The read view now comes from the same layout as the form.** `detailGroupsFor(spec, item)` runs
+  `pageViewsFor` with a new `rendersOnDetail(item)` filter: the Details page's groups in web order
+  (columns flattened top-down), then any custom page's under its own label, keeping only the
+  controls whose field has a **value** on the item — the web's behaviour, and the reason a field the
+  layout does not carry is still never shown. Panels are dropped (`FormGroupView.isPanel`): Links
+  and Attachments have their own sections, Development and Deployment belong to Azure DevOps.
+- **Nothing is shown twice.** `detailShownFieldRefs` is `headerFieldRefs` plus `System.CreatedDate`
+  and `Microsoft.VSTS.Common.Priority`, which the header carries as a chip; the bookkeeping fields
+  were already out through `FieldSpec.isBookkeeping`.
+- **An html control renders as a `RichTextView`** under the group's label (the control's own when
+  the group holds several), in the item's own format; every other field is a `label → value` row,
+  and `DetailFactRow` is now shared by the facts rows, the links rows and the groups so the labels
+  line up in one 104 dp column.
+- **One formatter for both pages.** `formatFieldValue(FieldSpec?, Object?)` (identity → display
+  name with the small avatar, dateTime → an absolute short date with the time only when it carries
+  one, double → trimmed so `1.0` reads "1", boolean → Yes/No, iterables joined) replaced
+  `ReadOnlyControl.displayValue`, which the edit form's read-only controls now call as well.
+- **The fallback stays.** While `_spec` is null (the first open of a cached item without a
+  connection, or a refused type read) or the layout yields no group, the old fixed long-text list
+  renders, so an offline open never loses the description.
+- **What #15303 actually holds** (read-only spike `s38`): `Custom.TestingPlan` is set, and
+  `Custom.QAStoryPoints` and `Custom.QAAssignee` are **not** — nor is `Microsoft.VSTS.Scheduling.
+  StoryPoints`. So the detail page shows Acceptance Criteria, Testing Plan and Classification
+  (Value area) there, and the two QA fields appear in the **edit** form, which renders every
+  editable field of the layout whether it is filled or not (checked on the emulator: Planning
+  shows QA Story Points empty, Priority 2, QA Assignee "Unassigned", Risk "Not set"). Bug
+  **#3898**, reached through the shared query "Bugs To review", does carry them and its detail
+  page now shows Planning with Story Points 1, QA Story Points 1 and its QA engineer as an
+  identity row with an avatar.
+
 ### Phase 5 notes (2026-09-12)
 
 The Links and Attachments pages, and the rich editor's "Insert image". What deviated from §4.3 and

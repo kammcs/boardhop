@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
@@ -269,6 +270,108 @@ List<FormPageView> pageViewsFor(FormSpec spec, {ControlFilter? renders}) {
 List<FormGroupView> groupViewsFor(FormSpec spec, {ControlFilter? renders}) => [
   for (final page in pageViewsFor(spec, renders: renders)) ...page.groups,
 ];
+
+/// Fields the detail page's header and facts rows already carry, so the
+/// layout-driven groups never repeat them: the header's own set, the two
+/// dates it stamps, and Priority, which the header shows as a chip.
+const detailShownFieldRefs = <String>{
+  ...headerFieldRefs,
+  'System.CreatedDate',
+  'Microsoft.VSTS.Common.Priority',
+};
+
+/// Long text with something in it: text outside the tags, or one of the
+/// elements that is content by itself (an image, a table, a list, a link).
+/// `<div><br></div>` is what the web leaves behind in an emptied field.
+bool hasRichContent(String html) =>
+    RegExp(
+      r'<(img|table|iframe|video|li|a)\b',
+      caseSensitive: false,
+    ).hasMatch(html) ||
+    html
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll('&nbsp;', ' ')
+        .trim()
+        .isNotEmpty;
+
+/// True when [item] has something to show for [reference]. The read view
+/// lists the layout's fields that carry a value and leaves the empty ones
+/// to the edit form, the way the web does.
+bool hasFieldValue(FormSpec spec, WorkItem item, String reference) {
+  final raw = item.fields[reference];
+  if (raw == null) return false;
+  if (raw is Iterable) return raw.isNotEmpty;
+  if (raw is String) {
+    return spec.fields[reference]?.type == FieldType.html
+        ? hasRichContent(raw)
+        : raw.trim().isNotEmpty;
+  }
+  return true;
+}
+
+/// Keeps the controls of the layout whose field carries a value on [item]:
+/// the read-only detail page, which shows no empty field and no control the
+/// header or the facts rows already own.
+ControlFilter rendersOnDetail(WorkItem item) => (spec, control) {
+  final field = _fieldOf(spec, control);
+  if (field == null) return false;
+  if (detailShownFieldRefs.contains(field.referenceName)) return false;
+  return hasFieldValue(spec, item, field.referenceName);
+};
+
+/// The Details page's groups in web order (columns flattened top-down),
+/// then any custom page's under its own label, holding only the fields
+/// [item] has a value for: the detail page's read view.
+///
+/// The panels are left out — links and attachments have their own sections
+/// on that page, and Development and Deployment belong to Azure DevOps.
+List<FormGroupView> detailGroupsFor(FormSpec spec, WorkItem item) => [
+  for (final page in pageViewsFor(spec, renders: rendersOnDetail(item)))
+    for (final group in page.groups)
+      if (!group.isPanel) group,
+];
+
+/// One field value as text: identities as their display name, dates as an
+/// absolute short date (with the time when it is not midnight), numbers
+/// trimmed, booleans as Yes or No, everything else as it stands.
+String formatFieldValue(FieldSpec? field, Object? value) {
+  if (value == null) return '';
+  if (value is IdentityRef) return value.displayName;
+  if (field != null && (field.isIdentity || field.type == FieldType.identity)) {
+    return IdentityRef.fromField(value)?.displayName ?? '$value';
+  }
+  if (value is bool) return value ? 'Yes' : 'No';
+  if (field?.type == FieldType.boolean) {
+    return '$value'.toLowerCase() == 'true' ? 'Yes' : 'No';
+  }
+  if (value is DateTime) return _absoluteDate(value);
+  if (field?.type == FieldType.dateTime) {
+    final parsed = DateTime.tryParse('$value');
+    if (parsed != null) return _absoluteDate(parsed);
+  }
+  if (value is num) return _trimmedNumber(value);
+  if (field != null && field.type.isNumeric) {
+    final parsed = num.tryParse('$value');
+    if (parsed != null) return _trimmedNumber(parsed);
+  }
+  if (value is Iterable) return value.map((v) => '$v').join(', ');
+  return '$value';
+}
+
+/// "Sep 12, 2026", with the time when the value carries one.
+String _absoluteDate(DateTime date) {
+  final local = date.toLocal();
+  final midnight = local.hour == 0 && local.minute == 0;
+  return midnight
+      ? DateFormat.yMMMd().format(local)
+      : DateFormat.yMMMd().add_jm().format(local);
+}
+
+/// 1.0 → "1", 1.5 → "1.5": the web never shows a trailing zero.
+String _trimmedNumber(num value) =>
+    value is int || value == value.roundToDouble()
+    ? value.toInt().toString()
+    : '$value';
 
 /// Every field the form owns: the header's, the state chip's and the field
 /// controls of the group cards, in that order.

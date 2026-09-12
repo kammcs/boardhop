@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Durations;
-import 'package:intl/intl.dart';
 
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
@@ -549,7 +548,7 @@ class ReadOnlyControl extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
         child: Text(
-          displayValue(state.value(field.referenceName)),
+          _valueText(state.value(field.referenceName)),
           style: theme.textTheme.bodyLarge?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -558,13 +557,12 @@ class ReadOnlyControl extends StatelessWidget {
     );
   }
 
-  static String displayValue(Object? value) => switch (value) {
-    null => '—',
-    IdentityRef person => person.displayName,
-    DateTime date => DateFormat.yMMMd().add_jm().format(date.toLocal()),
-    Iterable<Object?> list => list.join(', '),
-    _ => '$value',
-  };
+  /// The same formatting the detail page's read view uses, with an em
+  /// dash for a field this item never filled.
+  String _valueText(Object? value) {
+    final text = formatFieldValue(field, value);
+    return text.isEmpty ? '—' : text;
+  }
 }
 
 /// A control label and its group label are the same thing to the reader
