@@ -174,6 +174,40 @@ void main() {
     );
   });
 
+  testWidgets('portrait phone: the same bar, narrower, and whole at xxxL', (
+    tester,
+  ) async {
+    // iPhone 17 in portrait: status bar and home indicator only.
+    const portraitPhone = Size(402, 874);
+    const portraitInsets = EdgeInsets.fromLTRB(0, 62, 0, 34);
+    await pump(tester, size: portraitPhone, insets: portraitInsets);
+    final r = rail(tester);
+    expect(
+      r.width,
+      closeTo(portraitPhone.width * GlassShellLayout.heightFactor, 0.5),
+    );
+    expect(r.bottom, portraitPhone.height - 34 - GlassShellLayout.margin);
+    expect(
+      seen,
+      const EdgeInsets.only(top: 62, bottom: 34 + GlassShellLayout.barGutter),
+    );
+
+    // At the largest accessibility size four scaled items would be wider
+    // than the bar: they share its width instead of overflowing.
+    tester.platformDispatcher.textScaleFactorTestValue = 3.1;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(const SizedBox());
+    await pump(tester, size: portraitPhone, insets: portraitInsets);
+    expect(tester.takeException(), isNull);
+    expect(
+      rail(tester).width,
+      closeTo(portraitPhone.width * GlassShellLayout.heightFactor, 0.5),
+    );
+    for (final label in ['Home', 'Work', 'Repos', 'Pipelines']) {
+      expect(find.text(label), findsOneWidget);
+    }
+  });
+
   testWidgets('portrait tablet: bar along the bottom, page padded above it', (
     tester,
   ) async {

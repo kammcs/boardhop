@@ -167,28 +167,14 @@ class _ProjectShellState extends State<ProjectShell>
         Expanded(child: shell),
       ],
     );
-    if (context.breakpoint.isCompact) {
-      return Scaffold(
-        body: body,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          onDestinationSelected: (i) => _select(context, i),
-          destinations: [
-            for (final d in _destinations)
-              NavigationDestination(
-                icon: Icon(d.icon),
-                selectedIcon: Icon(d.selected),
-                label: d.label,
-              ),
-          ],
-        ),
-      );
-    }
     final platform = Theme.of(context).platform;
     if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
-      // Apple tablets, and phones in landscape, get the floating glass
-      // rail on the side chosen in Settings > Appearance (right by
-      // default); the layout rules live in GlassShellLayout.
+      // Apple devices get the floating glass chrome at every width: a
+      // rail beside the page in landscape (on the side chosen in
+      // Settings > Appearance, right by default) and a bar along the
+      // bottom in portrait, phones included (Kelly, 2026-09-12: the
+      // Material bottom bar on the iPhone was the odd one out). The
+      // layout rules live in GlassShellLayout.
       return GlassShellLayout(
         body: body,
         destinations: [
@@ -204,6 +190,23 @@ class _ProjectShellState extends State<ProjectShell>
         bleedsUnderRail: _bleedsUnderRail(widget.location),
         railOnRight: ThemeScope.of(context).railSide == RailSide.right,
         cutoutSide: _cutout,
+      );
+    }
+    if (context.breakpoint.isCompact) {
+      return Scaffold(
+        body: body,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: shell.currentIndex,
+          onDestinationSelected: (i) => _select(context, i),
+          destinations: [
+            for (final d in _destinations)
+              NavigationDestination(
+                icon: Icon(d.icon),
+                selectedIcon: Icon(d.selected),
+                label: d.label,
+              ),
+          ],
+        ),
       );
     }
     return Scaffold(

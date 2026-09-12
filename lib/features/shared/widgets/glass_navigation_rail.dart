@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart' hide Durations;
@@ -163,20 +164,38 @@ class GlassNavigationRail extends StatelessWidget {
               padding: axis == Axis.vertical
                   ? const EdgeInsets.symmetric(vertical: Spacing.sm)
                   : const EdgeInsets.symmetric(horizontal: Spacing.sm),
-              child: Flex(
-                direction: axis,
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: spread
-                    ? MainAxisAlignment.spaceEvenly
-                    : MainAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < destinations.length; i++)
-                    _GlassRailItem(
-                      destination: destinations[i],
-                      selected: i == selectedIndex,
-                      onTap: () => onDestinationSelected(i),
-                    ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Along the bottom of a phone the bar is narrower than
+                  // four destinations at a large text scale, so items
+                  // share the width instead of overflowing; the label
+                  // scales down inside its item.
+                  var itemWidth = widthFor(context);
+                  if (axis == Axis.horizontal &&
+                      constraints.maxWidth.isFinite &&
+                      destinations.isNotEmpty) {
+                    itemWidth = math.min(
+                      itemWidth,
+                      constraints.maxWidth / destinations.length,
+                    );
+                  }
+                  return Flex(
+                    direction: axis,
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: spread
+                        ? MainAxisAlignment.spaceEvenly
+                        : MainAxisAlignment.start,
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        _GlassRailItem(
+                          destination: destinations[i],
+                          selected: i == selectedIndex,
+                          width: itemWidth,
+                          onTap: () => onDestinationSelected(i),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -190,11 +209,13 @@ class _GlassRailItem extends StatelessWidget {
   const _GlassRailItem({
     required this.destination,
     required this.selected,
+    required this.width,
     required this.onTap,
   });
 
   final GlassRailDestination destination;
   final bool selected;
+  final double width;
   final VoidCallback onTap;
 
   @override
@@ -217,7 +238,7 @@ class _GlassRailItem extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(Radii.lg),
             child: SizedBox(
-              width: GlassNavigationRail.widthFor(context),
+              width: width,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
                 child: Column(
