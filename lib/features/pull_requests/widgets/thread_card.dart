@@ -274,6 +274,9 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                           // Only the empty/non-empty flip changes the row.
                           if (draft.isEmpty != _draft.isEmpty) {
                             setState(() => _draft = draft);
+                            // The button row grows by one: keep it clear
+                            // of the keyboard.
+                            _revealComposer();
                           } else {
                             _draft = draft;
                           }
