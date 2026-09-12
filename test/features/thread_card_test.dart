@@ -116,6 +116,9 @@ void main() {
     expect(find.text('Reactivate'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'reopening');
     await tester.pumpAndSettle();
+    // The plain reply says what the service will do with it anyway: a
+    // comment on a settled thread reopens it (spike note, 2026-09-12).
+    expect(find.text('Reply (reopens)'), findsOneWidget);
     await tester.tap(find.text('Reply & reactivate'));
     await tester.pumpAndSettle();
     expect(replies, ['reopening']);

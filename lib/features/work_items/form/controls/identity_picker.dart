@@ -192,12 +192,16 @@ class _IdentitySheetState extends State<_IdentitySheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final query = _query.text.trim();
-    final seen = <String>{};
     // The unique name first: a team member carries an identity id and the
     // same person from the Graph search carries only a descriptor, so
     // keying on the id would list them twice.
     String key(IdentityRef p) =>
         (p.uniqueName ?? p.id ?? p.displayName).toLowerCase();
+
+    // "Me" is pinned above the list, so the same person must not come back
+    // from the team members or the Graph hits below it.
+    final me = widget.source.me;
+    final seen = <String>{if (me != null) key(me)};
 
     final local = <IdentityRef>[
       for (final p in [...widget.source.recent, ..._members])
@@ -260,12 +264,12 @@ class _IdentitySheetState extends State<_IdentitySheet> {
                       leading: Icon(Icons.error_outline, color: scheme.error),
                       title: Text(_error!),
                     ),
-                  if (widget.source.me != null)
+                  if (me != null && _matches(me, query))
                     _PersonTile(
-                      person: widget.source.me!,
+                      person: me,
                       label: 'Me',
-                      selected: _same(widget.current, widget.source.me),
-                      onTap: () => _choose(widget.source.me!),
+                      selected: _same(widget.current, me),
+                      onTap: () => _choose(me),
                     ),
                   ListTile(
                     leading: const Icon(Icons.person_off_outlined),
@@ -283,7 +287,7 @@ class _IdentitySheetState extends State<_IdentitySheet> {
                       selected: _same(widget.current, person),
                       onTap: () => _choose(person),
                     ),
-                  if (local.isEmpty)
+                  if (local.isEmpty && !(me != null && _matches(me, query)))
                     Padding(
                       padding: const EdgeInsets.all(Spacing.lg),
                       child: Text(

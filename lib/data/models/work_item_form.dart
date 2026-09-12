@@ -782,10 +782,9 @@ class FormSpec extends Equatable {
       type.transitions['']?.firstOrNull ??
       (type.states.isEmpty ? null : type.states.first.name);
 
-  /// Legal target states from [state]; the current state is included when
-  /// Azure DevOps lists it.
-  List<String> transitionsFrom(String state) =>
-      type.transitions[state] ?? const [];
+  /// Legal target states from [state], in the type's own state order; the
+  /// current state is included when Azure DevOps lists it.
+  List<String> transitionsFrom(String state) => type.transitionsFrom(state);
 
   Map<String, dynamic> toJson() => {
     'type': type.toJson(),
@@ -1107,9 +1106,10 @@ class BacklogTypes extends Equatable {
   List<String> childTypeNames(String parentType) {
     if (levels.isEmpty) return const [];
     final index = levels.indexWhere((l) => l.typeNames.contains(parentType));
-    final level = index < 0
-        ? levels.last
-        : levels[index + 1 < levels.length ? index + 1 : index];
+    // The lowest backlog level has nothing under it: a Task is never a
+    // parent, so "Add child" is not offered on one (iOS walkthrough).
+    if (index >= 0 && index + 1 >= levels.length) return const [];
+    final level = index < 0 ? levels.last : levels[index + 1];
     return [
       for (final name in level.typeNames)
         if (!hiddenTypes.contains(name)) name,

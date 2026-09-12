@@ -125,14 +125,37 @@ class _ProjectShellState extends State<ProjectShell>
     final path = projectPath(context, _destinations[index].path);
     if (index == shell.currentIndex) {
       // Re-tapping the current tab resets its branch, which would drop an
-      // open page without its own `PopScope` ever running: already at the
-      // root there is nothing to do, and a form with unsaved changes is
-      // asked first (phase 2 review).
-      if (widget.location == path) return;
+      // open page without its own `PopScope` ever running, so a form with
+      // unsaved changes is asked first (phase 2 review).
+      //
+      // From medium width up that form is a dialog over the branch rather
+      // than a route of its own, so the location is already the branch
+      // root: the early return then swallowed the tap and the tablet
+      // never asked at all (iPad walkthrough, defect 7). Ask, and close
+      // what the branch has open by hand, because `go` to the location it
+      // is already at leaves a dialog standing.
+      final atRoot = widget.location == path;
+      if (atRoot && !UnsavedWork.hasUnsaved) return;
       if (!await UnsavedWork.confirmLeave()) return;
       if (!context.mounted) return;
+      if (atRoot) {
+        _closeBranchOverlays(index);
+        return;
+      }
     }
     context.go(path);
+  }
+
+  /// Closes whatever the branch holds above its own pages — the tablet
+  /// form dialog, a sheet — once the person has agreed to lose it.
+  void _closeBranchOverlays(int index) {
+    final navigator = shell.route.branches[index].navigatorKey.currentState;
+    if (navigator == null) return;
+    // `pop` rather than `maybePop`: the form's own `PopScope` already had
+    // its say through the guard, and would otherwise ask twice.
+    while (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 
   @override

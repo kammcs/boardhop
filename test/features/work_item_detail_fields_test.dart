@@ -131,9 +131,18 @@ void main() {
 
       expect(
         groups.map((g) => g.label).toList(),
-        // Description is empty on this item, so its group is left out; the
-        // panels (Development, Deployment, Related Work) never appear.
-        ['Acceptance Criteria', 'Testing Plan', 'Planning', 'Classification'],
+        // Description is empty on this item, so its group is left out.
+        // Related Work has its own section on the page and never appears,
+        // but Deployment and Development do, as the line of text that says
+        // Azure DevOps owns them.
+        [
+          'Acceptance Criteria',
+          'Testing Plan',
+          'Planning',
+          'Classification',
+          'Deployment',
+          'Development',
+        ],
       );
       final planning = groups.firstWhere((g) => g.label == 'Planning');
       expect(planning.controls.map((c) => c.fieldReferenceName).toList(), [
@@ -141,7 +150,10 @@ void main() {
         'Custom.QAStoryPoints',
         'Custom.QAAssignee',
       ]);
-      expect(groups.every((g) => g.isPanel), isFalse);
+      expect(
+        groups.where((g) => g.isPanel).map((g) => g.panel).toSet(),
+        {FormPanelKind.external},
+      );
       expect(groups.any((g) => g.pageLabel != null), isFalse);
     });
 
@@ -172,7 +184,7 @@ void main() {
     });
 
     test(
-      'an item with nothing filled has no groups, so the page falls back',
+      'an item with nothing filled has only panels, so the page falls back',
       () {
         final bare = WorkItem(
           id: 1,
@@ -185,7 +197,14 @@ void main() {
           },
         );
 
-        expect(detailGroupsFor(spec, bare), isEmpty);
+        final groups = detailGroupsFor(spec, bare);
+        // Only the service's own panels, which is what the page reads as
+        // "nothing of the layout to show" before it falls back.
+        expect(groups.every((g) => g.isPanel), isTrue);
+        expect(
+          groups.map((g) => g.label).toList(),
+          ['Deployment', 'Development'],
+        );
       },
     );
 
@@ -312,6 +331,18 @@ void main() {
       // The header's chip owns Priority; nothing repeats it here.
       expect(find.text('Priority'), findsNothing);
       expect(find.text('Risk'), findsNothing);
+    });
+
+    testWidgets('say who owns Development and Deployment', (tester) async {
+      await pump(tester);
+
+      // The form says it; the detail page did not, so the two groups were
+      // simply missing there (iOS walkthrough).
+      expect(find.text('Deployment'), findsOneWidget);
+      expect(find.text('Development'), findsOneWidget);
+      expect(find.text('Managed in Azure DevOps'), findsNWidgets(2));
+      // The editable panels keep their own sections on the page.
+      expect(find.text('Related Work'), findsNothing);
     });
 
     testWidgets('read the same at the expanded breakpoint', (tester) async {

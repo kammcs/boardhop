@@ -492,6 +492,26 @@ class WorkItemType extends Equatable {
     if (form != null) 'layout': form!.toJson(),
   };
 
+  /// Legal target states from [state], in the type's own state order (New,
+  /// Active, Resolved, Closed, Removed): the transition map answers in an
+  /// order of its own, which read as unsorted in the picker.
+  List<String> transitionsFrom(String state) {
+    final targets = transitions[state] ?? const <String>[];
+    if (targets.length < 2 || states.isEmpty) return targets;
+    final rank = <String, int>{
+      for (final (index, s) in states.indexed) s.name: index,
+    };
+    final ordered = [...targets.indexed];
+    ordered.sort((a, b) {
+      final byState = (rank[a.$2] ?? states.length).compareTo(
+        rank[b.$2] ?? states.length,
+      );
+      // A state the type does not list keeps the order it came in.
+      return byState != 0 ? byState : a.$1.compareTo(b.$1);
+    });
+    return [for (final entry in ordered) entry.$2];
+  }
+
   WorkItemState? stateNamed(String name) {
     for (final s in states) {
       if (s.name == name) return s;

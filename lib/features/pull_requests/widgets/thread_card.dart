@@ -318,7 +318,17 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                           else ...[
                             TextButton(
                               onPressed: widget.busy ? null : () => _send(),
-                              child: Text(widget.busy ? 'Posting…' : 'Reply'),
+                              // Azure DevOps reopens a settled thread as
+                              // soon as a comment lands on it, whatever
+                              // the app asks (spike note, 2026-09-12), so
+                              // the plain Reply says what it will do.
+                              child: Text(
+                                widget.busy
+                                    ? 'Posting…'
+                                    : (t.isResolved
+                                          ? 'Reply (reopens)'
+                                          : 'Reply'),
+                              ),
                             ),
                             if (widget.onSetStatus != null)
                               FilledButton(

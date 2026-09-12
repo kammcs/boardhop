@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/util/format.dart';
@@ -120,8 +122,17 @@ Future<TypeChoice?> showTypeChooser(
     anchor.size.bottomRight(Offset.zero),
     ancestor: overlay,
   );
+  // The menu must end above the bottom of the window: in phone landscape a
+  // long list of types ran off the screen instead of scrolling (iOS
+  // walkthrough).
+  final room =
+      overlay.size.height -
+      topLeft.dy -
+      MediaQuery.viewPaddingOf(context).bottom -
+      Spacing.lg;
   return showMenu<TypeChoice>(
     context: context,
+    constraints: BoxConstraints(maxHeight: math.max(160, room)),
     position: RelativeRect.fromLTRB(
       topLeft.dx,
       topLeft.dy,
@@ -184,8 +195,11 @@ List<PopupMenuEntry<TypeChoice>> _menuItems(
             const Icon(Icons.history_outlined, size: 20),
             const SizedBox(width: Spacing.md),
             Flexible(
+              // Two lines: the title and the age both matter when there is
+              // more than one draft of a type (iPad walkthrough).
               child: Text(
                 'Resume draft: ${draftRowLabel(draft)}',
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),

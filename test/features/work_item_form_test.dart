@@ -207,6 +207,46 @@ void main() {
       state.dispose();
     });
 
+    test('the phone stacks one link list, not two', () {
+      final state = newState();
+      // The layout carries both: the Details page's "Related Work" panel
+      // and the Links page's own.
+      expect(
+        [
+          for (final g in state.groups)
+            if (g.panel == FormPanelKind.links) g.label,
+        ],
+        const ['Related Work', ''],
+      );
+      // Stacked on one screen they were two identical editable lists, so
+      // the phone keeps the Links page's alone (iOS walkthrough).
+      expect(
+        [
+          for (final g in state.stackedGroups)
+            if (g.panel == FormPanelKind.links) g.pageLabel,
+        ],
+        const ['Links'],
+      );
+      // The tablet keeps both: they are on separate tabs.
+      expect(state.pages.map((p) => p.label).toList(), const [
+        'Details',
+        'Links',
+        'Attachments',
+      ]);
+      state.dispose();
+    });
+
+    testWidgets('the phone form renders the links section once', (
+      tester,
+    ) async {
+      final state = newState();
+      await _pump(tester, state, size: const Size(400, 4000));
+
+      expect(find.byType(LinksSection), findsOneWidget);
+      expect(find.text('Add link'), findsOneWidget);
+      state.dispose();
+    });
+
     testWidgets('each control matches its field type', (tester) async {
       final state = newState();
       await _pump(tester, state);

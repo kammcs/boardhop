@@ -6,6 +6,7 @@ import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
 import '../widgets/work_item_actions.dart';
+import '../widgets/work_item_field_groups.dart';
 import '../widgets/work_item_visuals.dart';
 import 'controls/attachments_section.dart';
 import 'controls/boolean_control.dart';
@@ -295,7 +296,7 @@ class _WorkItemFormBodyState extends State<WorkItemFormBody> {
     final out = <Widget>[];
     String? page;
     var index = 0;
-    for (final group in state.groups) {
+    for (final group in state.stackedGroups) {
       if (group.pageLabel != null && group.pageLabel != page) {
         page = group.pageLabel;
         out.add(
@@ -367,33 +368,9 @@ Widget buildPanel({
   // "Development" (branches, commits, pull requests) and "Deployment"
   // (pipeline environments) are artifact links the service writes; the app
   // never edits them.
-  FormPanelKind.external => const _ManagedElsewhere(),
+  FormPanelKind.external => const ManagedElsewhere(),
   FormPanelKind.none => const SizedBox.shrink(),
 };
-
-class _ManagedElsewhere extends StatelessWidget {
-  const _ManagedElsewhere();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Row(
-      children: [
-        Icon(Icons.cloud_outlined, size: 16, color: scheme.onSurfaceVariant),
-        const SizedBox(width: Spacing.sm),
-        Expanded(
-          child: Text(
-            'Managed in Azure DevOps',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 /// One group of the layout as a card: field controls, or one of the panels
 /// (links, attachments, the service's own artifact lists).

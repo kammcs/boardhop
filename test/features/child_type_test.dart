@@ -35,6 +35,13 @@ BacklogTypes _asRequirements() {
 
 void main() {
   group('the child type of a work item', () {
+    test('a level with nothing under it is never a parent', () {
+      // "Add child" is left off the overflow when this is empty, so a Task
+      // no longer offers Task and Bug (iOS walkthrough).
+      expect(_asTasks().childTypeNames('Task'), isEmpty);
+      expect(_asRequirements().childTypeNames('Task'), isEmpty);
+    });
+
     test('each backlog level offers the level below it', () {
       final backlog = _asTasks();
       expect(backlog.childTypeNames('Epic'), const ['Feature']);
@@ -48,9 +55,10 @@ void main() {
       expect(backlog.bugsAreTasks, isTrue);
       // A story's children are the task-level types, Bug included.
       expect(backlog.childTypeNames('User Story'), const ['Task', 'Bug']);
-      // The task level is the last one, so its children stay on it.
-      expect(backlog.childTypeNames('Task'), const ['Task', 'Bug']);
-      expect(backlog.childTypeNames('Bug'), const ['Task', 'Bug']);
+      // The task level is the last one, so nothing sits under it: a Task
+      // and (here) a Bug are never parents.
+      expect(backlog.childTypeNames('Task'), isEmpty);
+      expect(backlog.childTypeNames('Bug'), isEmpty);
     });
 
     test('bugsBehavior asRequirements puts Bug at the story level', () {
@@ -60,7 +68,7 @@ void main() {
       // A Bug then behaves like a story: its child is a Task.
       expect(backlog.childTypeNames('Bug'), const ['Task']);
       expect(backlog.childTypeNames('User Story'), const ['Task']);
-      expect(backlog.childTypeNames('Task'), const ['Task']);
+      expect(backlog.childTypeNames('Task'), isEmpty);
     });
 
     test('a type on no backlog falls back to the task level', () {

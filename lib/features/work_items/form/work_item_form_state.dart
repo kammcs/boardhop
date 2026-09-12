@@ -323,12 +323,13 @@ ControlFilter rendersOnDetail(WorkItem item) => (spec, control) {
 /// then any custom page's under its own label, holding only the fields
 /// [item] has a value for: the detail page's read view.
 ///
-/// The panels are left out — links and attachments have their own sections
-/// on that page, and Development and Deployment belong to Azure DevOps.
+/// Links and attachments are left out — they have their own sections on
+/// that page — but Development and Deployment stay, as the line of text
+/// the form shows too ([FormPanelKind.external]).
 List<FormGroupView> detailGroupsFor(FormSpec spec, WorkItem item) => [
   for (final page in pageViewsFor(spec, renders: rendersOnDetail(item)))
     for (final group in page.groups)
-      if (!group.isPanel) group,
+      if (!group.isPanel || group.panel == FormPanelKind.external) group,
 ];
 
 /// One field value as text: identities as their display name, dates as an
@@ -563,6 +564,25 @@ class WorkItemFormState extends ChangeNotifier {
   late final List<FormGroupView> groups = [
     for (final page in pages) ...page.groups,
   ];
+
+  /// The stacked (phone) arrangement's groups: [groups] without the Details
+  /// page's own "Related Work" panel when the Links page is stacked on the
+  /// same screen. A tablet keeps both, because they are on separate tabs;
+  /// on a phone they were two identical editable lists (iOS walkthrough).
+  late final List<FormGroupView> stackedGroups = _stacked();
+
+  List<FormGroupView> _stacked() {
+    bool isDetailsLinks(FormGroupView g) =>
+        g.panel == FormPanelKind.links && g.pageLabel == null;
+    final onOwnPage = groups.any(
+      (g) => g.panel == FormPanelKind.links && g.pageLabel != null,
+    );
+    if (!onOwnPage) return groups;
+    return [
+      for (final group in groups)
+        if (!isDetailsLinks(group)) group,
+    ];
+  }
 
   /// Every field the form owns, header first, then the cards in web order.
   late final Set<String> fieldRefs;

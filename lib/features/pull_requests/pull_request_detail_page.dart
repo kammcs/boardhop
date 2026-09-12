@@ -294,31 +294,60 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     return _act(() => repo.setThreadStatus(widget.org, pr, thread.id, status));
   }
 
-  void _openFile(PrFileChange change) {
-    final it = _iteration;
-    if (it == null) return;
-    context.push(
-      Uri(
-        path:
-            '${orgRoute(context, widget.org)}/pull-requests/${widget.id}/diff',
-        queryParameters: {'path': change.path, 'iteration': '$it'},
-      ).toString(),
-    );
-  }
+  Future<void> _openFile(PrFileChange change) => _openDiff(change.path);
 
   /// Opens the file a thread is anchored to, at the iteration being
   /// viewed, so the comment can be read in context.
-  void _openThread(PrThread thread) {
+  Future<void> _openThread(PrThread thread) async {
     final path = thread.filePath;
+    if (path == null) return;
+    await _openDiff(path);
+  }
+
+  /// The diff is a route pushed over this page, and threads are written
+  /// there too (a reply, a resolve, a new anchored thread). This page kept
+  /// the threads it read before that, so the Comments tab showed the state
+  /// from before the write until someone pulled (iPad walkthrough, defect
+  /// 6). Re-read them when the diff comes back.
+  Future<void> _openDiff(String path) async {
     final it = _iteration;
-    if (path == null || it == null) return;
-    context.push(
+    if (it == null) return;
+    await context.push(
       Uri(
         path:
             '${orgRoute(context, widget.org)}/pull-requests/${widget.id}/diff',
         queryParameters: {'path': path, 'iteration': '$it'},
       ).toString(),
     );
+    if (!mounted) return;
+    await _reloadThreads();
+  }
+
+  /// Just the conversation, without the file list and the checks: what a
+  /// write on another page can have changed.
+  Future<void> _reloadThreads() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final repo = context.read<PullRequestRepository>();
+    setState(() => _loading = true);
+    try {
+      final raw = await repo.rawThreads(widget.org, pr);
+      if (!mounted) return;
+      setState(() => _conversation = PullRequestRepository.conversation(raw));
+    } on AdoAuthException catch (e) {
+      if (mounted) {
+        context.read<AuthBloc>().add(
+          AuthInteractionRequired(
+            e.message,
+            accountId: AccountScope.maybeOf(context),
+          ),
+        );
+      }
+    } on AdoException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _openWorkItem(WorkItem item) {
@@ -336,6 +365,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     final scheme = theme.colorScheme;
     final pr = _pr;
     final myVote = pr?.reviewer(_me)?.vote ?? PrVote.none;
+    final scrollingTabs = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.3;
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -392,6 +422,11 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
               ),
           ],
           bottom: TabBar(
+            // Three filled thirds clip "Comments (3)" at accessibility
+            // text sizes (iPhone walkthrough, defect 10); let the strip
+            // scroll instead so every label stays whole and reachable.
+            isScrollable: scrollingTabs,
+            tabAlignment: scrollingTabs ? TabAlignment.start : null,
             tabs: [
               const Tab(text: 'Overview'),
               Tab(

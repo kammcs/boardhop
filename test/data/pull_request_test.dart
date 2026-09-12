@@ -41,6 +41,47 @@ void main() {
     expect(PrVote.fromValue(5), PrVote.approvedWithSuggestions);
   });
 
+  test('a reviewer reaches the Graph avatar through its avatar link', () {
+    // Reviewers carry no `descriptor` (spike s23); taking it raw left
+    // every reviewer on the image url the Entra token cannot fetch, so
+    // the row showed initials beside the author's photo (iOS walkthrough).
+    const descriptor = 'aad.YTM2YTFjNWEtOGJmMy03MWNmLWIyMzEtMDllYWM5MGI3YWRk';
+    final pr = PullRequest.fromJson({
+      ...json,
+      'reviewers': [
+        {
+          'id': 'r1',
+          'displayName': 'Kelly Kamm',
+          'vote': 0,
+          'imageUrl':
+              'https://dev.azure.com/puremedia/_api/_common/identityImage?id=1',
+          '_links': {
+            'avatar': {
+              'href':
+                  'https://dev.azure.com/puremedia/_apis/GraphProfile/'
+                  'MemberAvatars/$descriptor',
+            },
+          },
+        },
+      ],
+    });
+    final identity = pr.reviewer('r1')!.identity;
+    expect(identity.descriptor, descriptor);
+    expect(identity.org, 'puremedia');
+    expect(identity.avatarSource()!.isGraph, isTrue);
+  });
+
+  test('a reviewer with neither link nor descriptor keeps its initials', () {
+    final identity = PrReviewer.fromJson({
+      'id': 'r2',
+      'displayName': 'No Links',
+      'vote': 0,
+    }).identity;
+    expect(identity.descriptor, isNull);
+    expect(identity.avatarSource(), isNull);
+    expect(identity.initialsLabel, 'NL');
+  });
+
   test('thread bodies for conversation and anchored line comments', () {
     final plain = PullRequestRepository.threadBody(content: 'hi');
     expect(plain['threadContext'], isNull);

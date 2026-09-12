@@ -142,20 +142,20 @@ void main() {
       );
     });
 
-    test('a photo named after its media id gets a readable name', () {
+    test('a picked photo is named after the moment it was taken', () {
       final at = DateTime(2026, 9, 12, 9, 58, 3);
-      expect(photoFileName('19.png', now: at), 'image-20260912-095803.png');
+      expect(photoFileName('19.png', now: at), 'photo-20260912-095803.png');
+      // The plugin's own temp name never reaches Azure DevOps.
       expect(
-        photoFileName('1000000019.jpg', camera: true, now: at),
+        photoFileName('image_picker_EE2622C8-6B4C-4D3E-9E1F-0A.jpg', now: at),
         'photo-20260912-095803.jpg',
       );
-      // A name that means something is kept as it is.
       expect(
         photoFileName('screenshot-login.png', now: at),
-        'screenshot-login.png',
+        'photo-20260912-095803.png',
       );
       // No extension at all still produces one the service accepts.
-      expect(photoFileName('42', now: at), 'image-20260912-095803.jpg');
+      expect(photoFileName('42', now: at), 'photo-20260912-095803.jpg');
     });
 
     test('an oversize pick carries no bytes', () {

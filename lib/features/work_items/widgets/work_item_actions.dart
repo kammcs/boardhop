@@ -14,8 +14,9 @@ class StateChange {
   final String? reason;
 }
 
-/// Bottom sheet listing the **legal transitions** from the item's current
-/// state (`transitions[state]`, spike w18), not every state of the type.
+/// The **legal transitions** from the item's current state
+/// (`transitions[state]`, spike w18), not every state of the type, in the
+/// type's own state order.
 ///
 /// The type list read carries `transitions` for every type (spike s32), so
 /// the sheet costs no extra call. [reason] is the type's `System.Reason`
@@ -29,10 +30,12 @@ Future<StateChange?> pickState(
   List<String> transitions = const [],
 }) {
   final type = visuals.typeOf(item);
-  final legal = transitions.isNotEmpty
-      ? transitions
-      : (type?.transitions[item.state] ??
-            [for (final s in type?.states ?? const <WorkItemState>[]) s.name]);
+  final fallback = type == null
+      ? const <String>[]
+      : (type.transitionsFrom(item.state).isNotEmpty
+            ? type.transitionsFrom(item.state)
+            : [for (final s in type.states) s.name]);
+  final legal = transitions.isNotEmpty ? transitions : fallback;
   return pickStateChange(
     context,
     states: legal,
@@ -43,8 +46,12 @@ Future<StateChange?> pickState(
   );
 }
 
-/// The state sheet itself, over a plain list of state names, so the work
+/// The state picker itself, over a plain list of state names, so the work
 /// item form's header chip and the detail page share one picker.
+///
+/// A phone gets the bottom sheet; from medium up it is the centered dialog
+/// every other picker of the form uses, which also keeps the last row clear
+/// of the screen edge (iPad walkthrough).
 Future<StateChange?> pickStateChange(
   BuildContext context, {
   required List<String> states,
@@ -53,6 +60,26 @@ Future<StateChange?> pickStateChange(
   String? Function(String state)? categoryOf,
   FieldSpec? reason,
 }) {
+  if (!context.breakpoint.isCompact) {
+    return showDialog<StateChange>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+            child: _StateSheet(
+              states: states,
+              current: current,
+              colorOf: colorOf,
+              categoryOf: categoryOf,
+              reason: reason,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<StateChange>(
     context: context,
     showDragHandle: true,

@@ -79,6 +79,15 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   /// same way the form's Links page does (phase 5).
   Map<int, WorkItem> _linked = const {};
 
+  /// The types "Add child" may offer: the backlog level below this item's
+  /// own. Empty on the lowest level (a Task), where the overflow leaves the
+  /// action out altogether (iPad walkthrough).
+  Set<String> _childTypes = const {};
+
+  /// The overflow button, which the type chooser drops from as a menu from
+  /// medium up, the same way the Work `+` does.
+  final _moreKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +114,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         widget.id,
       );
       _spec = await _formSpec(item);
+      await _loadChildTypes(item);
       await _loadLinks(repo, item);
       final comments = await repo.comments(
         widget.org,
@@ -125,6 +135,21 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// What a child of [item] could be. Cached for a day by the repository,
+  /// and never worth an error: a refusal just leaves "Add child" offered.
+  Future<void> _loadChildTypes(WorkItem item) async {
+    try {
+      final backlog = await context.read<WorkItemFormRepository>().backlogTypes(
+        widget.org,
+        widget.project,
+      );
+      if (!mounted) return;
+      setState(() => _childTypes = backlog.childTypeNames(item.type).toSet());
+    } on AdoException {
+      // Keep whatever was known before.
     }
   }
 
@@ -165,6 +190,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (!related) {
         final backlog = await forms.backlogTypes(widget.org, widget.project);
         limitTo = backlog.childTypeNames(item.type).toSet();
+        if (limitTo.isEmpty) return;
       }
       if (!mounted) return;
       final data = await loadTypeChooserData(
@@ -180,10 +206,14 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       WorkItemTemplate? template;
       if (typeName == null) {
         if (data.model.all.isEmpty) return;
+        setState(() => _writing = false);
         final choice = await showTypeChooser(
           context,
           model: data.model,
           templates: data.templates,
+          // The same anchored menu the Work `+` opens at this width; a
+          // phone still gets the sheet (iPad walkthrough).
+          anchor: _moreKey.currentContext?.findRenderObject() as RenderBox?,
         );
         if (choice == null || !mounted) return;
         typeName = choice.typeName;
@@ -415,8 +445,10 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     final groups = spec == null
         ? const <FormGroupView>[]
         : detailGroupsFor(spec, item);
-    if (groups.isEmpty) {
-      return [
+    return [
+      // Nothing but the service's own panels (or no spec at all): the stock
+      // long-text fields stand in for the layout.
+      if (groups.every((g) => g.isPanel))
         for (final entry in _longTextFields.entries)
           if ((item.field<String>(entry.key) ?? '').trim().isNotEmpty)
             DetailSection(
@@ -427,14 +459,14 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                 headers: _headers,
               ),
             ),
-      ];
-    }
-    return workItemFieldSections(
-      spec: spec!,
-      item: item,
-      groups: groups,
-      headers: _headers,
-    );
+      if (spec != null && groups.isNotEmpty)
+        ...workItemFieldSections(
+          spec: spec,
+          item: item,
+          groups: groups,
+          headers: _headers,
+        ),
+    ];
   }
 
   @override
@@ -466,12 +498,16 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
             onPressed: _refreshing || _writing ? null : _edit,
           ),
           PopupMenuButton<String>(
+            key: _moreKey,
             tooltip: 'More',
             enabled: !_refreshing && !_writing,
             onSelected: (value) => _addLinked(related: value == 'related'),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'child', child: Text('Add child')),
-              PopupMenuItem(value: 'related', child: Text('Add related')),
+            itemBuilder: (context) => [
+              // A Task has no backlog level below it, so it is never a
+              // parent.
+              if (_childTypes.isNotEmpty)
+                const PopupMenuItem(value: 'child', child: Text('Add child')),
+              const PopupMenuItem(value: 'related', child: Text('Add related')),
             ],
           ),
         ],

@@ -74,6 +74,40 @@ void main() {
       expect(t.stateNamed('New')?.category, 'Proposed');
       expect(WorkItemType.iconFor('nope'), Icons.circle_outlined);
     });
+
+    test('transitions come back in the type own state order', () {
+      final t = WorkItemType.fromJson({
+        'name': 'Bug',
+        'referenceName': 'Microsoft.VSTS.WorkItemTypes.Bug',
+        'states': [
+          {'name': 'New'},
+          {'name': 'Active'},
+          {'name': 'Resolved'},
+          {'name': 'Closed'},
+          {'name': 'Removed'},
+        ],
+        // The map answers in an order of its own (spike w18).
+        'transitions': {
+          'New': [
+            {'to': 'New'},
+            {'to': 'Closed'},
+            {'to': 'Resolved'},
+            {'to': 'Active'},
+            {'to': 'Somewhere else'},
+          ],
+        },
+      });
+
+      expect(t.transitionsFrom('New'), const [
+        'New',
+        'Active',
+        'Resolved',
+        'Closed',
+        // A state the type does not list keeps the order it came in.
+        'Somewhere else',
+      ]);
+      expect(t.transitionsFrom('Closed'), isEmpty);
+    });
   });
 
   group('Board', () {

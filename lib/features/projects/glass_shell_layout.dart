@@ -72,13 +72,22 @@ class GlassShellLayout extends StatelessWidget {
   static const double margin = Spacing.xl;
 
   /// What a page keeps clear beside the rail in landscape, measured from
-  /// the screen edge (plus that side's inset when the rail must clear it).
+  /// the screen edge (plus that side's inset when the rail must clear it),
+  /// at the ordinary text size; [railGutterFor] follows the rail when the
+  /// text is larger.
   static const double railGutter =
       margin + GlassNavigationRail.width + Spacing.lg;
 
-  /// What a page keeps clear above the bar in portrait.
+  static double railGutterFor(BuildContext context) =>
+      margin + GlassNavigationRail.widthFor(context) + Spacing.lg;
+
+  /// What a page keeps clear above the bar in portrait, at the ordinary
+  /// text size; [barGutterFor] follows the bar when the text is larger.
   static const double barGutter =
       margin + GlassNavigationRail.thickness + Spacing.lg;
+
+  static double barGutterFor(BuildContext context) =>
+      margin + GlassNavigationRail.thicknessFor(context) + Spacing.lg;
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +108,7 @@ class GlassShellLayout extends StatelessWidget {
                     padding: inset.copyWith(
                       left: 0,
                       right: 0,
-                      bottom: inset.bottom + barGutter,
+                      bottom: inset.bottom + barGutterFor(context),
                     ),
                   ),
                   child: body,
@@ -131,7 +140,8 @@ class GlassShellLayout extends StatelessWidget {
     // From the screen edge: where the rail starts, and where the page's
     // content starts beside it.
     final railEdge = margin + (railSideClear ? 0 : railSideInset);
-    final gutter = railGutter + (railSideClear ? 0 : railSideInset);
+    final railWidth = GlassNavigationRail.widthFor(context);
+    final gutter = railGutterFor(context) + (railSideClear ? 0 : railSideInset);
     final page = bleedsUnderRail
         ? MediaQuery(
             data: mq.copyWith(
@@ -163,7 +173,7 @@ class GlassShellLayout extends StatelessWidget {
             right: railOnRight ? railEdge : null,
             top: inset.top,
             bottom: inset.bottom,
-            width: GlassNavigationRail.width,
+            width: railWidth,
             // Centered, four fifths of the safe height (Kelly's iPad
             // feedback), taller only when the destinations need it.
             child: LayoutBuilder(

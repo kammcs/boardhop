@@ -57,12 +57,38 @@ class GlassNavigationRail extends StatelessWidget {
   /// only as long as its destinations.
   final bool spread;
 
-  /// Width of one destination and so of a vertical rail.
+  /// Width of one destination and so of a vertical rail at the ordinary
+  /// text size.
   static const double width = 72;
+
+  /// How far the rail follows the text scale before the label gives way.
+  /// The rail is chrome of a fixed shape, so it cannot grow without
+  /// limit; the label is held to the same factor.
+  static const double maxScale = 2;
+
+  /// The text scale in force, as a factor of the label's own size and
+  /// capped at [maxScale].
+  static double scaleOf(BuildContext context) {
+    const label = 12.0; // labelMedium, the destination's own size.
+    final scale = MediaQuery.textScalerOf(context).scale(label) / label;
+    return scale.clamp(1.0, maxScale);
+  }
+
+  /// The rail's width for the text size in force. The label is the widest
+  /// part of a destination, and at accessibility sizes "Pipelines" no
+  /// longer fit the 72 pt box and read "Pipelin…" (iPad walkthrough).
+  /// A single word cannot wrap, so the rail follows the text scale
+  /// instead.
+  static double widthFor(BuildContext context) => width * scaleOf(context);
 
   /// Cross-axis size of a horizontal rail: icon pill, gap, label line and
   /// the item's vertical padding. The shell uses it as the page inset.
-  static const double thickness = 32 + Spacing.xs + 16 + 2 * Spacing.sm;
+  static const double thickness = 32 + Spacing.xs + _labelLine + 2 * Spacing.sm;
+  static const double _labelLine = 16;
+
+  /// [thickness] for the text size in force: only the label line grows.
+  static double thicknessFor(BuildContext context) =>
+      thickness + _labelLine * (scaleOf(context) - 1);
 
   /// Blur radius of the glass; the shell keeps this much margin around
   /// the rail so the shadow can fade.
@@ -191,7 +217,7 @@ class _GlassRailItem extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(Radii.lg),
             child: SizedBox(
-              width: GlassNavigationRail.width,
+              width: GlassNavigationRail.widthFor(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: Spacing.sm),
                 child: Column(
@@ -213,11 +239,22 @@ class _GlassRailItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: Spacing.xs),
-                    Text(
-                      destination.label,
-                      style: labelStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // The rail grows with the text scale only as far as
+                    // [GlassNavigationRail.maxScale], so the label is held
+                    // to the same factor, and scaled down inside that if a
+                    // longer word still will not fit — whole and smaller
+                    // rather than "Pipelin…".
+                    MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: GlassNavigationRail.maxScale,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          destination.label,
+                          style: labelStyle,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      ),
                     ),
                   ],
                 ),

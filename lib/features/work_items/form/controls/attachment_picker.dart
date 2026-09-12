@@ -21,8 +21,6 @@ enum AttachmentPickSource {
 
   final String label;
   final IconData icon;
-
-  bool get isCamera => this == AttachmentPickSource.camera;
 }
 
 /// A file the user picked, with its bytes — unless it is over the cap, in
@@ -47,59 +45,70 @@ String attachmentTooLargeMessage(String name, int size) =>
     '$name is ${formatBytes(size)}. Azure DevOps accepts attachments up to '
     '${formatBytes(WorkItemFormRepository.maxAttachmentBytes)}.';
 
-/// A readable name for a picked photo.
+/// A readable name for a picked photo: `photo-20260912-121503.jpg`.
 ///
-/// `image_picker` copies the file into the app's cache and names it after
-/// the platform's own id — "19.png" from the Android photo picker, a
-/// timestamped temp name from the camera — so a name that carries no
-/// meaning is replaced by one that does, keeping the extension.
-String photoFileName(String pickedName, {bool camera = false, DateTime? now}) {
-  final extension = p.extension(pickedName).isEmpty
-      ? '.jpg'
-      : p.extension(pickedName);
-  final stem = p.basenameWithoutExtension(pickedName);
-  final meaningful = stem.length > 3 && !RegExp(r'^[0-9_-]+$').hasMatch(stem);
-  if (meaningful) return pickedName;
-  final stamp = DateFormat('yyyyMMdd-HHmmss')
-      .format((now ?? DateTime.now()).toLocal());
-  return '${camera ? 'photo' : 'image'}-$stamp$extension';
+/// `image_picker` copies the file into the app's cache under a name of its
+/// own — `image_picker_<uuid>.jpg` on iOS, `19.png` from the Android photo
+/// picker — and that name is what the attachment list and the Azure DevOps
+/// web then show, so every camera and library pick is renamed after the
+/// moment it was taken, keeping its extension. A file chosen through the
+/// file picker keeps the name it has (iOS walkthrough).
+String photoFileName(String pickedName, {DateTime? now}) {
+  final extension = p.extension(pickedName);
+  final stamp = DateFormat(
+    'yyyyMMdd-HHmmss',
+  ).format((now ?? DateTime.now()).toLocal());
+  return 'photo-$stamp${extension.isEmpty ? '.jpg' : extension}';
 }
 
-/// The "Add" sheet: camera, photo library or any file.
-Future<AttachmentPickSource?> showAttachmentSourceSheet(BuildContext context) =>
-    showModalBottomSheet<AttachmentPickSource>(
+/// Where to take the file from: camera, photo library or any file.
+///
+/// A phone opens the bottom sheet; from medium up it is the centered dialog
+/// the form's other pickers use, rather than a sheet pinned to the screen
+/// edge behind the tablet's own dialog (iPad walkthrough).
+Future<AttachmentPickSource?> showAttachmentSourceSheet(BuildContext context) {
+  if (!context.breakpoint.isCompact) {
+    return showDialog<AttachmentPickSource>(
       context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Spacing.lg,
-                0,
-                Spacing.lg,
-                Spacing.sm,
-              ),
-              child: Text(
-                'Add attachment',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            for (final source in AttachmentPickSource.values)
-              ListTile(
-                leading: Icon(source.icon),
-                title: Text(source.label),
-                onTap: () => Navigator.of(context).pop(source),
-              ),
-            const SizedBox(height: Spacing.sm),
-          ],
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Spacing.lg),
+            child: _sourceList(context),
+          ),
         ),
       ),
     );
+  }
+  return showModalBottomSheet<AttachmentPickSource>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (context) => SafeArea(top: false, child: _sourceList(context)),
+  );
+}
+
+Widget _sourceList(BuildContext context) => Column(
+  mainAxisSize: MainAxisSize.min,
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    Padding(
+      padding: const EdgeInsets.fromLTRB(Spacing.lg, 0, Spacing.lg, Spacing.sm),
+      child: Text(
+        'Add attachment',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+    ),
+    for (final source in AttachmentPickSource.values)
+      ListTile(
+        leading: Icon(source.icon),
+        title: Text(source.label),
+        onTap: () => Navigator.of(context).pop(source),
+      ),
+    const SizedBox(height: Spacing.sm),
+  ],
+);
 
 /// Runs the platform picker. Returns null when the user backed out.
 ///
@@ -117,7 +126,7 @@ Future<PickedAttachment?> pickAttachment(AttachmentPickSource source) async {
       if (image == null) return null;
       final size = await image.length();
       return PickedAttachment(
-        name: photoFileName(image.name, camera: source.isCamera),
+        name: photoFileName(image.name),
         size: size,
         bytes: size > WorkItemFormRepository.maxAttachmentBytes
             ? null

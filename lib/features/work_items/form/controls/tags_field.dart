@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/http/ado_exceptions.dart';
@@ -10,6 +12,24 @@ Future<List<String>?> pickTags(
   required List<String> current,
   required Future<List<String>> Function() suggestions,
 }) {
+  // From medium up a centered dialog, like every other picker of the form;
+  // a sheet pinned to the screen edge sat oddly beside the tablet's own
+  // dialog (iPad walkthrough). A phone keeps the sheet.
+  if (!context.breakpoint.isCompact) {
+    return showDialog<List<String>>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: _TagsSheet(
+            current: current,
+            suggestions: suggestions,
+            dialog: true,
+          ),
+        ),
+      ),
+    );
+  }
   return showModalBottomSheet<List<String>>(
     context: context,
     isScrollControlled: true,
@@ -21,10 +41,18 @@ Future<List<String>?> pickTags(
 }
 
 class _TagsSheet extends StatefulWidget {
-  const _TagsSheet({required this.current, required this.suggestions});
+  const _TagsSheet({
+    required this.current,
+    required this.suggestions,
+    this.dialog = false,
+  });
 
   final List<String> current;
   final Future<List<String>> Function() suggestions;
+
+  /// Centered dialog rather than a bottom sheet: a shorter box with its own
+  /// title padding, since there is no drag handle above it.
+  final bool dialog;
 
   @override
   State<_TagsSheet> createState() => _TagsSheetState();
@@ -79,17 +107,18 @@ class _TagsSheetState extends State<_TagsSheet> {
             (query.isEmpty || tag.toLowerCase().contains(query)))
           tag,
     ];
+    final height = MediaQuery.sizeOf(context).height;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.7,
+        height: widget.dialog ? math.min(560, height * 0.8) : height * 0.7,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 Spacing.lg,
-                0,
+                widget.dialog ? Spacing.lg : 0,
                 Spacing.lg,
                 Spacing.sm,
               ),

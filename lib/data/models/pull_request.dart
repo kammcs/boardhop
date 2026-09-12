@@ -37,17 +37,24 @@ class PrReviewer extends Equatable {
     this.descriptor,
   });
 
-  factory PrReviewer.fromJson(Map<String, dynamic> json) => PrReviewer(
-    id: json['id'] as String? ?? '',
-    displayName: json['displayName'] as String? ?? '',
-    vote: PrVote.fromValue((json['vote'] as num?)?.toInt()),
-    isRequired: json['isRequired'] as bool? ?? false,
-    isContainer: json['isContainer'] as bool? ?? false,
-    hasDeclined: json['hasDeclined'] as bool? ?? false,
-    uniqueName: json['uniqueName'] as String?,
-    imageUrl: IdentityRef.fromJson(json).imageUrl,
-    descriptor: json['descriptor'] as String?,
-  );
+  factory PrReviewer.fromJson(Map<String, dynamic> json) {
+    // Reviewers carry no `descriptor` field (spike s23); it has to come
+    // from the `_links.avatar` MemberAvatars link, which is exactly what
+    // `IdentityRef.fromJson` does. Reading `json['descriptor']` raw left
+    // every reviewer on the 401 image url, so the row showed initials.
+    final identity = IdentityRef.fromJson(json);
+    return PrReviewer(
+      id: json['id'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? '',
+      vote: PrVote.fromValue((json['vote'] as num?)?.toInt()),
+      isRequired: json['isRequired'] as bool? ?? false,
+      isContainer: json['isContainer'] as bool? ?? false,
+      hasDeclined: json['hasDeclined'] as bool? ?? false,
+      uniqueName: json['uniqueName'] as String?,
+      imageUrl: identity.imageUrl,
+      descriptor: identity.descriptor,
+    );
+  }
 
   final String id;
   final String displayName;

@@ -199,7 +199,10 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
     final source = widget.source;
     if (source == null) return;
     if (info.isImage) {
-      await Navigator.of(context).push(
+      // The root navigator, so the viewer sits above the project shell:
+      // inside it the tab bar stayed on the phone and the glass rail
+      // floated over the image on the tablet (iOS walkthrough).
+      await Navigator.of(context, rootNavigator: true).push(
         MaterialPageRoute<void>(
           fullscreenDialog: true,
           builder: (_) => AttachmentViewer(info: info, source: source),
@@ -533,26 +536,48 @@ class _AttachmentImageState extends State<AttachmentImage> {
 }
 
 /// One image full screen, pinch to zoom.
+///
+/// A lightbox is the one surface of the app that is dark in both modes: the
+/// ground belongs to the photo, not to the theme, so the scaffold and the
+/// chrome over it are fixed here rather than taken from the scheme
+/// (DESIGN.md §3).
 class AttachmentViewer extends StatelessWidget {
   const AttachmentViewer({super.key, required this.info, required this.source});
+
+  static const _ground = Colors.black;
+  static const _onGround = Colors.white;
 
   final AttachmentInfo info;
   final AttachmentSource source;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(info.name, overflow: TextOverflow.ellipsis),
-      leading: IconButton(
-        tooltip: 'Close',
-        icon: const Icon(Icons.close),
-        onPressed: () => Navigator.of(context).pop(),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: _ground,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: _onGround,
+        // The theme's app bar names its own title colour, which
+        // `foregroundColor` does not override.
+        titleTextStyle:
+            (theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge)
+                ?.copyWith(color: _onGround),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(info.name, overflow: TextOverflow.ellipsis),
+        leading: IconButton(
+          tooltip: 'Close',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
-    ),
-    body: SafeArea(
-      top: false,
-      bottom: false,
-      child: AttachmentImage(info: info, source: source, zoomable: true),
-    ),
-  );
+      body: SafeArea(
+        child: SizedBox.expand(
+          child: AttachmentImage(info: info, source: source, zoomable: true),
+        ),
+      ),
+    );
+  }
 }

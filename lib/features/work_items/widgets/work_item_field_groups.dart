@@ -108,6 +108,19 @@ List<Widget> workItemFieldSections({
     }
     page = pageLabel;
 
+    // "Development" and "Deployment": Azure DevOps writes their rows, so
+    // the read view says so, exactly as the form does.
+    if (group.panel == FormPanelKind.external) {
+      out.add(
+        DetailSection(
+          title: group.label.trim(),
+          child: const ManagedElsewhere(),
+        ),
+      );
+      continue;
+    }
+    if (group.isPanel) continue;
+
     final rich = <FormControl>[];
     final facts = <FormControl>[];
     for (final control in group.controls) {
@@ -176,6 +189,32 @@ String _sectionTitle(
   final groupLabel = group.label.trim();
   if (group.controls.length == 1 && groupLabel.isNotEmpty) return groupLabel;
   return _labelFor(control, field);
+}
+
+/// The line the form and the detail page both show for a panel Azure DevOps
+/// fills itself: the "Development" links and the "Deployment" environments.
+class ManagedElsewhere extends StatelessWidget {
+  const ManagedElsewhere({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      children: [
+        Icon(Icons.cloud_outlined, size: 16, color: scheme.onSurfaceVariant),
+        const SizedBox(width: Spacing.sm),
+        Expanded(
+          child: Text(
+            'Managed in Azure DevOps',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// The label of a custom page, above its groups..

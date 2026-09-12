@@ -148,8 +148,9 @@ void main() {
 
     test('the state chip offers the legal transitions only', () {
       final state = editState();
-      // Bug from New (spike w18).
-      expect(state.legalTransitions, ['New', 'Closed', 'Resolved', 'Active']);
+      // Bug from New (spike w18), in the type's own state order rather than
+      // the transition map's (New, Closed, Resolved, Active).
+      expect(state.legalTransitions, ['New', 'Active', 'Resolved', 'Closed']);
       state.dispose();
     });
 

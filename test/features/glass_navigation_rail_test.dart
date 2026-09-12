@@ -1,6 +1,7 @@
 import 'package:boardhop/features/shared/widgets/glass_navigation_rail.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -171,6 +172,46 @@ void main() {
     final last = tester.getCenter(find.text('Pipelines'));
     expect(first.dy, last.dy);
     expect((last.dx - first.dx) / 3, greaterThan(120));
+  });
+
+  testWidgets('at accessibility text sizes the rail grows and the label '
+      'stays whole', (tester) async {
+    Future<Size> railAt(double scale) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: GlassNavigationRail(
+                  destinations: destinations,
+                  selectedIndex: 0,
+                  onDestinationSelected: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return tester.getSize(find.byType(GlassNavigationRail));
+    }
+
+    final normal = await railAt(1);
+    expect(normal.width, GlassNavigationRail.width);
+
+    // xxxL: the rail follows the text scale up to its cap, and the widest
+    // label is laid out whole inside it instead of reading "Pipelin…".
+    final huge = await railAt(3.1);
+    expect(huge.width, GlassNavigationRail.width * GlassNavigationRail.maxScale);
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('Pipelines'),
+    );
+    expect(paragraph.didExceedMaxLines, isFalse, reason: 'no "Pipelin…"');
+    // Painted (so after the scale-down) it fits inside the rail.
+    final rect = tester.getRect(find.text('Pipelines'));
+    expect(rect.width, lessThanOrEqualTo(huge.width));
   });
 
   testWidgets('builds in dark mode too', (tester) async {

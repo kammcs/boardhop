@@ -15,6 +15,13 @@ import 'work_item_detail_page.dart';
 import 'widgets/work_item_visuals.dart';
 import 'widgets/work_view_switch.dart';
 
+/// The item the list should show after a create: the new one from medium
+/// up, where the detail pane is on screen beside the list, and none on a
+/// phone, which pushed the detail route from the form instead (iPad
+/// walkthrough: the pane kept saying "Select a work item").
+int? selectionAfterCreate(int? created, Breakpoint breakpoint) =>
+    breakpoint.isAtLeastMedium ? created : null;
+
 /// Work item lists in one project: "assigned to me", "recently updated" or
 /// a saved query, rendered from the drift cache and refreshed on open, on
 /// pull and when the list changes.
@@ -122,6 +129,14 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
     _select(WorkItemRepository.queryKey(picked.id), picked.name, query: picked);
   }
 
+  /// After a create: the list reloads, and in the two-pane layout the new
+  /// item opens in the detail pane.
+  void _onCreated(int? id) {
+    final selected = selectionAfterCreate(id, context.breakpoint);
+    if (selected != null) setState(() => _selectedId = selected);
+    _refresh();
+  }
+
   void _open(WorkItem item) {
     if (context.breakpoint.isAtLeastMedium) {
       setState(() => _selectedId = item.id);
@@ -162,7 +177,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           NewWorkItemButton(
             org: widget.org,
             project: widget.project,
-            onCreated: (_) => _refresh(),
+            onCreated: _onCreated,
           ),
           // The switch stays rightmost so it never moves when an action
           // appears next to it.
@@ -233,7 +248,11 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
               children: [
                 if (_refreshing) const LinearProgressIndicator(),
                 SizedBox(
-                  height: 48,
+                  // The row follows the text scale: at the largest sizes a
+                  // fixed 48 clipped the chips' labels (iPad walkthrough).
+                  height: MediaQuery.textScalerOf(context)
+                      .scale(48)
+                      .clamp(48.0, 96.0),
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(
