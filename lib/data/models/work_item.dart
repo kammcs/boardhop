@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart' show IconData, Icons;
 
 import '../../core/util/format.dart';
+import 'work_item_form.dart';
 
 /// Graph avatar sizes: small 32 px, medium 64 px, large 256 px.
 enum AvatarSize { small, medium, large }
@@ -255,6 +256,8 @@ class WorkItemState extends Equatable {
 
 /// From `GET {org}/{project}/_apis/wit/workitemtypes`: the team's colors and
 /// icons for each type, which DESIGN.md §3 says to prefer over our palette.
+/// A single-type read adds `transitions` and `xmlForm`; the raw XML is
+/// parsed into [form] and dropped, never cached (research/01 §2.7).
 class WorkItemType extends Equatable {
   const WorkItemType({
     required this.name,
@@ -263,6 +266,8 @@ class WorkItemType extends Equatable {
     this.iconId,
     this.states = const [],
     this.isDisabled = false,
+    this.transitions = const {},
+    this.form,
   });
 
   factory WorkItemType.fromJson(Map<String, dynamic> json) => WorkItemType(
@@ -275,6 +280,15 @@ class WorkItemType extends Equatable {
         .map((m) => WorkItemState.fromJson(m.cast<String, dynamic>()))
         .toList(),
     isDisabled: json['isDisabled'] as bool? ?? false,
+    transitions: parseTransitions(json['transitions']),
+    // `xmlForm` on a fresh read, `layout` when read back from the cache.
+    form:
+        FormLayout.tryParse(json['xmlForm'] as String?) ??
+        (json['layout'] is Map
+            ? FormLayout.fromJson(
+                (json['layout'] as Map).cast<String, dynamic>(),
+              )
+            : null),
   );
 
   final String name;
@@ -283,6 +297,55 @@ class WorkItemType extends Equatable {
   final String? iconId;
   final List<WorkItemState> states;
   final bool isDisabled;
+
+  /// `fromState` → the states it may move to. The empty key is the
+  /// pre-creation state: what a new item may start in (spike s25).
+  final Map<String, List<String>> transitions;
+
+  /// The form tree parsed from `xmlForm`, when the type was read on its own.
+  final FormLayout? form;
+
+  /// `{"New": [{"to": "Active"}, …]}` flattened to target state names.
+  static Map<String, List<String>> parseTransitions(Object? raw) {
+    if (raw is! Map) return const {};
+    final out = <String, List<String>>{};
+    for (final entry in raw.entries) {
+      final targets = <String>[];
+      for (final t in (entry.value as List?) ?? const []) {
+        if (t is Map && t['to'] is String) {
+          targets.add(t['to'] as String);
+        } else if (t is String) {
+          targets.add(t);
+        }
+      }
+      out[entry.key.toString()] = targets;
+    }
+    return out;
+  }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'referenceName': referenceName,
+    if (color != null) 'color': color,
+    if (iconId != null) 'icon': {'id': iconId},
+    'states': [
+      for (final s in states)
+        {
+          'name': s.name,
+          if (s.color != null) 'color': s.color,
+          if (s.category != null) 'category': s.category,
+        },
+    ],
+    if (isDisabled) 'isDisabled': true,
+    if (transitions.isNotEmpty)
+      'transitions': {
+        for (final e in transitions.entries)
+          e.key: [
+            for (final t in e.value) {'to': t},
+          ],
+      },
+    if (form != null) 'layout': form!.toJson(),
+  };
 
   WorkItemState? stateNamed(String name) {
     for (final s in states) {
@@ -324,7 +387,15 @@ class WorkItemType extends Equatable {
   };
 
   @override
-  List<Object?> get props => [referenceName, name, color, iconId];
+  List<Object?> get props => [
+    referenceName,
+    name,
+    color,
+    iconId,
+    states,
+    transitions,
+    form,
+  ];
 }
 
 /// A saved query or folder from `GET _apis/wit/queries?$depth=2`.

@@ -99,7 +99,11 @@ class RuleValidationError {
         fieldReferenceName: json['fieldReferenceName'] as String? ?? '',
         errorCode: json['errorCode'] as String? ?? '',
         errorMessage: json['errorMessage'] as String? ?? '',
-        fieldStatus: json['fieldStatus'] as String?,
+        // The wire calls it `fieldStatusFlags` (`required, invalidEmpty`);
+        // `fieldStatus` is the name in the reference (spike w16).
+        fieldStatus:
+            json['fieldStatus'] as String? ??
+            json['fieldStatusFlags'] as String?,
       );
 
   final String fieldReferenceName;

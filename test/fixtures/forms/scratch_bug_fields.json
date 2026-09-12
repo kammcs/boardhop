@@ -1,0 +1,894 @@
+{
+ "count": 69,
+ "value": [
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "The iteration within which this bug will be fixed",
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.IterationId",
+     "name": "Iteration ID",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.IterationId"
+    }
+   ],
+   "referenceName": "System.IterationPath",
+   "name": "Iteration Path",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationPath"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": true,
+   "dependentFields": [
+    {
+     "referenceName": "System.IterationPath",
+     "name": "Iteration Path",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.IterationPath"
+    }
+   ],
+   "referenceName": "System.IterationId",
+   "name": "Iteration ID",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationId"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.ExternalLinkCount",
+   "name": "External Link Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.ExternalLinkCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel7",
+   "name": "Iteration Level 7",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel7"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel6",
+   "name": "Iteration Level 6",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel6"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel5",
+   "name": "Iteration Level 5",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel5"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel4",
+   "name": "Iteration Level 4",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel4"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel3",
+   "name": "Iteration Level 3",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel3"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel2",
+   "name": "Iteration Level 2",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel2"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.IterationLevel1",
+   "name": "Iteration Level 1",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.IterationLevel1"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel7",
+   "name": "Area Level 7",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel7"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel6",
+   "name": "Area Level 6",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel6"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel5",
+   "name": "Area Level 5",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel5"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel4",
+   "name": "Area Level 4",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel4"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel3",
+   "name": "Area Level 3",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel3"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel2",
+   "name": "Area Level 2",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel2"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AreaLevel1",
+   "name": "Area Level 1",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaLevel1"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.TeamProject",
+   "name": "Team Project",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.TeamProject"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Parent",
+   "name": "Parent",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Parent"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.RemoteLinkCount",
+   "name": "Remote Link Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.RemoteLinkCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.CommentCount",
+   "name": "Comment Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.CommentCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.HyperLinkCount",
+   "name": "Hyperlink Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.HyperLinkCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AttachedFileCount",
+   "name": "Attached File Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AttachedFileCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.AreaId",
+     "name": "Area ID",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AreaId"
+    }
+   ],
+   "referenceName": "System.NodeName",
+   "name": "Node Name",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.NodeName"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "The area of the product with which this bug is associated",
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.AreaId",
+     "name": "Area ID",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AreaId"
+    }
+   ],
+   "referenceName": "System.AreaPath",
+   "name": "Area Path",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaPath"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.RevisedDate",
+   "name": "Revised Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.RevisedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.ChangedDate",
+   "name": "Changed Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.ChangedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Id",
+   "name": "ID",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Id"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": true,
+   "dependentFields": [
+    {
+     "referenceName": "System.AreaPath",
+     "name": "Area Path",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AreaPath"
+    },
+    {
+     "referenceName": "System.NodeName",
+     "name": "Node Name",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.NodeName"
+    }
+   ],
+   "referenceName": "System.AreaId",
+   "name": "Area ID",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AreaId"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AuthorizedAs",
+   "name": "Authorized As",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AuthorizedAs"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "Stories affected and how",
+   "alwaysRequired": true,
+   "dependentFields": [],
+   "referenceName": "System.Title",
+   "name": "Title",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Title"
+  },
+  {
+   "defaultValue": "New",
+   "allowedValues": [
+    "Active",
+    "Closed",
+    "New",
+    "Resolved"
+   ],
+   "helpText": "New = for triage; Active = not yet fixed; Resolved = fixed not yet verified; Closed = fix verified.",
+   "alwaysRequired": true,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    },
+    {
+     "referenceName": "System.Reason",
+     "name": "Reason",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Reason"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+     "name": "Resolved By",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedBy"
+    },
+    {
+     "referenceName": "System.AssignedTo",
+     "name": "Assigned To",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AssignedTo"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+     "name": "Closed Date",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ClosedDate"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+     "name": "Closed By",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ClosedBy"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+     "name": "State Change Date",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.StateChangeDate"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+     "name": "Activated Date",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ActivatedDate"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+     "name": "Activated By",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ActivatedBy"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+     "name": "Resolved Date",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedDate"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ResolvedReason",
+     "name": "Resolved Reason",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedReason"
+    }
+   ],
+   "referenceName": "System.State",
+   "name": "State",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.State"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.AuthorizedDate",
+   "name": "Authorized Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AuthorizedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Watermark",
+   "name": "Watermark",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Watermark"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Rev",
+   "name": "Rev",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Rev"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.ChangedBy",
+   "name": "Changed By",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.ChangedBy"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "Verified",
+    "Not fixed",
+    "Test Failed",
+    "As Designed",
+    "Cannot Reproduce",
+    "Copied to Backlog",
+    "Deferred",
+    "Duplicate",
+    "Fixed and verified",
+    "Obsolete",
+    "Fixed",
+    "Will not Fix",
+    "Investigation Complete",
+    "Approved",
+    "Investigate",
+    "Resolved in error",
+    "Reactivated",
+    "Regression",
+    "Build Failure",
+    "New"
+   ],
+   "helpText": "The reason why the bug is in the current state",
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    },
+    {
+     "referenceName": "Microsoft.VSTS.Common.ResolvedReason",
+     "name": "Resolved Reason",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedReason"
+    }
+   ],
+   "referenceName": "System.Reason",
+   "name": "Reason",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Reason"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "The person currently working on this bug",
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+     "name": "Resolved By",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedBy"
+    },
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "System.AssignedTo",
+   "name": "Assigned To",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.AssignedTo"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "Bug",
+    "Code Review Request",
+    "Code Review Response",
+    "Epic",
+    "Feature",
+    "Feedback Request",
+    "Feedback Response",
+    "Issue",
+    "Shared Parameter",
+    "Shared Steps",
+    "Task",
+    "Test Case",
+    "Test Plan",
+    "Test Suite",
+    "User Story"
+   ],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.WorkItemType",
+   "name": "Work Item Type",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.WorkItemType"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.CreatedDate",
+   "name": "Created Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.CreatedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.CreatedBy",
+   "name": "Created By",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.CreatedBy"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Description",
+   "name": "Description",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Description"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "Discussion thread plus automatic record of changes",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.History",
+   "name": "History",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.History"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.RelatedLinkCount",
+   "name": "Related Link Count",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.RelatedLinkCount"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.Tags",
+   "name": "Tags",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.Tags"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.BoardColumn",
+   "name": "Board Column",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.BoardColumn"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.BoardColumnDone",
+   "name": "Board Column Done",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.BoardColumnDone"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "System.BoardLane",
+   "name": "Board Lane",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/System.BoardLane"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "The size of work estimated for fixing the bug",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Scheduling.StoryPoints",
+   "name": "Story Points",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Scheduling.StoryPoints"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "An estimate of the number of units of work remaining to complete this bug",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Scheduling.RemainingWork",
+   "name": "Remaining Work",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Scheduling.RemainingWork"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "Initial value for Remaining Work - set once, when work begins",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Scheduling.OriginalEstimate",
+   "name": "Original Estimate",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Scheduling.OriginalEstimate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "The number of units of work that have been spent on this bug",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Scheduling.CompletedWork",
+   "name": "Completed Work",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Scheduling.CompletedWork"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "Deployment",
+    "Design",
+    "Development",
+    "Documentation",
+    "Requirements",
+    "Testing"
+   ],
+   "helpText": "Type of work involved",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Common.Activity",
+   "name": "Activity",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.Activity"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "Test context, provided automatically by test infrastructure",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.TCM.SystemInfo",
+   "name": "System Info",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.TCM.SystemInfo"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "How to see the bug. End by contrasting expected with actual behavior.",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.TCM.ReproSteps",
+   "name": "Repro Steps",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.TCM.ReproSteps"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+   "name": "State Change Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.StateChangeDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+   "name": "Activated Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ActivatedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+   "name": "Activated By",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ActivatedBy"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+   "name": "Resolved Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    },
+    {
+     "referenceName": "System.AssignedTo",
+     "name": "Assigned To",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AssignedTo"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+   "name": "Resolved By",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedBy"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "As Designed",
+    "Cannot Reproduce",
+    "Copied to Backlog",
+    "Deferred",
+    "Duplicate",
+    "Fixed",
+    "Fixed and verified",
+    "Obsolete",
+    "Will not Fix"
+   ],
+   "helpText": "The reason why the bug was resolved",
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.Reason",
+     "name": "Reason",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Reason"
+    },
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ResolvedReason",
+   "name": "Resolved Reason",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ResolvedReason"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+   "name": "Closed Date",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ClosedDate"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "alwaysRequired": false,
+   "dependentFields": [
+    {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    }
+   ],
+   "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+   "name": "Closed By",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ClosedBy"
+  },
+  {
+   "defaultValue": "2",
+   "allowedValues": [
+    "1",
+    "2",
+    "3",
+    "4"
+   ],
+   "helpText": "Business importance. 1=must fix; 4=unimportant.",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Common.Priority",
+   "name": "Priority",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.Priority"
+  },
+  {
+   "defaultValue": "3 - Medium",
+   "allowedValues": [
+    "1 - Critical",
+    "2 - High",
+    "3 - Medium",
+    "4 - Low"
+   ],
+   "helpText": "Assessment of the effect of the bug on the project.",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Common.Severity",
+   "name": "Severity",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.Severity"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [],
+   "helpText": "Work first on items with lower-valued stack rank. Set in triage.",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Common.StackRank",
+   "name": "Stack Rank",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.StackRank"
+  },
+  {
+   "defaultValue": "Business",
+   "allowedValues": [
+    "Architectural",
+    "Business"
+   ],
+   "helpText": "The type should be set to Business primarily to represent customer-facing issues. Work to change the architecture should be added as a Requirement",
+   "alwaysRequired": true,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Common.ValueArea",
+   "name": "Value Area",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Common.ValueArea"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "<None>"
+   ],
+   "helpText": "The build in which the bug was fixed",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+   "name": "Integration Build",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Build.IntegrationBuild"
+  },
+  {
+   "defaultValue": null,
+   "allowedValues": [
+    "<None>"
+   ],
+   "helpText": "The build in which the bug was found",
+   "alwaysRequired": false,
+   "dependentFields": [],
+   "referenceName": "Microsoft.VSTS.Build.FoundIn",
+   "name": "Found In",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/fields/Microsoft.VSTS.Build.FoundIn"
+  }
+ ]
+}

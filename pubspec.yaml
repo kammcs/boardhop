@@ -57,6 +57,8 @@ dependencies:
   url_launcher: ^6.3.2
   re_editor: ^0.10.0
   share_plus: ^12.0.2
+  # Parses the legacy `<FORM><Layout>` tree of a work item type (spike s26).
+  xml: ^7.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

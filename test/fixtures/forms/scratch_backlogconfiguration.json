@@ -1,0 +1,384 @@
+{
+ "taskBacklog": {
+  "id": "Microsoft.TaskCategory",
+  "name": "Tasks",
+  "rank": 1,
+  "workItemCountLimit": 1000,
+  "addPanelFields": [
+   {
+    "referenceName": "System.Title",
+    "name": "Title",
+    "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+   }
+  ],
+  "columnFields": [
+   {
+    "columnFieldReference": {
+     "referenceName": "System.Title",
+     "name": "Title",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+    },
+    "width": 400
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    },
+    "width": 100
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.AssignedTo",
+     "name": "Assigned To",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.AssignedTo"
+    },
+    "width": 100
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "Microsoft.VSTS.Scheduling.RemainingWork",
+     "name": "Remaining Work",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Scheduling.RemainingWork"
+    },
+    "width": 50
+   }
+  ],
+  "workItemTypes": [
+   {
+    "name": "Task",
+    "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Task"
+   },
+   {
+    "name": "Bug",
+    "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Bug"
+   }
+  ],
+  "defaultWorkItemType": {
+   "name": "Task",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Task"
+  },
+  "color": "FFA4880A",
+  "isHidden": false,
+  "type": "task"
+ },
+ "requirementBacklog": {
+  "id": "Microsoft.RequirementCategory",
+  "name": "Stories",
+  "rank": 2,
+  "workItemCountLimit": 1000,
+  "addPanelFields": [
+   {
+    "referenceName": "System.Title",
+    "name": "Title",
+    "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+   }
+  ],
+  "columnFields": [
+   {
+    "columnFieldReference": {
+     "referenceName": "System.WorkItemType",
+     "name": "Work Item Type",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.WorkItemType"
+    },
+    "width": 100
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.Title",
+     "name": "Title",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+    },
+    "width": 400
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.State",
+     "name": "State",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+    },
+    "width": 100
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "Microsoft.VSTS.Scheduling.StoryPoints",
+     "name": "Story Points",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Scheduling.StoryPoints"
+    },
+    "width": 50
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "Microsoft.VSTS.Common.ValueArea",
+     "name": "Value Area",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ValueArea"
+    },
+    "width": 100
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.IterationPath",
+     "name": "Iteration Path",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.IterationPath"
+    },
+    "width": 200
+   },
+   {
+    "columnFieldReference": {
+     "referenceName": "System.Tags",
+     "name": "Tags",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Tags"
+    },
+    "width": 200
+   }
+  ],
+  "workItemTypes": [
+   {
+    "name": "User Story",
+    "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/User%20Story"
+   }
+  ],
+  "defaultWorkItemType": {
+   "name": "User Story",
+   "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/User%20Story"
+  },
+  "color": "FF0098C7",
+  "isHidden": false,
+  "type": "requirement"
+ },
+ "portfolioBacklogs": [
+  {
+   "id": "Microsoft.FeatureCategory",
+   "name": "Features",
+   "rank": 3,
+   "workItemCountLimit": 1000,
+   "addPanelFields": [
+    {
+     "referenceName": "System.Title",
+     "name": "Title",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+    }
+   ],
+   "columnFields": [
+    {
+     "columnFieldReference": {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.WorkItemType"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+     },
+     "width": 400
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.State",
+      "name": "State",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Scheduling.Effort"
+     },
+     "width": 50
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+      "name": "Business Value",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.BusinessValue"
+     },
+     "width": 50
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ValueArea"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Tags"
+     },
+     "width": 200
+    }
+   ],
+   "workItemTypes": [
+    {
+     "name": "Feature",
+     "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Feature"
+    }
+   ],
+   "defaultWorkItemType": {
+    "name": "Feature",
+    "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Feature"
+   },
+   "color": "FF773B93",
+   "isHidden": false,
+   "type": "portfolio"
+  },
+  {
+   "id": "Microsoft.EpicCategory",
+   "name": "Epics",
+   "rank": 4,
+   "workItemCountLimit": 1000,
+   "addPanelFields": [
+    {
+     "referenceName": "System.Title",
+     "name": "Title",
+     "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+    }
+   ],
+   "columnFields": [
+    {
+     "columnFieldReference": {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.WorkItemType"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Title"
+     },
+     "width": 400
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.State",
+      "name": "State",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.State"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Scheduling.Effort"
+     },
+     "width": 50
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+      "name": "Business Value",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.BusinessValue"
+     },
+     "width": 50
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/Microsoft.VSTS.Common.ValueArea"
+     },
+     "width": 100
+    },
+    {
+     "columnFieldReference": {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "url": "https://dev.azure.com/puremedia/_apis/wit/fields/System.Tags"
+     },
+     "width": 200
+    }
+   ],
+   "workItemTypes": [
+    {
+     "name": "Epic",
+     "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Epic"
+    }
+   ],
+   "defaultWorkItemType": {
+    "name": "Epic",
+    "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/_apis/wit/workItemTypes/Epic"
+   },
+   "color": "FFE06C00",
+   "isHidden": true,
+   "type": "portfolio"
+  }
+ ],
+ "workItemTypeMappedStates": [
+  {
+   "workItemTypeName": "Epic",
+   "states": {
+    "New": "Proposed",
+    "Active": "InProgress",
+    "Resolved": "InProgress",
+    "Closed": "Completed"
+   }
+  },
+  {
+   "workItemTypeName": "Feature",
+   "states": {
+    "New": "Proposed",
+    "Active": "InProgress",
+    "Resolved": "InProgress",
+    "Closed": "Completed"
+   }
+  },
+  {
+   "workItemTypeName": "User Story",
+   "states": {
+    "New": "Proposed",
+    "Active": "InProgress",
+    "Resolved": "InProgress",
+    "Closed": "Completed"
+   }
+  },
+  {
+   "workItemTypeName": "Task",
+   "states": {
+    "New": "Proposed",
+    "Active": "InProgress",
+    "Closed": "Completed"
+   }
+  },
+  {
+   "workItemTypeName": "Bug",
+   "states": {
+    "New": "Proposed",
+    "Active": "InProgress",
+    "Closed": "Completed",
+    "Resolved": "Resolved"
+   }
+  }
+ ],
+ "backlogFields": {
+  "typeFields": {
+   "Activity": "Microsoft.VSTS.Common.Activity",
+   "Order": "Microsoft.VSTS.Common.StackRank",
+   "ApplicationLaunchInstructions": "Microsoft.VSTS.Feedback.ApplicationLaunchInstructions",
+   "ApplicationStartInformation": "Microsoft.VSTS.Feedback.ApplicationStartInformation",
+   "ApplicationType": "Microsoft.VSTS.Feedback.ApplicationType",
+   "RemainingWork": "Microsoft.VSTS.Scheduling.RemainingWork",
+   "Effort": "Microsoft.VSTS.Scheduling.StoryPoints",
+   "Team": "System.AreaPath"
+  }
+ },
+ "bugsBehavior": "asTasks",
+ "hiddenBacklogs": [
+  "Microsoft.EpicCategory"
+ ],
+ "url": "https://dev.azure.com/puremedia/98720989-0195-48cb-ae2e-0e58ec1bb9a9/8c08e1e1-7afd-411e-b414-4f9e1d14d8d6/_apis/work/backlogconfiguration",
+ "isBugsBehaviorConfigured": true
+}

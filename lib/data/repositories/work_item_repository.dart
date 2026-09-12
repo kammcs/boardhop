@@ -403,6 +403,11 @@ class WorkItemRepository {
     return types;
   }
 
+  /// Puts one item (a fresh create, or a detail read made elsewhere) into
+  /// the cache, merging with a richer copy of the same revision.
+  Future<void> cacheItem(String org, String project, WorkItem item) =>
+      _upsert(org, project, item, DateTime.now());
+
   /// Writes field values into the cached copy only (same rev), for changes
   /// that are queued while offline.
   Future<WorkItem> applyLocally(

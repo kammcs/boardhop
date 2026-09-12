@@ -20,6 +20,7 @@ import 'data/repositories/pipeline_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/pull_request_repository.dart';
 import 'data/repositories/repo_repository.dart';
+import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/write_queue.dart';
 import 'router.dart';
@@ -41,6 +42,7 @@ class AccountDeps {
     pipelines = PipelineRepository(client, db, accountId);
     repos = RepoRepository(client, db, accountId);
     boards = BoardRepository(client, workItems);
+    workItemForms = WorkItemFormRepository(client, workItems, db, accountId);
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
       client,
@@ -77,6 +79,7 @@ class AccountDeps {
   late final PipelineRepository pipelines;
   late final RepoRepository repos;
   late final BoardRepository boards;
+  late final WorkItemFormRepository workItemForms;
   late final WriteQueue queue;
   late final ActivityRepository activity;
   late final AccountRepository account;
@@ -89,6 +92,7 @@ class AccountDeps {
     RepositoryProvider<ProjectRepository>.value(value: projects),
     RepositoryProvider<WorkItemRepository>.value(value: workItems),
     RepositoryProvider<BoardRepository>.value(value: boards),
+    RepositoryProvider<WorkItemFormRepository>.value(value: workItemForms),
     RepositoryProvider<WriteQueue>.value(value: queue),
     RepositoryProvider<PullRequestRepository>.value(value: pullRequests),
     RepositoryProvider<PipelineRepository>.value(value: pipelines),
