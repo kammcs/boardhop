@@ -277,6 +277,10 @@ None of these change relay or app code; they feed §2 and §8 and are the first 
 - **R2.3 choices (2026-09-13):** `UserPrefs.allows` takes verb, reason and detail (`votes: rejectionsAndWaitsOnly` needs the vote label) and quiet hours take the verb, so `quietHours.exceptApprovals: false` can silence approvals; `myThreadsOnly` keeps thread participants and mentions only, not the PR author; `mergeFailed`/`prCompleted`/`prAbandoned` fall under `pullRequests.completedAbandoned` and `prPublished` under `reviewRequested`; the build fallback body is "Build failed" (one pointer serves many recipients, so it cannot say "requested by you"); `POST /v1/test-push` sends the data-only Android shape, so the R1 app shows nothing for it until R2.4 posts the notification itself; `Verb` lives in `lib/src/verb.dart` above both `gateway/` and `routing/`, and `routing/` imports `gateway/`, never the reverse.
 - Known test flake, untouched: `capture_test.dart` "caps the directory at maxFilesPerName" fails about one run in five under a full-suite load (timestamped filenames collide); it is the spike-3 recorder, not relay storage.
 
+## 8b. Status (2026-09-13 evening)
+
+R2.1–R2.6 and R2.8 are built, committed and, for the relay, deployed (see NEXT-STEPS item 19 for the commits). Live acceptance on the Android emulator against the scratch project: a deliberately failed build, an approval-pending push whose tap landed on the Approvals card and was granted there, and the "fixed" build afterwards — all delivered by FCM as data-only messages and enriched on the phone by the Kotlin path with the user's own token. Two facts learned on the way that changed this document: work item hooks must be at resourceVersion 5.1-preview.3 (§1.1) and the comment-shaped `workitem.updated` is the comment event (§2.1). **R2.7 (iOS Notification Service Extension) is the one phase left** and needs the Mac.
+
 ## 9. Build plan (R2, dispatcher and Opus subagents)
 
 Phases, each one subagent brief, each reviewed and committed by the dispatcher after `dart analyze`/`dart test` (relay) and `flutter analyze`/`flutter test` (app), with the emulator and the live relay as the acceptance rig:
