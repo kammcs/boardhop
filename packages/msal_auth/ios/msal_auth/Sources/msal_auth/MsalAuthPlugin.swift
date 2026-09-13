@@ -227,6 +227,9 @@ public class MsalAuthPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDeleg
             // We will only have a public client application object. Apple MSAL does not have specific class for different account mode (Single & multiple). So we just assigned type that we receives from Dart and then call methods as per the type.
             MsalAuth.publicClientApplication = application
             MsalAuth.pcaType = pcaType
+            mirrorConfigurationToSharedDefaults(
+                clientId: clientId, authority: authority, authorityType: authorityType,
+                redirectUri: redirectUri, clientCapabilities: clientCapabilities)
             result(true)
         } else {
             // Sets initialization error. This is a custom exception created at Dart side.
@@ -236,6 +239,41 @@ public class MsalAuthPlugin: NSObject, FlutterPlugin, FlutterSceneLifeCycleDeleg
                     message: "Unable to create public client application",
                     details: nil))
         }
+    }
+
+    /// Mirrors this configuration into a shared `UserDefaults` suite, for a
+    /// host app whose app extension has to build the same client.
+    ///
+    /// Opt-in and inert by default: nothing is written unless the host app's
+    /// `Info.plist` carries `MsalAuthSharedDefaultsSuite`, a string naming an
+    /// app group both the app and its extension are entitled to. MSAL on Apple
+    /// platforms keeps `MSALPublicClientApplicationConfig` in memory, so an
+    /// extension otherwise has no way to learn the client id, authority or
+    /// capabilities the app was configured with — Android's plugin gets this
+    /// for free by writing `msal_config.json`.
+    ///
+    /// What is written is exactly what Dart passed: no tokens, no accounts, no
+    /// account identifiers. Nothing here is logged.
+    private func mirrorConfigurationToSharedDefaults(
+        clientId: String, authority: String?, authorityType: AuthorityType,
+        redirectUri: String?, clientCapabilities: [String]?
+    ) {
+        guard
+            let suite = Bundle.main.object(forInfoDictionaryKey: "MsalAuthSharedDefaultsSuite")
+                as? String, !suite.isEmpty,
+            let defaults = UserDefaults(suiteName: suite)
+        else { return }
+
+        var config: [String: Any] = [
+            "clientId": clientId,
+            "authorityType": authorityType == .b2c ? "b2c" : "aad",
+        ]
+        if let authority, !authority.isEmpty { config["authority"] = authority }
+        if let redirectUri, !redirectUri.isEmpty { config["redirectUri"] = redirectUri }
+        if let clientCapabilities, !clientCapabilities.isEmpty {
+            config["clientCapabilities"] = clientCapabilities
+        }
+        defaults.set(config, forKey: "MsalAuthConfig")
     }
 
     /// Acquires token from public client application.

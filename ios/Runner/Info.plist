@@ -31,6 +31,12 @@
 			</array>
 		</dict>
 	</array>
+	<!-- R2.7: tells the vendored msal_auth plugin to mirror the MSAL
+	     configuration it is given into this app group, where
+	     BoardhopNotificationService can read it. Without the key the plugin
+	     writes nothing (packages/msal_auth/README.md). -->
+	<key>MsalAuthSharedDefaultsSuite</key>
+	<string>group.com.kammcs.boardhop</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>msauthv2</string>
@@ -72,7 +78,8 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<!-- Lets iOS wake Boardhop for a push carrying `content-available`; the
-	     alert itself needs no background mode. UNVERIFIED: never built. -->
+	     alert itself needs no background mode. Verified on Kelly's iPhone on
+	     2026-09-13 (research/06 R1). -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

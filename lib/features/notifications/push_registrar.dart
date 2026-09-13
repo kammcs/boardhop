@@ -21,6 +21,17 @@ typedef RelayCall = Future<RelayResponse> Function(
   Map<String, Object?>? body,
 });
 
+/// Mirrors the MSAL account identifier that registered one organization into a
+/// platform store the app itself does not own — on iOS the app group the
+/// Notification Service Extension reads (R2.7). Null clears it.
+///
+/// Injected so the registrar stays testable and so nothing is called on a
+/// platform that has no such store; `PushService.mirrorAccount` is the live one.
+typedef PushAccountMirror = Future<void> Function(
+  String org,
+  String? accountId,
+);
+
 class RelayResponse {
   const RelayResponse(this.statusCode, [this.body = const {}]);
 
@@ -93,6 +104,7 @@ class PushRegistrar {
     RelayCall? call,
     this.prefs,
     String Function(String org)? relayUrl,
+    this.mirrorAccount,
     this.appVersion = defaultAppVersion,
   }) : _call = call ?? dioRelayCall(),
        _relayUrl = relayUrl ?? relayUrlFor;
@@ -114,6 +126,11 @@ class PushRegistrar {
 
   final RelayCall _call;
   final String Function(String org) _relayUrl;
+
+  /// iOS: the second copy of [msalAccountKeyFor], in the app group. Null on
+  /// Android, where the messaging service reads shared preferences itself.
+  final PushAccountMirror? mirrorAccount;
+
   final String appVersion;
 
   /// Injected in tests (`SharedPreferences.setMockInitialValues` gives one);
@@ -164,6 +181,7 @@ class PushRegistrar {
       // register again.
       if (value.org.isNotEmpty) {
         await store?.setString(msalAccountKeyFor(value.org), accountId);
+        await mirrorAccount?.call(value.org, accountId);
       }
       return registration.value = value;
     } catch (_) {
@@ -180,12 +198,15 @@ class PushRegistrar {
       final org = previous?.org;
       if (org != null && org.isNotEmpty) {
         await store?.remove(msalAccountKeyFor(org));
+        await mirrorAccount?.call(org, null);
       }
     } else {
       await store?.setString(_prefKey, jsonEncode(value.toJson()));
       // The Android messaging service needs this to acquire a token silently
-      // for a push that arrives while the app is not running.
+      // for a push that arrives while the app is not running; the iOS
+      // extension needs the same value in the app group (R2.7).
       await store?.setString(msalAccountKeyFor(value.org), accountId);
+      await mirrorAccount?.call(value.org, accountId);
     }
   }
 

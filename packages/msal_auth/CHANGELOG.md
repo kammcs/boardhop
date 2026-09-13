@@ -1,3 +1,6 @@
+## 3.5.3+boardhop.2
+- iOS: `createSingleAccountPca` / `createMultipleAccountPca` mirror the configuration into a shared `UserDefaults` suite (`MsalAuthConfig`) when the host app's `Info.plist` declares `MsalAuthSharedDefaultsSuite`. Opt-in, no-op without the key; lets an app extension in the same app group build the same public client and call `acquireTokenSilent` against the shared `com.microsoft.adalcache` keychain group. Nothing but the Dart-supplied configuration is written, and nothing is logged.
+
 ## 3.5.3+boardhop.1
 - Added `claims` to `acquireToken` and `acquireTokenSilent`, and `forceRefresh` to `acquireTokenSilent` (Android: `withClaims` / `forceRefresh` on the parameter builders; iOS: `MSALClaimsRequest` and `forceRefresh` on the token parameters). Needed to answer Continuous Access Evaluation claims challenges.
 - Added `AppleConfig.clientCapabilities`, mapped to `MSALPublicClientApplicationConfig.clientApplicationCapabilities`.

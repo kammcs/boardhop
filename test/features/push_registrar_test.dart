@@ -30,6 +30,9 @@ void main() {
   late PushRegistrar registrar;
   var tokenCalls = 0;
 
+  /// What the iOS app group would have been told (R2.7).
+  late List<({String org, String? accountId})> mirrored;
+
   Future<PushRegistrar> build({bool tokenFails = false}) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -43,12 +46,15 @@ void main() {
       call: relay.call,
       prefs: prefs,
       relayUrl: (org) => 'https://relay.test',
+      mirrorAccount: (org, accountId) async =>
+          mirrored.add((org: org, accountId: accountId)),
     );
   }
 
   setUp(() async {
     relay = FakeRelay();
     tokenCalls = 0;
+    mirrored = [];
     registrar = await build();
   });
 
@@ -222,6 +228,71 @@ void main() {
       relay.answers.add(const RelayResponse(500));
       await registrar.unregister();
       expect(await registrar.load(), isNull);
+    });
+  });
+
+  group('the MSAL account mirror (R2.7)', () {
+    test('registering writes the account id under the org key', () async {
+      await registrar.register(
+        org: 'puremedia',
+        platform: 'ios',
+        token: deviceToken,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      // Both stores: shared preferences for Android's messaging service, the
+      // app group for the iOS extension, under the same key name.
+      expect(
+        prefs.getString(PushRegistrar.msalAccountKeyFor('puremedia')),
+        account,
+      );
+      expect(mirrored, [(org: 'puremedia', accountId: account)]);
+    });
+
+    test('unregistering clears it', () async {
+      await registrar.register(
+        org: 'puremedia',
+        platform: 'ios',
+        token: deviceToken,
+      );
+      mirrored.clear();
+      relay.fallback = const RelayResponse(204);
+      await registrar.unregister();
+      expect(mirrored, [(org: 'puremedia', accountId: null)]);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(PushRegistrar.msalAccountKeyFor('puremedia')),
+        isNull,
+      );
+    });
+
+    test('loading an older registration mirrors it too', () async {
+      await registrar.register(
+        org: 'puremedia',
+        platform: 'ios',
+        token: deviceToken,
+      );
+      mirrored.clear();
+      await registrar.load();
+      expect(mirrored, [(org: 'puremedia', accountId: account)]);
+    });
+
+    test('a registrar with no mirror (Android) still registers', () async {
+      final plain = PushRegistrar(
+        accountId: account,
+        accessToken: () async => 'ado-access-token',
+        call: relay.call,
+        prefs: await SharedPreferences.getInstance(),
+        relayUrl: (org) => 'https://relay.test',
+      );
+      expect(
+        await plain.register(
+          org: 'puremedia',
+          platform: 'android',
+          token: deviceToken,
+        ),
+        isNotNull,
+      );
+      expect(mirrored, isEmpty);
     });
   });
 

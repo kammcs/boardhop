@@ -31,9 +31,8 @@ import UserNotifications
   // comes from the existing local-notifications prompt
   // (NotificationService.setEnabled), so the user is asked once.
   //
-  // UNVERIFIED: written on Windows for a session with no Mac. It has never
-  // been compiled or run, and APNs is disabled on the relay until Apple's
-  // Key ID for the .p8 is known.
+  // Verified end to end on Kelly's iPhone on 2026-09-13: token, registration,
+  // a real push from the relay and a tap that routed.
 
   private var pushChannel: FlutterMethodChannel?
 
@@ -58,6 +57,30 @@ import UserNotifications
         // is up, while `_initIos` only runs once Flutter is running. Hold
         // it and deliver it here, where Dart is known to be listening.
         self?.flushPendingOpened()
+      case "setAccount":
+        // R2.7: BoardhopNotificationService runs in its own process and
+        // cannot read `shared_preferences` (the app's standard UserDefaults),
+        // so the MSAL account identifier that registered an organization is
+        // mirrored into the app group under the same key name PushRegistrar
+        // uses. An account identifier, not a token; never logged.
+        guard let arguments = call.arguments as? [String: Any],
+          let org = arguments["org"] as? String, !org.isEmpty,
+          let accountId = arguments["accountId"] as? String, !accountId.isEmpty
+        else {
+          result(false)
+          return
+        }
+        PushSharedDefaults.setAccountId(accountId, org: org)
+        result(true)
+      case "clearAccount":
+        guard let arguments = call.arguments as? [String: Any],
+          let org = arguments["org"] as? String, !org.isEmpty
+        else {
+          result(false)
+          return
+        }
+        PushSharedDefaults.clearAccountId(org: org)
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }

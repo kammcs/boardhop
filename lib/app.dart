@@ -65,6 +65,13 @@ class AccountDeps {
     pushRegistrar = PushRegistrar(
       accountId: accountId,
       accessToken: () => root.auth.accessToken(accountId: accountId),
+      // iOS only: BoardhopNotificationService reads the account id out of the
+      // app group, which shared_preferences cannot reach (R2.7). Android's
+      // messaging service reads shared preferences itself and implements
+      // neither channel method.
+      mirrorAccount: root.push.platform == 'ios'
+          ? root.push.mirrorAccount
+          : null,
     );
     pushPrefs = PushPrefsRepository(
       accountId: accountId,

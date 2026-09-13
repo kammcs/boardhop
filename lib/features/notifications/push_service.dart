@@ -185,8 +185,7 @@ class PushService {
         .whenComplete(() => token.removeListener(listener));
   }
 
-  /// The iOS side is **unverified**: it has never been built or run (no Mac in
-  /// the R1 session, and APNs is off until the key id exists). See research/06.
+  /// Verified end to end on Kelly's iPhone on 2026-09-13 (research/06 R1).
   Future<void> _initIos() async {
     channel.setMethodCallHandler(_onPlatformCall);
     final existing = await channel.invokeMethod<String>('register');
@@ -214,6 +213,35 @@ class PushService {
     return PushPointer.tryFrom({
       for (final entry in arguments.entries) '${entry.key}': entry.value,
     });
+  }
+
+  /// Mirrors the MSAL account identifier that registered [org] into the
+  /// platform's own store, or clears it when [accountId] is null.
+  ///
+  /// **iOS only in practice** (R2.7). `BoardhopNotificationService` runs in its
+  /// own process and cannot read `shared_preferences`, so the Runner copies the
+  /// identifier into the app group under the same key name `PushRegistrar`
+  /// uses; the extension needs it to ask MSAL for a token silently when a push
+  /// arrives with the app closed. Android's messaging service reads
+  /// `FlutterSharedPreferences` directly and implements neither method, which
+  /// is why the caller (`AppDependencies`) only wires this up on iOS and why a
+  /// `MissingPluginException` here is swallowed rather than surfaced.
+  ///
+  /// An account identifier, not a token. Nothing is logged.
+  Future<void> mirrorAccount(String org, String? accountId) async {
+    if (org.isEmpty) return;
+    try {
+      if (accountId == null || accountId.isEmpty) {
+        await channel.invokeMethod<bool>('clearAccount', {'org': org});
+      } else {
+        await channel.invokeMethod<bool>('setAccount', {
+          'org': org,
+          'accountId': accountId,
+        });
+      }
+    } catch (e) {
+      debugPrint('Push: account mirror failed ($e)');
+    }
   }
 
   /// Asks the platform for a token again, for the "Turn on" flow: on Android

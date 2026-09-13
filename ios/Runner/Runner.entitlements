@@ -4,9 +4,17 @@
 <dict>
 	<!-- APNs (research/06 R1). `development` covers debug builds and
 	     TestFlight's sandbox; the App Store build is re-signed with the
-	     production environment automatically. UNVERIFIED: never built. -->
+	     production environment automatically. Verified end to end on Kelly's
+	     iPhone on 2026-09-13. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Shared with BoardhopNotificationService: the account id per
+	     organization and the MSAL configuration the extension builds its
+	     silent client from (R2.7). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.kammcs.boardhop</string>
+	</array>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>

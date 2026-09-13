@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The only door between the app and this extension: the account id per
+	     organization and the MSAL configuration (R2.7, research/14 §4.1). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.kammcs.boardhop</string>
+	</array>
+	<!-- MSAL's own cache group. The same entry is on the Runner, and both
+	     bundles are signed by team 73W98CESN9, so the extension refreshes the
+	     token the app signed in with instead of asking for a new sign-in. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
+	</array>
+</dict>
+</plist>
