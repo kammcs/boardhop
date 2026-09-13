@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -15,6 +16,10 @@ import UIKit
     let messenger = engineBridge.applicationRegistrar.messenger()
     registerDisplayChannel(messenger: messenger)
     registerPushChannel(messenger: messenger)
+    // After the plugins, never before: flutter_local_notifications makes
+    // itself the notification centre's delegate during registration, and
+    // the proxy has to wrap the delegate that is actually installed.
+    installNotificationCentreProxy()
   }
 
   // MARK: - Push (research/06 R1)
@@ -47,6 +52,11 @@ import UIKit
         // never fires.
         UIApplication.shared.registerForRemoteNotifications()
         result(self?.apnsToken)
+        // A tap that launched the app arrives before Dart has a handler:
+        // the notification centre calls its delegate as soon as the engine
+        // is up, while `_initIos` only runs once Flutter is running. Hold
+        // it and deliver it here, where Dart is known to be listening.
+        self?.flushPendingOpened()
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -88,14 +98,59 @@ import UIKit
         pointer[key] = value
       }
     }
-    if !pointer.isEmpty {
-      pushChannel?.invokeMethod(
-        application.applicationState == .active ? "onMessage" : "onOpened",
-        arguments: pointer)
+    // Only the foreground case belongs here now. A notification the user
+    // taps reaches `userNotificationCenter(_:didReceive:)` on the proxy
+    // below, and a normal push delivered while the app is in the
+    // background does not call this method at all — only a silent
+    // `content-available` one does, and that is not an "opened".
+    if !pointer.isEmpty, application.applicationState == .active {
+      pushChannel?.invokeMethod("onMessage", arguments: pointer)
     }
     super.application(
       application, didReceiveRemoteNotification: userInfo,
       fetchCompletionHandler: completionHandler)
+  }
+
+  // MARK: - Notification centre proxy
+  //
+  // `UNUserNotificationCenter` has exactly one delegate and
+  // flutter_local_notifications claims it, forwarding only the
+  // notifications it raised itself. That left a pushed notification with
+  // no route home when the user tapped it (research/06). This proxy sits
+  // in front: it answers for remote notifications and passes everything
+  // else to the delegate the plugin installed, so the feed's own local
+  // notifications keep working exactly as before.
+
+  /// Held strongly: the centre's `delegate` is weak.
+  private var notificationProxy: NotificationCentreProxy?
+
+  /// A tap that arrived before Dart had a handler.
+  private var pendingOpened: [String: String]?
+
+  private func installNotificationCentreProxy() {
+    let centre = UNUserNotificationCenter.current()
+    let proxy = NotificationCentreProxy(inner: centre.delegate)
+    proxy.onRemote = { [weak self] pointer, opened in
+      guard let self, !pointer.isEmpty else { return }
+      if opened {
+        // No handler yet means a cold start from the tap.
+        if self.pushChannel == nil {
+          self.pendingOpened = pointer
+        } else {
+          self.pushChannel?.invokeMethod("onOpened", arguments: pointer)
+        }
+      } else {
+        self.pushChannel?.invokeMethod("onMessage", arguments: pointer)
+      }
+    }
+    notificationProxy = proxy
+    centre.delegate = proxy
+  }
+
+  fileprivate func flushPendingOpened() {
+    guard let pointer = pendingOpened else { return }
+    pendingOpened = nil
+    pushChannel?.invokeMethod("onOpened", arguments: pointer)
   }
 
   /// The display channel, read by lib/core/display_cutout.dart.
@@ -188,5 +243,87 @@ import UIKit
         .takeUnretainedValue() as? [NSValue]
     else { return [] }
     return raw.map { $0.cgRectValue }.filter { !$0.isNull }
+  }
+}
+
+/// Wraps whatever delegate flutter_local_notifications installed.
+///
+/// Remote notifications are answered here and reported to Dart; anything
+/// else is handed straight to [inner], which is how the activity feed's
+/// local notifications keep their taps.
+private final class NotificationCentreProxy: NSObject, UNUserNotificationCenterDelegate {
+  init(inner: UNUserNotificationCenterDelegate?) {
+    self.inner = inner
+  }
+
+  /// Strong on purpose: replacing the centre's weak `delegate` can be the
+  /// last reference to the plugin's own.
+  private let inner: UNUserNotificationCenterDelegate?
+
+  /// `(pointer, opened)` — opened is false for a foreground arrival.
+  var onRemote: (([String: String], Bool) -> Void)?
+
+  /// True for a notification APNs delivered, false for one the app raised.
+  private func isRemote(_ notification: UNNotification) -> Bool {
+    notification.request.trigger is UNPushNotificationTrigger
+  }
+
+  /// The pointer's keys sit beside `aps` at the top level of the payload.
+  private func pointer(of notification: UNNotification) -> [String: String] {
+    var out: [String: String] = [:]
+    for (key, value) in notification.request.content.userInfo {
+      if let key = key as? String, key != "aps", let value = value as? String {
+        out[key] = value
+      }
+    }
+    return out
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    guard isRemote(notification) else {
+      if let inner, inner.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:willPresent:withCompletionHandler:))) {
+        inner.userNotificationCenter?(
+          center, willPresent: notification, withCompletionHandler: completionHandler)
+      } else {
+        completionHandler([.banner, .list, .sound])
+      }
+      return
+    }
+    onRemote?(pointer(of: notification), false)
+    // Nothing from the system: Dart raises its own notification for a
+    // foreground push through the feed's channel, the way Android does,
+    // and two banners for one event is worse than none.
+    completionHandler([])
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    guard isRemote(response.notification) else {
+      if let inner, inner.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) {
+        inner.userNotificationCenter?(
+          center, didReceive: response, withCompletionHandler: completionHandler)
+      } else {
+        completionHandler()
+      }
+      return
+    }
+    onRemote?(pointer(of: response.notification), true)
+    completionHandler()
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    openSettingsFor notification: UNNotification?
+  ) {
+    if let inner, inner.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:openSettingsFor:))) {
+      inner.userNotificationCenter?(center, openSettingsFor: notification)
+    }
   }
 }
