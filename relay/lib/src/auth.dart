@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:shelf/shelf.dart';
 
 /// The only capture user. The secret is `RELAY_CAPTURE_SECRET` on the box.
@@ -16,26 +17,36 @@ bool secureEquals(String a, String b) {
   return diff == 0;
 }
 
-/// True when the request carries `Basic hook:<secret>`.
-bool basicAuthOk(Request request, String secret) {
-  if (secret.isEmpty) return false;
+/// The username and password out of an HTTP Basic header, or null when there
+/// is none or it is malformed. Neither half is ever logged.
+({String username, String password})? basicCredentials(Request request) {
   final header = request.headers['authorization'];
-  if (header == null) return false;
+  if (header == null) return null;
   final parts = header.split(' ');
-  if (parts.length != 2 || parts[0].toLowerCase() != 'basic') return false;
+  if (parts.length != 2 || parts[0].toLowerCase() != 'basic') return null;
   String decoded;
   try {
     decoded = utf8.decode(base64.decode(parts[1].trim()));
   } catch (_) {
-    return false;
+    return null;
   }
   final colon = decoded.indexOf(':');
-  if (colon < 0) return false;
-  final user = decoded.substring(0, colon);
-  final pass = decoded.substring(colon + 1);
+  if (colon < 0) return null;
+  return (username: decoded.substring(0, colon), password: decoded.substring(colon + 1));
+}
+
+/// The hash stored in `orgs.hook_secret_hash`. The secret itself is never
+/// written to the database, a log line or a response.
+String sha256Hex(String secret) => sha256.convert(utf8.encode(secret)).toString();
+
+/// True when the request carries `Basic hook:<secret>`.
+bool basicAuthOk(Request request, String secret) {
+  if (secret.isEmpty) return false;
+  final credentials = basicCredentials(request);
+  if (credentials == null) return false;
   // Both halves in constant time; `&` rather than `&&` so neither short-circuits.
-  final userOk = secureEquals(user, captureUsername);
-  final passOk = secureEquals(pass, secret);
+  final userOk = secureEquals(credentials.username, captureUsername);
+  final passOk = secureEquals(credentials.password, secret);
   return userOk & passOk;
 }
 

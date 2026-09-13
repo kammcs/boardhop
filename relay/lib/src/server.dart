@@ -6,6 +6,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'auth.dart';
 import 'capture.dart';
 import 'gateway/gateway.dart';
+import 'hooks/ingest.dart';
 import 'log.dart';
 import 'registration.dart';
 import 'responses.dart';
@@ -19,6 +20,7 @@ class RelayServer {
     required this.registrations,
     required this.gateway,
     DateTime? startedAt,
+    this.hooks,
     this.dbStatus = 'absent',
   }) : startedAt = startedAt ?? DateTime.now();
 
@@ -33,23 +35,39 @@ class RelayServer {
   /// APNs and FCM; only its health is read here.
   final PushGateway gateway;
 
+  /// Service-hook ingest (R2.1). Null leaves `/hooks/*` unrouted, which the
+  /// catch-all answers 404 — the same answer a rejected post gets.
+  final HookIngest? hooks;
+
   /// "ok", "absent" or an error string; reported by /healthz.
   final String dbStatus;
 
   Handler get handler =>
       const Pipeline().addMiddleware(jsonRequestLog()).addMiddleware(_errorsAsJson).addHandler(_router.call);
 
-  Router get _router => Router()
-    ..get('/healthz', _healthz)
-    ..post('/capture/<name>', _postCapture)
-    ..get('/capture/<name>', _listCapture)
-    ..post('/v1/devices', registrations.register)
-    ..delete('/v1/devices/<deviceId>', registrations.unregister)
-    ..post('/v1/devices/<deviceId>/heartbeat', registrations.heartbeat)
-    ..post('/v1/test-push', registrations.testPush)
-    ..get('/v1/admin/devices', registrations.adminDevices)
-    ..get('/v1/admin/fcm-check', registrations.adminFcmCheck)
-    ..all('/<ignored|.*>', (Request _) => jsonError(404, 'not found'));
+  Router get _router {
+    final router = Router()
+      ..get('/healthz', _healthz)
+      ..post('/capture/<name>', _postCapture)
+      ..get('/capture/<name>', _listCapture)
+      ..post('/v1/devices', registrations.register)
+      ..delete('/v1/devices/<deviceId>', registrations.unregister)
+      ..post('/v1/devices/<deviceId>/heartbeat', registrations.heartbeat)
+      ..post('/v1/test-push', registrations.testPush)
+      ..get('/v1/admin/devices', registrations.adminDevices)
+      ..get('/v1/admin/fcm-check', registrations.adminFcmCheck);
+
+    final ingest = hooks;
+    if (ingest != null) {
+      router
+        ..post('/hooks/<org>', ingest.receive)
+        ..put('/v1/admin/orgs/<org>/hook-secret', ingest.putHookSecret)
+        ..put('/v1/admin/orgs/<org>/subscriptions', ingest.putSubscriptions)
+        ..get('/v1/admin/orgs/<org>/subscriptions', ingest.getSubscriptions);
+    }
+
+    return router..all('/<ignored|.*>', (Request _) => jsonError(404, 'not found'));
+  }
 
   Response _healthz(Request request) {
     final health = gateway.health;

@@ -5,6 +5,9 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:boardhop_relay/src/capture.dart';
 import 'package:boardhop_relay/src/db.dart';
 import 'package:boardhop_relay/src/gateway/gateway.dart';
+import 'package:boardhop_relay/src/hooks/hook_event.dart';
+import 'package:boardhop_relay/src/hooks/hook_queue.dart';
+import 'package:boardhop_relay/src/hooks/ingest.dart';
 import 'package:boardhop_relay/src/identity.dart';
 import 'package:boardhop_relay/src/log.dart';
 import 'package:boardhop_relay/src/registration.dart';
@@ -33,12 +36,18 @@ Future<void> main(List<String> args) async {
   // as in /healthz.
   logEvent('push gateway', fields: {'apns': gateway.apns.status, 'fcm': gateway.fcm.status});
 
+  // The ingest hand-off: `POST /hooks/{org}` validates and enqueues, and this
+  // one consumer does the work. R2.2 replaces LoggingHookProcessor with the
+  // audience rule engine; nothing else about the wiring changes.
+  final hookQueue = HookQueue(processor: const LoggingHookProcessor());
+
   final server = RelayServer(
     version: version,
     captureSecret: secret,
     captures: CaptureStore(captureDir),
     dbStatus: db == null ? 'error' : 'ok',
     gateway: gateway,
+    hooks: HookIngest(db: db, queue: hookQueue, adminSecret: adminSecret),
     registrations: Registrations(
       db: db,
       validator: connectionDataValidator(),
@@ -64,6 +73,7 @@ Future<void> main(List<String> args) async {
   Future<void> shutdown(ProcessSignal signal) async {
     logEvent('shutting down', fields: {'signal': signal.toString()});
     await http.close(force: true);
+    await hookQueue.close();
     await gateway.close();
     db?.close();
     exit(0);

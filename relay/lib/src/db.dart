@@ -60,8 +60,62 @@ class DeviceRow {
   bool get isAndroid => platform == 'android';
 }
 
-/// The relay's store: organizations (kill switch, hook secret) and the devices
-/// registered for them.
+/// One organization's hook settings: the kill switch and the hash of the basic
+/// auth password its service hooks post with. The secret itself is never here.
+class HookOrgRow {
+  const HookOrgRow({required this.org, required this.enabled, this.hookSecretHash});
+
+  final String org;
+  final bool enabled;
+  final String? hookSecretHash;
+}
+
+/// One registered service-hook subscription: which subscription id belongs to
+/// this org and which routing label (`HookKind.label`) it produces.
+///
+/// `kind` is kept as a string so the store stays free of routing types; the
+/// ingest parses it and treats an unparseable row as an unknown subscription.
+class HookSubscriptionRow {
+  const HookSubscriptionRow({
+    required this.org,
+    required this.subId,
+    required this.eventType,
+    required this.kind,
+    this.projectId,
+    this.projectName,
+    this.createdAt,
+  });
+
+  factory HookSubscriptionRow.fromSql(Map<String, Object?> row) => HookSubscriptionRow(
+    org: row['org']! as String,
+    subId: row['sub_id']! as String,
+    eventType: row['event_type']! as String,
+    kind: row['kind']! as String,
+    projectId: row['project_id'] as String?,
+    projectName: row['project_name'] as String?,
+    createdAt: row['created_at'] as String?,
+  );
+
+  final String org;
+  final String subId;
+  final String eventType;
+  final String kind;
+  final String? projectId;
+  final String? projectName;
+  final String? createdAt;
+
+  Map<String, Object?> toJson() => {
+    'subId': subId,
+    'eventType': eventType,
+    'kind': kind,
+    'projectId': projectId,
+    'projectName': projectName,
+    'createdAt': createdAt,
+  };
+}
+
+/// The relay's store: organizations (kill switch, hook secret), the devices
+/// registered for them and the service-hook registry.
 class RelayDb {
   RelayDb._(this._db, this.path);
 
@@ -70,7 +124,17 @@ class RelayDb {
 
   /// 1 — the R0 skeleton (`meta` only).
   /// 2 — R1: `orgs` and `devices`.
-  static const schemaVersion = 2;
+  /// 3 — R2.1: `hook_subscriptions` and `hook_deliveries`.
+  static const schemaVersion = 3;
+
+  /// Delivery rows older than this are pruned; Azure DevOps stops retrying one
+  /// delivery long before it (research/14 §5.2 rule 4).
+  static const deliveryRetention = Duration(hours: 24);
+
+  /// Pruning is opportunistic: one sweep every this many inserts.
+  static const _pruneEvery = 200;
+
+  var _deliveryInserts = 0;
 
   static var _libraryResolved = false;
 
@@ -155,6 +219,33 @@ class RelayDb {
     db.execute('CREATE INDEX IF NOT EXISTS devices_org_user ON devices (org, user_id);');
     db.execute('CREATE INDEX IF NOT EXISTS devices_token ON devices (token);');
 
+    // R2.1. The subscription registry: a post whose subscription id is not here
+    // is answered 404 and dropped, exactly like a wrong secret.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS hook_subscriptions ('
+      '  org          TEXT NOT NULL,'
+      '  sub_id       TEXT NOT NULL,'
+      '  event_type   TEXT NOT NULL,'
+      '  kind         TEXT NOT NULL,'
+      '  project_id   TEXT,'
+      '  project_name TEXT,'
+      '  created_at   TEXT NOT NULL,'
+      '  PRIMARY KEY (org, sub_id)'
+      ');',
+    );
+    // Idempotency across the retries of one delivery. Ids only: no body, no
+    // name, nothing that came out of a payload's content.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS hook_deliveries ('
+      '  org         TEXT NOT NULL,'
+      '  sub_id      TEXT NOT NULL,'
+      '  activity_id TEXT NOT NULL,'
+      '  received_at TEXT NOT NULL,'
+      '  PRIMARY KEY (org, sub_id, activity_id)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS hook_deliveries_age ON hook_deliveries (received_at);');
+
     db.execute('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;', [
       'schema_version',
       '$schemaVersion',
@@ -186,6 +277,89 @@ class RelayDb {
   void setOrgEnabled(String org, bool enabled) {
     ensureOrg(org);
     _db.execute('UPDATE orgs SET enabled = ? WHERE org = ?;', [enabled ? 1 : 0, org]);
+  }
+
+  /// The hook settings for one org, or null when the org has never been seen.
+  HookOrgRow? hookOrg(String org) {
+    final rows = _db.select('SELECT org, enabled, hook_secret_hash FROM orgs WHERE org = ?;', [org]);
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return HookOrgRow(
+      org: row['org']! as String,
+      enabled: (row['enabled'] as int? ?? 1) != 0,
+      hookSecretHash: row['hook_secret_hash'] as String?,
+    );
+  }
+
+  /// Stores the **hash** of an org's hook secret, creating the org enabled if
+  /// it is new. The secret itself never reaches this class.
+  void setHookSecretHash(String org, String hash) {
+    ensureOrg(org);
+    _db.execute('UPDATE orgs SET hook_secret_hash = ? WHERE org = ?;', [hash, org]);
+  }
+
+  // ------------------------------------------------------ hook subscriptions
+
+  HookSubscriptionRow? hookSubscription(String org, String subId) {
+    final rows = _db.select('SELECT * FROM hook_subscriptions WHERE org = ? AND sub_id = ?;', [org, subId]);
+    return rows.isEmpty ? null : HookSubscriptionRow.fromSql(rows.first);
+  }
+
+  List<HookSubscriptionRow> hookSubscriptions(String org) => [
+    for (final row in _db.select('SELECT * FROM hook_subscriptions WHERE org = ? ORDER BY sub_id;', [org]))
+      HookSubscriptionRow.fromSql(row),
+  ];
+
+  /// Replaces an org's whole set in one transaction: either the new set is
+  /// there or the old one still is, never a half-applied mixture.
+  int replaceHookSubscriptions(String org, List<HookSubscriptionRow> rows) {
+    ensureOrg(org);
+    final now = _now();
+    _db.execute('BEGIN IMMEDIATE;');
+    try {
+      _db.execute('DELETE FROM hook_subscriptions WHERE org = ?;', [org]);
+      for (final row in rows) {
+        _db.execute(
+          'INSERT INTO hook_subscriptions (org, sub_id, event_type, kind, project_id, project_name, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?);',
+          [org, row.subId, row.eventType, row.kind, row.projectId, row.projectName, row.createdAt ?? now],
+        );
+      }
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+    return rows.length;
+  }
+
+  // --------------------------------------------------------- hook deliveries
+
+  /// Records one delivery attempt. False means this `(org, subId, activityId)`
+  /// has been seen already: a retry, to be answered 200 and processed no
+  /// further (research/14 §5.2 rule 4).
+  bool recordHookDelivery({required String org, required String subId, required String activityId}) {
+    _db.execute(
+      'INSERT INTO hook_deliveries (org, sub_id, activity_id, received_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (org, sub_id, activity_id) DO NOTHING;',
+      [org, subId, activityId, _now()],
+    );
+    final inserted = _db.updatedRows > 0;
+    if (inserted && ++_deliveryInserts % _pruneEvery == 0) {
+      pruneHookDeliveries(DateTime.now().toUtc().subtract(deliveryRetention));
+    }
+    return inserted;
+  }
+
+  /// Drops delivery rows received before [before]. Returns how many went.
+  int pruneHookDeliveries(DateTime before) {
+    _db.execute('DELETE FROM hook_deliveries WHERE received_at < ?;', [before.toUtc().toIso8601String()]);
+    return _db.updatedRows;
+  }
+
+  int hookDeliveryCount() {
+    final rows = _db.select('SELECT COUNT(*) AS n FROM hook_deliveries;');
+    return rows.isEmpty ? 0 : rows.first['n']! as int;
   }
 
   // --------------------------------------------------------------- devices

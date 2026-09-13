@@ -6,10 +6,14 @@ push gateway forwards an opaque pointer to the phone. This directory is the
 relay's home in the monorepo — a plain Dart package (no Flutter) that ships as a
 container.
 
-What it does today (phase R1):
+What it does today (phases R1 and R2.1):
 
 - `GET /healthz` — `{"ok":true,"version":"<git sha>","uptime":<seconds>,"db":"ok",
   "apns":"disabled (no key id)","fcm":"ready"}`.
+- **Service-hook ingest** — `POST /hooks/{org}` with per-org HTTP basic auth, a
+  subscription registry, delivery dedup and a fast 200 backed by an in-process
+  queue, plus the `/v1/admin/orgs/{org}/…` routes that configure it. See
+  "Ingest" below.
 - **Device registration** — `POST /v1/devices`, `DELETE /v1/devices/{id}`,
   `POST /v1/devices/{id}/heartbeat`, each authenticated with the user's own
   Azure DevOps access token.
@@ -21,8 +25,8 @@ What it does today (phase R1):
   HTTP basic auth, user `hook`; every post is written as one JSON file under
   `/data/capture/{name}/`.
 
-The event→user mapping (turning a service-hook post into an audience) is the
-next phase; see "The audience problem" in research/06.
+Turning a routed event into an audience is the next phase (R2.2); the design is
+research/14 §2 and §5, and "The audience problem" in research/06.
 
 ## What runs on the box
 
@@ -132,6 +136,105 @@ subset: `content-type`, `user-agent` and every `x-vss-*`.
 
 `research/spikes/w22_hook_capture.py` creates the scratch-project subscriptions
 that feed `/capture/scratch`.
+
+## Ingest (`/hooks/{org}`)
+
+The real receiver, as opposed to the capture recorder: this is what the thirteen
+service-hook subscriptions of research/14 §1 post to. It is deliberately dull —
+authenticate, look the subscription up, dedup, project the body into a typed
+`RoutingView`, hand that to an in-process queue, answer 200. No network call on
+the request path, and nothing from the body is written anywhere.
+
+```
+POST /hooks/{org}
+Authorization: Basic aG9vazo…       (user `hook`, password = the org's hook secret)
+Content-Type: application/json
+{"subscriptionId":"…","eventType":"workitem.updated","resource":{…}}
+→ 200 {"accepted":true}
+→ 200 {"accepted":true,"duplicate":true}    (a retry of a delivery already seen)
+→ 404 {}                                    (everything the relay refuses)
+→ 413 / 415 / 400                           (too big, not JSON, not an object)
+```
+
+**Auth and the 404 wall.** The secret is stored only as a **sha256 hex hash** in
+`orgs.hook_secret_hash` and compared in constant time. Five different failures —
+an org with no secret, an unknown org, a disabled org (`orgs.enabled = 0`), a
+wrong secret, and a `subscriptionId` (or `X-VSS-SubscriptionId`) that is not
+registered for that org — all answer **404 with an empty JSON object**, byte for
+byte the same, so the endpoint cannot be probed. Which one it was appears only
+in the log, as `{"msg":"hook rejected","org":"…","reason":"bad-secret"}`: a
+reason code and nothing else. The body is capped at 1 MB (413 past that) and the
+content type must be JSON.
+
+**Registry.** `hook_subscriptions (org, sub_id, event_type, kind, project_id,
+project_name, created_at)` is the list of subscriptions the relay will accept a
+post from. `kind` is the routing label of research/14 §1 — `pr.created`,
+`pr.updated.push|reviewers|status|vote`, `pr.comment`, `pr.merged`, `wi.created`,
+`wi.updated`, `wi.commented`, `build.complete`, `run.state`, `stage.state`,
+`approval.pending`, `approval.completed` — because `git.pullrequest.updated`
+fires for four different things and the body does not say which; the four
+`notificationType`-filtered subscriptions do. Registering it is the admin's job:
+
+```sh
+# On the box, so neither secret leaves it:
+S=$(grep ^RELAY_ADMIN_SECRET= /srv/relay/relay.env | cut -d= -f2)
+
+curl -sS -X PUT -H "Authorization: Bearer $S" -H 'Content-Type: application/json' \
+  -d '{"secret":"<32 random bytes, hex>"}' \
+  http://127.0.0.1:8080/v1/admin/orgs/puremedia/hook-secret
+→ {"org":"puremedia","updated":true}
+
+curl -sS -X PUT -H "Authorization: Bearer $S" -H 'Content-Type: application/json' \
+  -d '[{"subId":"…","eventType":"workitem.updated","kind":"wi.updated",
+        "projectId":"…","projectName":"DevOps Mobile App"}]' \
+  http://127.0.0.1:8080/v1/admin/orgs/puremedia/subscriptions
+→ {"org":"puremedia","subscriptions":1}
+
+curl -sS -H "Authorization: Bearer $S" \
+  http://127.0.0.1:8080/v1/admin/orgs/puremedia/subscriptions
+```
+
+The PUT **replaces** the org's whole set in one transaction, so a half-applied
+registry is impossible; an unknown `kind`, or a kind that does not belong to its
+`eventType`, is a 400 and leaves the old set alone. The org row is created
+enabled if it is new. Without `RELAY_ADMIN_SECRET` all three routes answer 404,
+as `/v1/admin/devices` does. The secret is hashed the moment it arrives: it is
+never logged, echoed in the response, or stored.
+
+**Dedup and the fast 200.** `X-VSS-ActivityId` is unique per delivery *attempt*,
+so `hook_deliveries (org, sub_id, activity_id, received_at)` makes a retry a
+no-op: 200, one `hook duplicate` log line, no processing. The body's `id` is the
+fallback when the header is absent. Rows are pruned opportunistically on insert
+once they are older than 24 h. Everything after the dedup is queued: `HookQueue`
+is a bounded (1000) in-process queue with a **single consumer**, so the handler
+returns in milliseconds — research/14 §5.2 rule 4, since a slow answer is a
+retry, and a retry is another delivery. An overflow is dropped and counted
+(`hook dropped`, reason `queue-full`) rather than growing without limit; a
+processor that throws is counted and forgotten.
+
+**What the consumer sees.** A `RoutingView`: a typed, immutable projection of
+the ~20 fields the R2.2 rules read — ids, the kind, the artifact title, the
+actor, assignee, creator, reviewers and their votes, the new state, the changed
+field *names*, mention **GUIDs** (pulled out of `data-vss-mention="version:2.0,…"`
+and `@<…>` markup, the text itself discarded), comment/thread/parent ids, build
+result and branch, approval status and approver ids. It keeps no reference to
+the raw body, so nothing downstream can serialise one by accident, and
+`toLogFields()` returns ids, the kind and counts only. It also carries the two
+noise classifiers of research/14 §5.2 rule 3: `isCommentNoise` (a
+`workitem.updated` whose changed fields are all in the comment set — the
+`workitem.commented` event is the one that notifies) and `isSystemComment`.
+
+**What is logged, and what is never stored.** For R2.1 the processor is
+`LoggingHookProcessor`: one `hook routed` line per event, carrying the kind,
+org, event type, subscription id, activity id, project id, artifact id, run id
+and actor/assignee/comment/thread ids, plus counts for mentions, reviewers and
+changed fields. Never a title, a name, a comment, a description, a field value
+or a branch. The only durable trace of an event is the four-column
+`hook_deliveries` row, which is ids and a timestamp. `dart test` asserts both:
+a synthetic payload carrying a sentinel string in its title, description,
+comment content, `System.History` and `message.text` produces no log line and no
+byte in the sqlite file containing it. R2.2 swaps the processor for the audience
+rule engine; nothing else about the wiring changes.
 
 ## Device registration (`/v1/devices`)
 
@@ -250,7 +353,7 @@ are missing and never overwrites one that is there.
 | name | what it is |
 |---|---|
 | `RELAY_CAPTURE_SECRET` | the capture endpoint's basic-auth password; generated on the box |
-| `RELAY_ADMIN_SECRET` | bearer for `/v1/admin/*`; generated on the box |
+| `RELAY_ADMIN_SECRET` | bearer for `/v1/admin/*`, including the hook registry routes; generated on the box |
 | `APNS_KEY_ID` | Apple's ten-character Key ID. `9L94ZN33Y3` since 2026-09-13; empty means APNs is off, which `/healthz` reports as `disabled (no key id)` |
 | `APNS_TEAM_ID` | `73W98CESN9` |
 | `APNS_TOPIC` | `com.kammcs.boardhop` |
