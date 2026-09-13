@@ -21,9 +21,9 @@ Nine subscriptions per project today (spike w22), chosen from the catalogue in `
 | tfs | `git.pullrequest.updated` ×4 | 1.0 | `notificationType` = each of the four kinds (§1.2) | yes |
 | tfs | `ms.vss-code.git-pullrequest-comment-event` | 2.0 | none | yes |
 | tfs | `git.pullrequest.merged` | 1.0 | `mergeResult` = `Unsuccessful` (it fires on every merge attempt otherwise, w24) | yes, author only |
-| tfs | `workitem.updated` | 1.0 | `changedFields` empty (any); the relay filters | yes |
-| tfs | `workitem.commented` | 1.0 | none | yes |
-| tfs | `workitem.created` | 1.0 | none | yes, only when created assigned to someone else |
+| tfs | `workitem.updated` | **5.1-preview.3** (see §1.1) | `changedFields` empty (any); the relay filters | yes |
+| tfs | `workitem.commented` | 5.1-preview.3 | none | subscribed, dropped by the relay (§2.1 note) |
+| tfs | `workitem.created` | 5.1-preview.3 | none | yes, only when created assigned to someone else |
 | tfs | `build.complete` | 2.0 | none | yes |
 | pipelines | `ms.vss-pipelinechecks-events.approval-pending` | 5.1-preview.1 | none | yes |
 | pipelines | `ms.vss-pipelines.run-state-changed-event` | 5.1-preview.1 | none | subscribed, never notifies: it is the only event that gives the run's requester as an identity (§1.4) |
@@ -34,7 +34,7 @@ Payload facts verified by capture (All + text; w22/w23 on 2026-09-13, then w24/w
 
 ### 1.1 The identity of the actor and of each audience member
 
-Every payload names people as identity refs with `id` (the identity GUID the relay stores from `connectionData.authenticatedUser.id`), `displayName`, `uniqueName`, sometimes `descriptor`. The relay matches on **`id`**, never on name or mail. Verified in w22: `revisedBy.id`, `comment.author.id`, `pullRequest.createdBy.id`, `reviewers[].id` are present. Work item identity fields in `revision.fields` (`System.AssignedTo`, `System.CreatedBy`) are identity **objects** at resourceVersion 1.0 with `all` (`{displayName, id, uniqueName, ...}`) *(seen for AssignedTo in w22; CreatedBy assumed the same)*.
+Every payload names people as identity refs with `id` (the identity GUID the relay stores from `connectionData.authenticatedUser.id`), `displayName`, `uniqueName`, sometimes `descriptor`. The relay matches on **`id`**, never on name or mail. Verified in w22: `revisedBy.id`, `comment.author.id`, `pullRequest.createdBy.id`, `reviewers[].id` are present. Work item identity fields are the trap: at resourceVersion **1.0** and **3.1-preview.3** `System.AssignedTo`, `System.CreatedBy` and `System.ChangedBy` arrive as `"Name <mail>"` **strings** (1.0) or `{displayName, name, uniqueName}` objects **without an id** (3.1-preview.3), in both `revision.fields` and `fields.*.oldValue/newValue`; only **5.1-preview.3** sends full identity refs `{id, descriptor, displayName, uniqueName, …}`. Found on 2026-09-13 when the first live assignment routed with no `assigneeId` (spikes w27/w28); the three work item subscriptions are therefore created at 5.1-preview.3 and the relay's `RoutingView` reads the objects. `revisedBy` carries an `id` at every version.
 
 ### 1.2 `git.pullrequest.updated` fires for everything
 

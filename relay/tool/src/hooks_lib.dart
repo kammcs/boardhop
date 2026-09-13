@@ -127,13 +127,19 @@ final List<PlannedSubscription> plannedSubscriptions = List.unmodifiable([
   const PlannedSubscription(
     publisherId: 'tfs',
     eventType: 'workitem.created',
-    resourceVersion: '1.0',
+    // 5.1-preview.3: the only version whose identity fields (AssignedTo,
+    // CreatedBy, ChangedBy) are objects with an `id`; 1.0 and 3.1-preview.3
+    // send "Name <mail>" strings (spikes w27/w28, 2026-09-13).
+    resourceVersion: '5.1-preview.3',
     filters: {'areaPath': '', 'workItemType': ''},
   ),
   const PlannedSubscription(
     publisherId: 'tfs',
     eventType: 'workitem.updated',
-    resourceVersion: '1.0',
+    // 5.1-preview.3: the only version whose identity fields (AssignedTo,
+    // CreatedBy, ChangedBy) are objects with an `id`; 1.0 and 3.1-preview.3
+    // send "Name <mail>" strings (spikes w27/w28, 2026-09-13).
+    resourceVersion: '5.1-preview.3',
     filters: {'areaPath': '', 'workItemType': '', 'changedFields': ''},
   ),
   // Subscribed, then dropped by the relay: the body names nobody by id, so the
@@ -141,7 +147,10 @@ final List<PlannedSubscription> plannedSubscriptions = List.unmodifiable([
   const PlannedSubscription(
     publisherId: 'tfs',
     eventType: 'workitem.commented',
-    resourceVersion: '1.0',
+    // 5.1-preview.3: the only version whose identity fields (AssignedTo,
+    // CreatedBy, ChangedBy) are objects with an `id`; 1.0 and 3.1-preview.3
+    // send "Name <mail>" strings (spikes w27/w28, 2026-09-13).
+    resourceVersion: '5.1-preview.3',
     filters: {'areaPath': '', 'workItemType': ''},
   ),
   const PlannedSubscription(

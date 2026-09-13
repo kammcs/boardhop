@@ -232,8 +232,11 @@ result and branch, approval status and approver ids. It keeps no reference to
 the raw body, so nothing downstream can serialise one by accident, and
 `toLogFields()` returns ids, the kind and counts only. It also carries the two
 noise classifiers of research/14 §5.2 rule 3: `isCommentNoise` (a
-`workitem.updated` whose changed fields are all in the comment set — the
-`workitem.commented` event is the one that notifies) and `isSystemComment`.
+`workitem.updated` whose changed fields are all in the comment set — since R2.2
+that **is** the work item comment event, because the `workitem.commented` body
+names nobody by id) and `isSystemComment`. Work item subscriptions are created
+at resourceVersion 5.1-preview.3, the only version whose identity fields carry
+an `id` (w27/w28).
 
 **What is logged, and what is never stored.** For R2.1 the processor is
 `LoggingHookProcessor`: one `hook routed` line per event, carrying the kind,
