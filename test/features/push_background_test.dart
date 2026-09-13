@@ -159,4 +159,13 @@ void main() {
       expect(back.sentAt, pointer.sentAt);
     });
   });
+
+  group('who posts a background pointer (R2.6)', () {
+    test('off Android nothing is handed to the platform', () {
+      // BoardhopMessagingService owns background pointers on Android and
+      // enriches them; everywhere else this isolate is still the poster.
+      expect(handledByPlatform(data()), isFalse);
+      expect(handledByPlatform(const {'org': 'contoso'}), isFalse);
+    });
+  });
 }

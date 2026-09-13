@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,7 +11,9 @@ import '../../core/config/app_config.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/http/ado_host.dart';
+import '../../core/routes.dart';
 import '../../theme/theme.dart';
+import '../notifications/push_service.dart';
 
 /// Spike F1 and F2 runner (NEXT-STEPS.md steps 2 and 3).
 ///
@@ -277,6 +280,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               label: Text(_running ? 'Running…' : 'Run checks'),
             ),
             const SizedBox(height: 16),
+            if (kDebugMode) const _RouteBox(),
+            if (kDebugMode) const _EnrichBox(),
             const _EnvironmentCard(),
             for (final c in _checks)
               Card(
@@ -294,6 +299,245 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                   isThreeLine: true,
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A route typed by hand, for checking a deep link on a device where no
+/// notification can be tapped and no `adb` intent reaches the router
+/// (research/14 §4.2 anchors). Debug builds only.
+class _RouteBox extends StatefulWidget {
+  const _RouteBox();
+
+  @override
+  State<_RouteBox> createState() => _RouteBoxState();
+}
+
+class _RouteBoxState extends State<_RouteBox> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// A route that does not name an account gets the signed-in one's
+  /// prefix, so only the interesting half has to be typed:
+  /// `/orgs/puremedia/pull-requests/8334?thread=42566`.
+  void _go() {
+    var route = _controller.text.trim();
+    if (route.isEmpty) return;
+    if (!route.startsWith('/a/')) {
+      final account = context.read<AuthService>().knownAccounts.firstOrNull;
+      if (account == null) return;
+      if (!route.startsWith('/')) route = '/$route';
+      route = '${Routes.account(account.id)}$route';
+    }
+    context.go(route);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _controller,
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                suffixIcon: IconButton(
+                  tooltip: 'Clear',
+                  icon: const Icon(Icons.clear),
+                  onPressed: _controller.clear,
+                ),
+                labelText: 'Open route (debug)',
+                helperText:
+                    '/orgs/{org}/... (the account is added) with '
+                    '?comment=, ?thread=, ?tab=approvals&approval=',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _go(),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _go,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Go'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Runs the **Android** enrichment path (R2.6) against a pointer typed by
+/// hand, and posts whatever it produces, so the fetch, the body and the
+/// lock-screen shape can be checked against real read-only artifacts without
+/// waiting for a real event to fire. Debug builds only, on both sides: the
+/// `debugEnrich` method refuses a non-debuggable build.
+class _EnrichBox extends StatefulWidget {
+  const _EnrichBox();
+
+  @override
+  State<_EnrichBox> createState() => _EnrichBoxState();
+}
+
+class _EnrichBoxState extends State<_EnrichBox> {
+  /// Pointers shaped exactly like the relay's, against the read-only scratch
+  /// artifacts of CLAUDE.md's "Test data in puremedia", one per §4.1 row that
+  /// this project can exercise. Typing a pointer by hand on a phone is not
+  /// realistic, so the presets are the interface.
+  static const _samples = <String, String>{
+    'Work item comment':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"workItem","artifactId":"15545",'
+        '"eventType":"workitem.commented","verb":"commented",'
+        '"actor":"Kelly Kamm","anchor":"comment:0",'
+        '"collapseKey":"puremedia.wi.15545.c",'
+        '"fallbackTitle":"#15545 · Boardhop spike task",'
+        '"fallbackBody":"Kelly Kamm commented on #15545",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+    'Work item state':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"workItem","artifactId":"15545",'
+        '"eventType":"workitem.updated","verb":"stateChanged",'
+        '"actor":"Kelly Kamm","detail":"Active",'
+        '"collapseKey":"puremedia.wi.15545",'
+        '"fallbackTitle":"#15545 · Boardhop spike task",'
+        '"fallbackBody":"Kelly Kamm moved #15545 to Active",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+    'PR thread':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"pullRequest","artifactId":"8334",'
+        '"eventType":"ms.vss-code.git-pullrequest-comment-event",'
+        '"verb":"replied","actor":"Kelly Kamm","anchor":"thread:42511",'
+        '"collapseKey":"puremedia.pr.8334.t42511",'
+        '"fallbackTitle":"!8334 · Scratch PR for Boardhop tests",'
+        '"fallbackBody":"Kelly Kamm replied on !8334",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+    'PR review':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"pullRequest","artifactId":"8334",'
+        '"eventType":"git.pullrequest.updated","verb":"reviewRequested",'
+        '"actor":"Kelly Kamm","collapseKey":"puremedia.pr.8334",'
+        '"fallbackTitle":"!8334 · Scratch PR for Boardhop tests",'
+        '"fallbackBody":"Kelly Kamm asked you to review !8334",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+    'Build':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"build","artifactId":"20163",'
+        '"eventType":"build.complete","verb":"buildSucceeded",'
+        '"detail":"succeeded","collapseKey":"puremedia.build.20163",'
+        '"fallbackTitle":"boardhop-scratch · 20260913.1",'
+        '"fallbackBody":"Build succeeded",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+    'Approval':
+        '{"org":"puremedia","project":"DevOps Mobile App",'
+        '"artifactType":"approval",'
+        '"artifactId":"53d82215-e7d6-444d-8763-abd96b5df8fb",'
+        '"eventType":"ms.vss-pipelinechecks-events.approval-completed",'
+        '"verb":"approvalCompleted","detail":"approved",'
+        '"collapseKey":"puremedia.approval.53d82215",'
+        '"fallbackTitle":"boardhop-scratch → Deploy",'
+        '"fallbackBody":"Kelly Kamm approved the approval",'
+        '"fallbackSubtitle":"DevOps Mobile App"}',
+  };
+
+  final _controller = TextEditingController(text: _samples.values.first);
+  String? _outcome;
+  bool _running = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _running = true;
+      _outcome = null;
+    });
+    String outcome;
+    try {
+      final decoded = jsonDecode(_controller.text.trim());
+      if (decoded is! Map) throw const FormatException('not a JSON object');
+      final data = <String, String>{
+        for (final entry in decoded.entries)
+          if (entry.value != null) '${entry.key}': '${entry.value}',
+      };
+      // `sentAt` is what keeps a pointer out of the stale branch; fill it in
+      // when the typed pointer has none, so the fetch actually runs.
+      data['sentAt'] ??= DateTime.now().toUtc().toIso8601String();
+      outcome =
+          await PushService.channel.invokeMethod<String>('debugEnrich', data) ??
+          'no answer';
+    } on PlatformException catch (e) {
+      outcome = '${e.code}: ${e.message}';
+    } catch (e) {
+      outcome = '$e';
+    }
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      _outcome = outcome;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _controller,
+              autocorrect: false,
+              maxLines: 6,
+              minLines: 3,
+              style: BoardhopTheme.codeStyle(context),
+              decoration: const InputDecoration(
+                labelText: 'Enrich a pointer (debug, Android)',
+                helperText:
+                    'The FCM data map as JSON; posts the notification it '
+                    'would have posted',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final entry in _samples.entries)
+                  ActionChip(
+                    label: Text(entry.key),
+                    onPressed: () => _controller.text = entry.value,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _running ? null : _run,
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: Text(_running ? 'Enriching…' : 'Run enrichment'),
+            ),
+            if (_outcome != null) ...[
+              const SizedBox(height: 12),
+              Text(_outcome!, style: BoardhopTheme.codeStyle(context)),
+            ],
           ],
         ),
       ),

@@ -3,11 +3,22 @@
 /// foreground through `PushCoordinator`, and here in the background and from
 /// cold, in the isolate `firebase_messaging` spins up for the purpose.
 ///
-/// What it posts now is the **fallback line** of research/14 §3.1 (heading,
-/// body and sub-text the relay already composed). R2.6 replaces the body with
-/// the enriched one after two GETs; the two-version lock-screen shape of §4.1
-/// D7 is already wired here, so that phase only has to fill the private half
-/// in.
+/// **Who owns what since R2.6.** A background pointer is now handled in
+/// Kotlin, by `BoardhopMessagingService`, which fetches the artifact with the
+/// user's own token and posts an enriched notification (research/14 §4.1).
+/// That cannot be arranged by declining to call `super.onMessageReceived`:
+/// `firebase_messaging` does not deliver messages through the service at all,
+/// it listens for the same `com.google.android.c2dm.intent.RECEIVE` broadcast
+/// and wakes this isolate from its own receiver, so both paths see every
+/// message. The division is therefore drawn **here**: on Android this handler
+/// ignores anything that parses as a pointer and leaves it to Kotlin, and
+/// keeps posting for everything else. On any other platform — and in the
+/// tests — it behaves as it did in R2.4, which is why
+/// [backgroundNotificationFor] is unchanged and still the fallback poster.
+///
+/// What it posts is the **fallback line** of research/14 §3.1 (heading, body
+/// and sub-text the relay already composed). The enriched body and the
+/// two-version lock screen of §4.1 D7 live in `PushNotifier.kt`.
 ///
 /// Everything below `backgroundNotificationFor` is a **pure function**, which
 /// is what the tests drive: an isolate with no bindings cannot be pumped.
@@ -171,6 +182,11 @@ Future<void> registerPushBackgroundHandler() async {
 @pragma('vm:entry-point')
 Future<void> boardhopBackgroundMessage(RemoteMessage message) async {
   try {
+    // R2.6: a pointer in the background belongs to Kotlin
+    // (`BoardhopMessagingService`), which enriches it before posting. Posting
+    // it here as well would show the same event twice, once without the
+    // comment text.
+    if (handledByPlatform(message.data)) return;
     DartPluginRegistrant.ensureInitialized();
     await Firebase.initializeApp();
     final request = backgroundNotificationFor(
@@ -185,6 +201,17 @@ Future<void> boardhopBackgroundMessage(RemoteMessage message) async {
     // it; a missed notification is the smaller failure.
     debugPrint('Push background handler failed: $e');
   }
+}
+
+/// True when `BoardhopMessagingService` (Kotlin) owns this message and this
+/// isolate must stay out of its way: an Android message that parses as a
+/// pointer (R2.6).
+///
+/// Kotlin's test is the same one — `PointerData.isPointer`, which is
+/// `PushPointer.tryFrom` in Kotlin — so exactly one of the two posts.
+bool handledByPlatform(Map<String, Object?> data) {
+  if (kIsWeb || !Platform.isAndroid) return false;
+  return PushPointer.tryFrom(data) != null;
 }
 
 /// The user's opt-in, read straight from shared preferences: the background

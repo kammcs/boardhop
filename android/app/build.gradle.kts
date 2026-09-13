@@ -88,4 +88,15 @@ dependencies {
     // the firebase_messaging plugin keeps this off the app's compile classpath.
     // Same version the plugin resolves, so Gradle picks one.
     implementation("com.google.firebase:firebase-messaging:25.1.2")
+    // R2.6 Android enrichment. Both of these are already in the APK through
+    // other modules; declaring them only puts them on *this* module's compile
+    // classpath, so no artifact and no size is added.
+    //  * MSAL: PushTokens builds a PublicClientApplication inside the
+    //    messaging service, on the configuration the vendored msal_auth plugin
+    //    writes, and that plugin keeps MSAL off the app's compile classpath.
+    //    Same version range it resolves, so Gradle picks one.
+    //  * androidx.core: NotificationCompat, for setPublicVersion and the
+    //    grouped, private notifications PushNotifier posts.
+    implementation("com.microsoft.identity.client:msal:8.3.+")
+    implementation("androidx.core:core:1.13.1")
 }

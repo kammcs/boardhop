@@ -126,6 +126,15 @@ class PushService {
     final initial = await messaging.getInitialMessage();
     if (initial != null) _launchPointer = PushPointer.tryFrom(initial.data);
 
+    // R2.6: a notification the Kotlin messaging service posted is the app's
+    // own, not one FCM drew, so `getInitialMessage()` knows nothing about it.
+    // MainActivity holds the pointer off its launch intent and hands it over
+    // here, once; while the app is running the same intent arrives as
+    // `onOpened` through [_onPlatformCall].
+    _launchPointer ??= _pointerOf(
+      await channel.invokeMethod<Map<Object?, Object?>>('launchPointer'),
+    );
+
     // Whatever was learned on an earlier run. Registration itself waits for
     // the user's opt-in: see [refreshToken].
     final remembered = _prefs?.getString(tokenPrefKey);

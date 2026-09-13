@@ -126,6 +126,19 @@ class PushRegistrar {
 
   String get _prefKey => 'push.registration.$accountId';
 
+  /// Where the Android messaging service looks up which signed-in account to
+  /// ask MSAL for a token as, when a push for [org] arrives and the app is not
+  /// running (R2.6, research/14 §4.1 "Token").
+  ///
+  /// [accountId] is the MSAL account identifier — the same string
+  /// `AuthService.acquireSilent` passes as `identifier` — so Kotlin's
+  /// `IMultipleAccountPublicClientApplication.getAccount` takes it as it is.
+  /// `shared_preferences` prefixes its Android keys with `flutter.`, so the
+  /// service reads `flutter.push.msal.account.{org}` out of
+  /// `FlutterSharedPreferences`. Nothing secret is stored: an account
+  /// identifier, not a token.
+  static String msalAccountKeyFor(String org) => 'push.msal.account.$org';
+
   Future<SharedPreferences?> _preferences() async {
     final existing = prefs;
     if (existing != null) return existing;
@@ -143,21 +156,36 @@ class PushRegistrar {
     final raw = store?.getString(_prefKey);
     if (raw == null) return registration.value = null;
     try {
-      return registration.value = PushRegistration.fromJson(
+      final value = PushRegistration.fromJson(
         jsonDecode(raw) as Map<String, Object?>,
       );
+      // Also on load, so a device that registered before R2.6 tells the
+      // messaging service which account to ask MSAL for without having to
+      // register again.
+      if (value.org.isNotEmpty) {
+        await store?.setString(msalAccountKeyFor(value.org), accountId);
+      }
+      return registration.value = value;
     } catch (_) {
       return registration.value = null;
     }
   }
 
   Future<void> _store(PushRegistration? value) async {
+    final previous = registration.value;
     registration.value = value;
     final store = await _preferences();
     if (value == null) {
       await store?.remove(_prefKey);
+      final org = previous?.org;
+      if (org != null && org.isNotEmpty) {
+        await store?.remove(msalAccountKeyFor(org));
+      }
     } else {
       await store?.setString(_prefKey, jsonEncode(value.toJson()));
+      // The Android messaging service needs this to acquire a token silently
+      // for a push that arrives while the app is not running.
+      await store?.setString(msalAccountKeyFor(value.org), accountId);
     }
   }
 
