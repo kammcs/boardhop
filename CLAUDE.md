@@ -47,6 +47,7 @@ Boardhop is Kelly Kamm's (kammcs) Flutter mobile client for Azure DevOps Service
 ## Where things are
 
 - `lib/core` (client, routes, tiles), `lib/auth` (MSAL multi-account), `lib/data` (models, drift database, repositories), `lib/features/*` (screens by area), `lib/theme`.
+- `extension/` is the Azure DevOps Marketplace extension (TypeScript, esbuild, `tfx-cli`): a private hub that provisions the relay's hooks per project. Publish with `cd extension && npx tfx-cli extension publish --manifest-globs vss-extension.json --share-with puremedia --token <BOARDHOP_MARKETPLACE_PAT>` after bumping `version` in `vss-extension.json` (the token comes from `.env`, on the command line only). `src/plan.ts` must stay in step with `relay/tool/src/hooks_lib.dart` and `relay/lib/src/hooks/hook_kind.dart`.
 - `packages/msal_auth` is a vendored, patched copy of msal_auth 3.5.3; keep the diff small (its README lists the changes). The Swift side compiled for the first time on 2026-09-11 (then Xcode 26.6, MSAL 2.14.1 through SwiftPM) and browser sign-in works on the iOS simulator. **This Mac now has Xcode 27.0** (iOS 27.0 SDK, simulator runtimes 26.5 and 27.0). `reservedRegions` is an iOS **27.1** API, so it is still absent from the SDK headers and there is still no iPhone Duo simulator device type (checked 2026-09-13).
 - Untested so far because no physical device was available: the Authenticator broker path and Conditional Access. The iOS notification prompt works on the simulator (from the feed's Turn on).
 
