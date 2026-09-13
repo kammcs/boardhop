@@ -19,6 +19,8 @@ analyzer:
     - packages/**
     # Spike harnesses carry their own pubspec (research/spikes/f3_harness).
     - research/**
+    # The relay is its own pure-Dart package with its own analysis options.
+    - relay/**
 
 linter:
   # The lint rules applied to this project can be customized in the

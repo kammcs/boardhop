@@ -77,11 +77,46 @@ Payloads are pointers, never content. Titles beyond a short line, comments and c
 - Conditional Access tenants that require a managed device.
 - Anything while the app is force-quit on iOS is fine (push still arrives), but the app cannot pre-fetch content in the background reliably.
 
+## Server
+
+The relay runs on a dedicated Hetzner CX23, `boardhop-relay-1`, at
+**boardhop.relay.kammcs.com** — Caddy (automatic Let's Encrypt HTTPS) in front of
+a Dart `shelf` container, both from `/srv/relay/compose.yml`. The source of
+truth is **`relay/` in this repo**, and `relay/README.md` covers what runs there,
+`relay/deploy.sh`, `relay/rollback.sh`, where the logs are, and how a spike reads
+the capture secret over ssh without ever printing it.
+
+As of 2026-09-13 the box serves `GET /healthz` and the spike-3 capture endpoint
+`POST|GET /capture/{name}` (HTTP basic, user `hook`, per-post JSON files capped
+at 1 MB each and 200 files per name). Device registration, the event→user
+mapping and the gateway are the next phase; `/srv/relay/secrets` is mounted
+read-only at `/secrets` and waits for the APNs `.p8` (B2) and the FCM service
+account (B3).
+
 ## Spikes before building
 
 1. Confirm the Extension Data Service documents are readable from the mobile app with the user's Entra token and the `vso.extension.data` scope.
 2. Confirm an extension hub with `vso.hooks_write` can create webhook subscriptions in every project for an org admin, and what happens for projects where the admin lacks rights.
-3. Capture webhook payload shape with "Minimal" resource details for `git.pullrequest.updated`, `workitem.updated`, `ms.vss-work.work-item-comment-event`, `build.complete`, and `ms.vss-pipelinechecks-events.approval-pending`, against the scratch project with a hook pointing at a capture endpoint on the kammcs server; record exactly which fields (and whether titles) leave the tenant.
+3. Capture webhook payload shape with "Minimal" resource details against the scratch project, with the hooks pointing at the capture endpoint on the relay box, and record exactly which fields (and whether titles) leave the tenant. **The endpoint is live** at `https://boardhop.relay.kammcs.com/capture/scratch` (see *Server* below) and `research/spikes/w22_hook_capture.py` creates, lists and deletes the subscriptions; it has not been run in `create` mode yet.
+
+   **Exact event ids, from spike s39** (`GET {org}/_apis/hooks/publishers/tfs` and `.../pipelines`, results in `research/spikes/results/s39_hook_publishers.md`). Two ids in the original list here were wrong:
+
+   | publisher | event id | resourceVersion used | event-level publisher inputs |
+   |---|---|---|---|
+   | `tfs` | `git.pullrequest.created` | `1.0` (also `1.0-preview.1`) | `repository`, `branch`, `pullrequestCreatedBy`, `pullrequestReviewersContains` |
+   | `tfs` | `git.pullrequest.updated` | `1.0` (also `1.0-preview.1`) | `repository`, `branch`, `notificationType`, `pullrequestCreatedBy`, `pullrequestReviewersContains` |
+   | `tfs` | `ms.vss-code.git-pullrequest-comment-event` | `2.0` (also `1.0`, `1.0-preview.1`) | `repository`, `branch` |
+   | `tfs` | `workitem.created` | `1.0` (also `1.0-preview.2`, `3.1-preview.3`, `5.1-preview.3`) | `areaPath`, `workItemType`, `linksChanged`, `tag` |
+   | `tfs` | `workitem.updated` | `1.0` (same preview set) | `areaPath`, `workItemType`, `tag`, `changedFields`, `linksChanged` |
+   | `tfs` | **`workitem.commented`** | `1.0` (same preview set) | `areaPath`, `workItemType` |
+   | `tfs` | `build.complete` | `1.0` (also `2.0`, `2.0-preview.2`) | `definitionName`, `buildStatus` |
+   | **`pipelines`** | `ms.vss-pipelines.run-state-changed-event` | `5.1-preview.1` (only) | `pipelineId`, `runStateId`, `runResultId` |
+   | **`pipelines`** | `ms.vss-pipelinechecks-events.approval-pending` | `5.1-preview.1` (only) | `pipelineId`, `stageName`, `environmentName` |
+
+   - **`ms.vss-work.work-item-comment-event` does not exist.** The work-item comment event is `workitem.commented` on the `tfs` publisher.
+   - **The two pipeline events are not on `tfs`.** They live on the `pipelines` publisher ("Pipelines policy service hooks publisher"), which also carries `ms.vss-pipelinechecks-events.approval-completed`, `ms.vss-pipelines.stage-state-changed-event`, `ms.vss-pipelines.job-state-changed-event` and `ms.vss-pipelinechecks-events.check-updated-event`. Only `5.1-preview.1` is offered.
+   - Both publishers share the same publisher-level inputs: **`projectId`** (this is how a subscription is scoped to one project), `subscriberId`, `teamId`. Empty strings in the event-level inputs mean "any", the way the web UI sends them (proven by w21).
+   - The `webHooks` consumer's `httpRequest` action takes `url`, `acceptUntrustedCerts`, `basicAuthUsername`, `basicAuthPassword`, `httpHeaders`, `resourceDetailsToSend`, `messagesToSend`, `detailedMessagesToSend`, `businessJustification` — so per-org basic auth on the relay needs no custom header scheme.
 4. Push end to end: FCM (Android) and APNs (iOS, needs a physical iPhone or a TestFlight build) from a gateway on the Hetzner box, measuring latency from hook to phone.
 5. Private publish: create the publisher, publish a hello-world extension privately, share it with `puremedia`, and confirm the install and the data-store read from the app.
 6. SignalR feed: from the relay, subscribe to a running scratch pipeline's timeline feed with a PAT and confirm lines arrive while the task runs; then decide the identity question above.

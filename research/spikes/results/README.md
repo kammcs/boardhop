@@ -76,11 +76,27 @@ Work items #15503–#15507 were created and left in place for inspection.
 | w03 | Suggestion wire format | **Settled.** A comment whose `content` is Markdown with a ```` ```suggestion ```` fence, anchored to the target line through `threadContext` on the right side, renders in the web UI as an applyable suggestion. Kelly confirmed thread 42376 on PR 8319 showed the Apply flow (2026-09-10). | The mobile composer emits the GitHub-style fence in the comment body; no special API field exists. Anchor to the right-hand side only, since the web UI offers no suggestion on left-side lines. |
 | S2 (revisited) | With the broadened PAT, do the `app.vssps.visualstudio.com` profile and accounts APIs work? | **Still 401** with only a `Basic` challenge, while Graph, entitlements and every other area now return 200. This supports Microsoft's 2026-09-04 statement that these two APIs accept only Entra tokens. `vssps.dev.azure.com/{org}/_apis/profile/profiles/me` keeps working with a PAT. | PAT login (roadmap) cannot enumerate orgs; it must be per-org. Already the design. |
 
+## Service hooks (s39, read-only, 2026-09-13)
+
+`GET {org}/_apis/hooks/publishers/{id}?api-version=7.1` is the catalogue. Facts worth not re-probing:
+
+- The **`tfs`** publisher ("Azure DevOps Server") carries 19 events: the git, tfvc, work item and `build.complete` ones.
+- **`ms.vss-work.work-item-comment-event` does not exist.** The work-item comment event is **`workitem.commented`** on `tfs`.
+- The pipeline events are on a **separate `pipelines` publisher**, not `tfs`: `ms.vss-pipelines.run-state-changed-event`, `ms.vss-pipelinechecks-events.approval-pending` (and `approval-completed`, `stage-state-changed`, `job-state-changed`, `check-updated-event`). All only at **`5.1-preview.1`**.
+- Both publishers share publisher-level inputs `projectId`, `subscriberId`, `teamId`. **`projectId` is what scopes a subscription to one project.** Event-level inputs are extra filters (`changedFields`, `pullrequestReviewersContains`, `definitionName`, `buildStatus`, `pipelineId`, `stageName`, `environmentName`, …); empty strings mean "any", the way the web UI sends them.
+- `supportedResourceVersions` on an event is a **list**, not a map. Stable versions: PR events `1.0`, PR comment `2.0`, work item events `1.0`, `build.complete` `1.0` or `2.0`.
+- The `webHooks` consumer's `httpRequest` action takes `url`, `acceptUntrustedCerts`, `basicAuthUsername`, `basicAuthPassword`, `httpHeaders`, `resourceDetailsToSend`, `messagesToSend`, `detailedMessagesToSend`, `businessJustification` — basic auth per subscription needs no custom header scheme.
+- Listing every subscription costs 0.134 TSTU; the project GET costs 0.004.
+
+Full table in `s39_hook_publishers.md`. The capture endpoint they will point at is
+`https://boardhop.relay.kammcs.com/capture/scratch` (see `relay/README.md`); `w22_hook_capture.py`
+creates, lists and deletes the subscriptions.
+
 ## Still to run
 
 | Spike | Needs |
 |---|---|
-| Service hook "Minimal" payload capture | Project-admin rights on the scratch project and an HTTPS receiver |
+| Service hook "Minimal" payload capture (w22 `create`) | Ready to run: the receiver is live and the event ids are confirmed (s39) |
 | Token sizes, cross-tenant 401 hint | Entra app registration and a guest account |
 
 ## F1: msal_auth sign-in on Android (2026-09-10)

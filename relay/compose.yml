@@ -1,0 +1,61 @@
+# Runs as /srv/relay/compose.yml on boardhop-relay-1; deploy.sh puts it there.
+# `docker compose` reads /srv/relay/.env for the interpolations below.
+
+x-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: relay-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - /srv/relay/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/relay/caddy/data:/data
+      - /srv/relay/caddy/config:/config
+    depends_on:
+      - relay
+    # The admin API is container-local; a 200 from it means the config loaded.
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *json-logging
+
+  relay:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    image: boardhop-relay:${RELAY_VERSION:-dev}
+    container_name: relay-app
+    restart: unless-stopped
+    # No host ports: only Caddy reaches it, over the compose network.
+    expose:
+      - "8080"
+    # The deploy user owns /srv/relay/data, so the container writes as it.
+    user: "1000:1000"
+    env_file:
+      - /srv/relay/relay.env
+    environment:
+      RELAY_DB: /data/relay.sqlite
+      RELAY_CAPTURE_DIR: /data/capture
+      RELAY_VERSION: ${RELAY_VERSION:-dev}
+    volumes:
+      - /srv/relay/data:/data
+      - /srv/relay/secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *json-logging

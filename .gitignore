@@ -66,6 +66,11 @@ __pycache__/
 # Emulator screenshots from tool/shot.sh
 .shots/
 
+# Relay (relay/ is the push relay's home; its secrets live on the server)
+relay/.env
+relay/build/
+relay/.dart_tool/
+
 # App Store Connect API keys (never commit)
 AuthKey_*.p8
 *.p8

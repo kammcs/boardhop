@@ -1,0 +1,37 @@
+{
+	email support@kammcs.com
+}
+
+boardhop.relay.kammcs.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		-Server
+		-X-Powered-By
+	}
+
+	reverse_proxy relay:8080
+
+	log {
+		output file /data/access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		# Caddy logs request headers by default, and the capture endpoint is
+		# HTTP basic: without this the shared secret lands on disk in base64.
+		format filter {
+			wrap json
+			fields {
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+				request>headers>Proxy-Authorization delete
+			}
+		}
+	}
+}
