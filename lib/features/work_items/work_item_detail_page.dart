@@ -500,6 +500,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
           PopupMenuButton<String>(
             key: _moreKey,
             tooltip: 'More',
+            offset: kTrailingMenuOffset,
             enabled: !_refreshing && !_writing,
             onSelected: (value) => _addLinked(related: value == 'related'),
             itemBuilder: (context) => [
@@ -607,10 +608,15 @@ class _Header extends StatelessWidget {
             children: [
               Icon(visuals.typeIcon(item), size: 18, color: typeColor),
               const SizedBox(width: Spacing.xs),
-              Text(
-                '${item.type} ${item.id}',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              // "User Story 15558" runs 29 pt past the window at xxxL
+              // (iPhone, 2026-09-13), so the type line wraps rather than
+              // overflowing; the id stays with it on the second line.
+              Expanded(
+                child: Text(
+                  '${item.type} ${item.id}',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -802,7 +808,7 @@ class _Links extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: DetailFactRow.labelWidth,
+                width: DetailFactRow.labelWidthFor(context),
                 child: Text(
                   caption,
                   style: theme.textTheme.labelMedium?.copyWith(

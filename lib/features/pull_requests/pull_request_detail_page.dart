@@ -34,7 +34,23 @@ class PullRequestDetailPage extends StatefulWidget {
   State<PullRequestDetailPage> createState() => _PullRequestDetailPageState();
 }
 
-class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
+class _PullRequestDetailPageState extends State<PullRequestDetailPage>
+    with SingleTickerProviderStateMixin {
+  /// Overview, Files, Comments. Owned here rather than through a
+  /// `DefaultTabController` so the scaffold rebuilds when the tab changes
+  /// and can take its composer away; see [_commentsTab].
+  late final TabController _tabs = TabController(length: 3, vsync: this)
+    ..addListener(() {
+      if (!mounted) return;
+      setState(() {});
+    });
+
+  /// The Comments tab's index. The composer posts a conversation comment,
+  /// which means nothing under Overview and is the wrong gesture under
+  /// Files, where a comment belongs to a line and is written from the
+  /// diff's gutter (iPhone walkthrough, finding j).
+  static const int _commentsTab = 2;
+
   PullRequest? _pr;
   String? _me;
   List<WorkItem> _workItems = const [];
@@ -53,6 +69,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -366,9 +388,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     final pr = _pr;
     final myVote = pr?.reviewer(_me)?.vote ?? PrVote.none;
     final scrollingTabs = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.3;
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,6 +412,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
             if (pr != null && pr.isActive)
               PopupMenuButton<PrVote>(
                 tooltip: 'Vote',
+                offset: kTrailingMenuOffset,
                 enabled: !_acting,
                 icon: Icon(voteIcon(myVote), color: voteColor(context, myVote)),
                 onSelected: _vote,
@@ -413,6 +434,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
             if (pr != null && pr.isActive)
               PopupMenuButton<String>(
                 tooltip: 'More',
+                offset: kTrailingMenuOffset,
                 enabled: !_acting,
                 onSelected: (v) => v == 'complete' ? _complete() : _abandon(),
                 itemBuilder: (context) => const [
@@ -422,6 +444,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
               ),
           ],
           bottom: TabBar(
+            controller: _tabs,
             // Three filled thirds clip "Comments (3)" at accessibility
             // text sizes (iPhone walkthrough, defect 10); let the strip
             // scroll instead so every label stays whole and reachable.
@@ -439,7 +462,8 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
             ],
           ),
         ),
-        bottomNavigationBar: pr == null || !pr.isActive
+        bottomNavigationBar:
+            pr == null || !pr.isActive || _tabs.index != _commentsTab
             ? null
             : CommentComposer(onSubmit: _comment, busy: _acting),
         body: Column(
@@ -460,6 +484,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                           )
                         : const SizedBox.shrink())
                   : TabBarView(
+                      controller: _tabs,
                       children: [
                         RefreshIndicator(
                           onRefresh: _load,
@@ -498,7 +523,6 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
             ),
           ],
         ),
-      ),
     );
   }
 }
@@ -625,21 +649,29 @@ class _Overview extends StatelessWidget {
                   ListTile(
                     dense: true,
                     leading: Icon(
-                      checkIcon(c.state),
-                      color: checkColor(context, c.state),
+                      checkIcon(c.state, isBlocking: c.isBlocking),
+                      color: checkColor(
+                        context,
+                        c.state,
+                        isBlocking: c.isBlocking,
+                      ),
                     ),
                     title: Text(c.name),
                     subtitle: c.detail == null || c.detail!.isEmpty
                         ? null
                         : Text(c.detail!),
-                    trailing: c.isBlocking
-                        ? Text(
-                            'required',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          )
-                        : null,
+                    // "optional" is said out loud on a failing policy that
+                    // does not block: the absence of "required" was the
+                    // only signal, and it was easy to miss next to a red
+                    // row (finding k).
+                    trailing: Text(
+                      c.isBlocking
+                          ? 'required'
+                          : (c.state == PrCheckState.failed ? 'optional' : ''),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
               ],
               _SectionTitle('Reviewers (${pr.reviewers.length})'),

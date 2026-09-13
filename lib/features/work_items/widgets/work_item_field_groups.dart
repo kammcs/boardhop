@@ -44,8 +44,23 @@ class DetailFactRow extends StatelessWidget {
     this.child,
   });
 
-  /// Wide enough for "QA Story Points" on two lines at phone width.
+  /// Wide enough for "QA Story Points" on two lines at phone width, at the
+  /// ordinary text size; [labelWidthFor] follows the text scale.
   static const double labelWidth = 104;
+
+  /// Beyond this share of the row the label column crowds its value, so
+  /// the row stacks the label above the value instead.
+  static const double _maxLabelShare = 0.45;
+
+  /// The label column's width at the text size in force. A fixed 104 pt
+  /// broke "Changed" mid-word at accessibility sizes (iPhone walkthrough,
+  /// finding g): a single word that does not fit its box is wrapped
+  /// between characters, so the column has to follow the text.
+  static double labelWidthFor(BuildContext context) {
+    const size = 12.0; // labelMedium, the label's own size.
+    final scale = MediaQuery.textScalerOf(context).scale(size) / size;
+    return labelWidth * scale.clamp(1.0, 2.0);
+  }
 
   final String label;
 
@@ -59,24 +74,42 @@ class DetailFactRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final labelStyle = theme.textTheme.labelMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final valueWidget =
+        child ?? Text(value, style: theme.textTheme.bodyMedium);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: labelWidth,
-            child: Text(
-              label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = labelWidthFor(context);
+          // Past the point where the scaled column would take most of the
+          // row, two columns stop being readable at all: stack instead,
+          // the way iOS settings rows do at accessibility sizes.
+          if (constraints.hasBoundedWidth &&
+              width > constraints.maxWidth * _maxLabelShare) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: labelStyle),
+                const SizedBox(height: Spacing.xs),
+                valueWidget,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: width,
+                child: Text(label, style: labelStyle),
               ),
-            ),
-          ),
-          Expanded(
-            child: child ?? Text(value, style: theme.textTheme.bodyMedium),
-          ),
-        ],
+              Expanded(child: valueWidget),
+            ],
+          );
+        },
       ),
     );
   }

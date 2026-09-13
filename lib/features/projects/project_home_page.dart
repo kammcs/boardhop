@@ -453,20 +453,49 @@ class _Section extends StatelessWidget {
             Spacing.sm,
             0,
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: scheme.primary),
-              const SizedBox(width: Spacing.sm),
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: scheme.primary,
-                  ),
+          // At xxxL "Recent repositories" and "See all" cannot share a
+          // line: the title was character-wrapped to "repositor / ies"
+          // under the button (iPhone, 2026-09-13). Past the point where
+          // the two no longer fit, the action drops to its own line.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final titleWidget = Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: scheme.primary,
                 ),
-              ),
-              TextButton(onPressed: onSeeAll, child: const Text('See all')),
-            ],
+              );
+              final action = TextButton(
+                onPressed: onSeeAll,
+                child: const Text('See all'),
+              );
+              final leading = Icon(icon, size: 18, color: scheme.primary);
+              final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+              if (scale > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        leading,
+                        const SizedBox(width: Spacing.sm),
+                        Expanded(child: titleWidget),
+                      ],
+                    ),
+                    Align(alignment: Alignment.centerLeft, child: action),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  leading,
+                  const SizedBox(width: Spacing.sm),
+                  Expanded(child: titleWidget),
+                  action,
+                ],
+              );
+            },
           ),
         ),
         if (error != null)

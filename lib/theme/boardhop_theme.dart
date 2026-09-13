@@ -20,6 +20,28 @@ abstract final class BoardhopTheme {
 
   static ThemeData dark() => _build(Brightness.dark);
 
+  /// Largest a floating snackbar gets. Material's own guidance is that a
+  /// snackbar stays near one end of a wide window rather than spanning it;
+  /// 560 pt is about 70 characters of `bodyMedium`, past which the eye has
+  /// to travel back for the action.
+  static const double snackBarMaxWidth = 560;
+
+  /// [base] adjusted for a window this wide. The snackbar is the only
+  /// component whose look depends on the window rather than the widget:
+  /// `SnackBarThemeData.width` is read when the bar is shown, and there is
+  /// no per-snackbar call site to fix, so the app wraps its routes in this
+  /// (see `lib/app.dart`).
+  ///
+  /// A phone keeps the full-width bar; from [Breakpoint.medium] up the bar
+  /// is capped and floats centred, so one line of text no longer runs the
+  /// whole iPad (iPad walkthrough, finding h).
+  static ThemeData forWindow(ThemeData base, double width) {
+    if (width <= snackBarMaxWidth + 2 * Spacing.lg) return base;
+    return base.copyWith(
+      snackBarTheme: base.snackBarTheme.copyWith(width: snackBarMaxWidth),
+    );
+  }
+
   static ThemeData _build(Brightness brightness) {
     final scheme = ColorScheme.fromSeed(
       seedColor: seed,
@@ -160,6 +182,9 @@ abstract final class BoardhopTheme {
           borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
         ),
       ),
+      // A floating snackbar still stretches the whole window, so on an
+      // iPad one line of text ran the full 1032 pt (iPad walkthrough,
+      // finding h). `BoardhopTheme.forWindow` caps it; see there.
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: scheme.primary,
         linearTrackColor: scheme.surfaceContainerHighest,

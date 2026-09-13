@@ -4,20 +4,33 @@ import '../../../data/models/pr_check.dart';
 import '../../../data/models/pull_request.dart';
 import '../../../theme/theme.dart';
 
-IconData checkIcon(PrCheckState state) => switch (state) {
-  PrCheckState.succeeded => Icons.check_circle,
-  PrCheckState.failed => Icons.cancel,
-  PrCheckState.pending => Icons.schedule,
-  PrCheckState.error => Icons.error_outline,
-  PrCheckState.notApplicable => Icons.remove_circle_outline,
-};
+/// The Checks row's icon. A failing policy that does not block the merge
+/// gets a warning triangle rather than the blocking red X: the two read
+/// identically otherwise, so an optional build failure looked as though it
+/// stopped the PR (iPhone walkthrough, finding k). [isBlocking] is false
+/// for PR statuses, which never block on their own.
+IconData checkIcon(PrCheckState state, {bool isBlocking = true}) =>
+    switch (state) {
+      PrCheckState.succeeded => Icons.check_circle,
+      PrCheckState.failed =>
+        isBlocking ? Icons.cancel : Icons.warning_amber_rounded,
+      PrCheckState.pending => Icons.schedule,
+      PrCheckState.error => Icons.error_outline,
+      PrCheckState.notApplicable => Icons.remove_circle_outline,
+    };
 
-Color checkColor(BuildContext context, PrCheckState state) {
+/// The Checks row's color; see [checkIcon] for [isBlocking].
+Color checkColor(
+  BuildContext context,
+  PrCheckState state, {
+  bool isBlocking = true,
+}) {
   final colors = context.boardhopColors;
   final scheme = Theme.of(context).colorScheme;
   return switch (state) {
     PrCheckState.succeeded => colors.voteApproved,
-    PrCheckState.failed => colors.voteRejected,
+    PrCheckState.failed =>
+      isBlocking ? colors.voteRejected : colors.voteWaiting,
     PrCheckState.pending => colors.voteWaiting,
     PrCheckState.error => scheme.error,
     PrCheckState.notApplicable => scheme.onSurfaceVariant,

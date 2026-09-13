@@ -28,6 +28,17 @@ extension BreakpointContext on BuildContext {
       Breakpoint.fromWidth(MediaQuery.sizeOf(this).width);
 }
 
+/// How far a menu opened from an app bar's trailing action is nudged away
+/// from that edge.
+///
+/// On iOS and macOS the floating glass rail sits just outside the page's
+/// trailing edge in landscape, so a popup menu aligned to its button's own
+/// edge opened hard against the rail, the two separated only by the rail's
+/// shadow margin (iPad walkthrough). Pulling the menu inward gives them a
+/// real gap. In portrait, where the bar lies along the bottom, this simply
+/// keeps the menu a little clear of the screen edge, which is no worse.
+const Offset kTrailingMenuOffset = Offset(-Spacing.xxl, Spacing.sm);
+
 /// Bottom padding for a scroll view that sets its own `padding`.
 ///
 /// A `ListView` with a null `padding` consumes the ambient
@@ -74,7 +85,14 @@ class ContentColumn extends StatelessWidget {
 
   /// Content width from which [SideBySide] puts its halves next to each
   /// other.
-  static const double twoColumnMin = 960;
+  ///
+  /// 880, not 960: the iPhone Duo's inner display (ships 2026-10-23) is a
+  /// regular x regular window where [widthFor] yields 903 pt of content,
+  /// so a 960 threshold would have left the fold showing one column on a
+  /// screen with room for two (research/12b, Kelly approved 2026-09-12).
+  /// 880 still keeps a phone in landscape and a small tablet on one
+  /// column: an iPad Pro 11" in portrait gives 834.
+  static const double twoColumnMin = 880;
 
   static double widthFor(double available) => math.min(
     available,

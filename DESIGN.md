@@ -65,3 +65,8 @@ Locked 2026-09-10, before the feature screens. Everything visual flows from one 
 2. Read colors, text styles and spacing from the theme and tokens; no literals.
 3. Check the screen at compact and expanded widths, in light and dark, at 130% text.
 4. If the theme needs a change to make the screen right, change the theme, then the screen.
+
+- Text that must not break mid-word: a single word that does not fit its box is wrapped between characters, not ellipsised, so any fixed-width label column has to follow the text scale (`DetailFactRow.labelWidthFor`, capped at 2x) and stack above its value once it would take most of the row. The same rule retired a fixed-width label column and a title sharing a line with an action (`See all` drops below its section title past 1.5x).
+- Snackbars: floating, and capped at `BoardhopTheme.snackBarMaxWidth` (560) from `Breakpoint.medium` up, applied once in `MaterialApp.builder` since the width is read where the bar is shown. A full-width bar across an iPad makes the eye travel back for the action.
+- A menu opened from an app bar's trailing action takes `kTrailingMenuOffset`: on iOS the floating glass rail sits just outside the page's trailing edge in landscape and a menu aligned to its own button opened hard against it. Flutter applies roughly half the offset given, so measure rather than assume.
+- Checks and other status rows distinguish blocking from optional failures: an optional failure is an amber warning, never the blocking red X, and says "optional" rather than relying on the absence of "required".

@@ -263,6 +263,17 @@ class _BoardhopAppState extends State<BoardhopApp> {
               darkTheme: _dark,
               themeMode: ThemeScope.of(context).mode,
               routerConfig: _router,
+              // The snackbar's width is the one component value that
+              // follows the window rather than the widget, and it is read
+              // where the bar is shown, below every route. Applying it
+              // here catches all 21 call sites at once.
+              builder: (context, child) => Theme(
+                data: BoardhopTheme.forWindow(
+                  Theme.of(context),
+                  MediaQuery.sizeOf(context).width,
+                ),
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         ),
