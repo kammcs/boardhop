@@ -149,8 +149,9 @@ that feed `/capture/scratch`.
 
 ## Ingest (`/hooks/{org}`)
 
-The real receiver, as opposed to the capture recorder: this is what the thirteen
-service-hook subscriptions of research/14 §1 post to. It is deliberately dull —
+The real receiver, as opposed to the capture recorder: this is what the fourteen
+service-hook subscriptions of research/14 §1 post to (`tool/hooks.dart` below
+creates them). It is deliberately dull —
 authenticate, look the subscription up, dedup, project the body into a typed
 `RoutingView`, hand that to an in-process queue, answer 200. No network call on
 the request path, and nothing from the body is written anywhere.
@@ -246,6 +247,94 @@ comment content, `System.History` and `message.text` produces no log line and no
 byte in the sqlite file containing it. In R2.2 the processor is the `RuleEngine`
 below and the `hook routed` line gains candidate, recipient and drop **counts**;
 `LoggingHookProcessor` stays for the tests and for a relay with no database.
+
+## Provisioning hooks (`tool/hooks.dart`)
+
+`w22_hook_capture.py` generalized into the relay's own CLI: it creates the beta's
+subscriptions in Azure DevOps and registers them with the relay in one go, so the
+two can never disagree. The routing labels come from `HookKind` itself
+(`lib/src/hooks/hook_kind.dart`), which is the same enum the ingest route parses.
+
+```sh
+cd relay
+dart run tool/hooks.dart plan   --org puremedia --project 'DevOps Mobile App'
+dart run tool/hooks.dart secret --org puremedia
+dart run tool/hooks.dart create --org puremedia --project 'DevOps Mobile App'                                 --secret-file .hooks-secret-puremedia
+dart run tool/hooks.dart list   --org puremedia
+dart run tool/hooks.dart delete --org puremedia --project 'DevOps Mobile App'
+```
+
+| command | what it does |
+|---|---|
+| `plan` | prints the planned set — publisher, event, resourceVersion, filter, kind — and calls nothing |
+| `secret` | generates 32 random bytes as hex, `PUT`s the **hash** to the relay, writes the plaintext to `--out` (default `.hooks-secret-<org>`, mode 600, gitignored as `.hooks-secret-*`) and never prints it |
+| `create` | resolves the project id, creates every missing subscription against `{RELAY_URL}/hooks/{org}`, skips the ones already there, then registers the set with the relay |
+| `list` | Azure DevOps subscriptions pointing at `{RELAY_URL}/hooks/` beside the relay registry, flagging anything that disagrees (exit 1 on a mismatch) |
+| `delete` | deletes only subscriptions whose url is exactly `{RELAY_URL}/hooks/{org}` **and** whose `publisherInputs.projectId` is that project, then takes those rows out of the registry |
+
+**The set is 14 subscriptions over 11 distinct event ids.** research/14 §1 counts
+"thirteen" by listing one row per event id including `stage-state-changed`, which
+that table itself marks "later"; the beta leaves it out.
+`git.pullrequest.updated` is subscribed **four times**, once per
+`notificationType` (`PushNotification`, `ReviewersUpdateNotification`,
+`StatusUpdateNotification`, `ReviewerVoteNotification`), because the body never
+says what changed; `git.pullrequest.merged` is filtered to
+`mergeResult=Unsuccessful` because it otherwise fires on every merge *attempt*
+(w24); `workitem.commented` is subscribed and then dropped by the relay, whose
+`workitem.updated` twin is the one that names the commenter by id. Every other
+publisher input goes out as an empty string — what the web UI sends for "any".
+Each subscription is created with `resourceDetailsToSend: all` and
+`messagesToSend`/`detailedMessagesToSend: text`, basic auth `hook` / the org's
+hook secret.
+
+**Environment.**
+
+| name | what it is |
+|---|---|
+| `ADO_ORG_URL` | `https://dev.azure.com/<org>`; the PAT travels as basic auth `:PAT` |
+| `ADO_PAT` | a PAT with the service-hooks scope for that org |
+| `RELAY_URL` | default `https://boardhop.relay.kammcs.com` |
+| `RELAY_ADMIN_SECRET` | bearer for `/v1/admin/*`; read off the box, never committed |
+| `HOOKS_ALLOW_PROJECT` | **the write guard** |
+
+**The guard.** `create` and `delete` write to Azure DevOps, so they refuse any
+project whose name is not exactly `HOOKS_ALLOW_PROJECT` — and refuse before the
+first network call, so a typo never even resolves a project id. With the variable
+unset they refuse outright. That is CLAUDE.md hard rule 1 in code: today the only
+value it is ever given is `DevOps Mobile App`. `plan` and `list` are read-only
+and need no guard.
+
+**Order for a new org.**
+
+1. `secret --org <org>` — the relay stores the hash, the box never sees the
+   plaintext and the plaintext never leaves the file.
+2. `create --org <org> --project <name> --secret-file <path>` once **per
+   project**. Each run GETs the registry, replaces that project's rows and PUTs
+   the union, so provisioning the second project does not unregister the first
+   (the admin PUT replaces the whole org set in one transaction).
+3. `list --org <org>` to confirm; it exits non-zero if anything disagrees.
+
+**Rotating the secret.** The subscriptions carry the old password inside Azure
+DevOps and there is no way to edit it in place that is worth the risk, so:
+`secret --org <org> --out <new file>`, then `delete` and `create` for **every**
+project in the org. Between the two the relay answers 404 to every delivery and
+the events in that window are lost — Azure DevOps retries, but not forever, so do
+it in a quiet minute.
+
+**Rate limits.** Calls are sequential and there is one retry on a 429, honouring
+`Retry-After` (up to 60 s, then it gives up). A full `create` is 16 calls, about
+2.7 TSTU (s39/w24 measurements).
+
+**The scratch project's capture subscriptions are gone.** w22's `/capture/scratch`
+and w24/w25's `/capture/scratch-r2` sets were deleted when those spikes finished,
+so `create` on `DevOps Mobile App` starts from nothing and the payload captures
+on the box are wiped. `list` shows only `/hooks/` urls, so an old capture
+subscription would not even appear.
+
+**From a spike runner.** `research/spikes/w26_provision_hooks.py` is the wrapper
+the dispatcher uses: it reads `RELAY_ADMIN_SECRET` off the box over ssh, pins
+`HOOKS_ALLOW_PROJECT` to `DevOps Mobile App` and runs the command in `W26_ARGS`,
+writing the tool's stdout to `research/spikes/results/w26_provision_hooks.md`.
 
 ## Routing (R2.2)
 

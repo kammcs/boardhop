@@ -83,3 +83,6 @@ fcm-service-account*.json
 
 # Kotlin compiler session data written by the Android Gradle build
 android/.kotlin/
+
+# Hook secrets written by relay/tool/hooks.dart (plaintext, per org)
+.hooks-secret-*
