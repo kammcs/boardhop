@@ -64,6 +64,16 @@ Payloads are pointers, never content. Titles beyond a short line, comments and c
 4. The mobile app already has puremedia's admin consent for the Entra registration; the extension needs nothing from Entra.
 5. What the beta gives up: charging through Microsoft and public discoverability. Nothing is thrown away when the listing goes public.
 
+## The audience problem (spike w22/w23, 2026-09-13): Minimal payloads cannot be routed
+
+"Resource details = Minimal" delivers only ids (update number, work item id, project GUID); the PR comment event delivers an empty resource. Nothing in it says who is assigned, who reviews, who wrote the comment or which fields changed, so the relay cannot decide which phones to wake. "All" delivers everything the relay needs (assignee, reviewers, author, changed fields) but also the comment text, the PR description and titles, which is the content the pointer-only design keeps inside the tenant. Options, for Kelly to decide:
+
+1. **All details, strip on receipt.** Hooks send `all`; the relay reads the routing fields, builds the pointer and discards the body without persisting it. Content transits the relay in memory (TLS in, nothing written). Simplest; honest disclosure for the beta; the customer-hosted relay remains the answer for tenants that cannot accept transit.
+2. **Minimal details plus a relay identity that reads the artifact.** Hooks stay `minimal`; the relay fetches the update or PR by id with its own identity and computes the audience. Nothing beyond ids ever transits, and the same identity answers the live-log SignalR question. The identity has to be provisioned per org: a customer-issued PAT stored in the relay (expires, is a person's token), or a **service principal**: Azure DevOps admits Entra service principals as members, and Boardhop's multi-tenant app registration already exists, so the customer admin adds the Boardhop service principal to their org with Basic access and the relay takes client-credential tokens for that tenant. Costs the customer one Basic seat unless within the free five, needs a client secret or certificate held at kammcs, and one more spike (s40: service principal membership and the scopes it reaches).
+3. **Per-user subscriptions with server-side filters.** `git.pullrequest.*` supports `pullrequestReviewersContains`, work item events only `areaPath`, `workItemType` and `changedFields`; so it covers PR review requests but not "assigned to me" or "mentioned me", and multiplies subscriptions by users. Not sufficient on its own.
+
+Recommendation: **1 for the puremedia beta** (with the disclosure already planned), **2 with a service principal as the product path** for the shared relay, and the customer-hosted relay for tenants that want neither. The pointer contract at the gateway is unchanged in every option.
+
 ## What it buys beyond notifications
 
 - A clean data story: pointer-only pushes, credentials only at kammcs, an enterprise option with the relay in the customer's tenant.
@@ -97,26 +107,7 @@ account (B3).
 
 1. Confirm the Extension Data Service documents are readable from the mobile app with the user's Entra token and the `vso.extension.data` scope.
 2. Confirm an extension hub with `vso.hooks_write` can create webhook subscriptions in every project for an org admin, and what happens for projects where the admin lacks rights.
-3. Capture webhook payload shape with "Minimal" resource details against the scratch project, with the hooks pointing at the capture endpoint on the relay box, and record exactly which fields (and whether titles) leave the tenant. **The endpoint is live** at `https://boardhop.relay.kammcs.com/capture/scratch` (see *Server* below) and `research/spikes/w22_hook_capture.py` creates, lists and deletes the subscriptions; it has not been run in `create` mode yet.
-
-   **Exact event ids, from spike s39** (`GET {org}/_apis/hooks/publishers/tfs` and `.../pipelines`, results in `research/spikes/results/s39_hook_publishers.md`). Two ids in the original list here were wrong:
-
-   | publisher | event id | resourceVersion used | event-level publisher inputs |
-   |---|---|---|---|
-   | `tfs` | `git.pullrequest.created` | `1.0` (also `1.0-preview.1`) | `repository`, `branch`, `pullrequestCreatedBy`, `pullrequestReviewersContains` |
-   | `tfs` | `git.pullrequest.updated` | `1.0` (also `1.0-preview.1`) | `repository`, `branch`, `notificationType`, `pullrequestCreatedBy`, `pullrequestReviewersContains` |
-   | `tfs` | `ms.vss-code.git-pullrequest-comment-event` | `2.0` (also `1.0`, `1.0-preview.1`) | `repository`, `branch` |
-   | `tfs` | `workitem.created` | `1.0` (also `1.0-preview.2`, `3.1-preview.3`, `5.1-preview.3`) | `areaPath`, `workItemType`, `linksChanged`, `tag` |
-   | `tfs` | `workitem.updated` | `1.0` (same preview set) | `areaPath`, `workItemType`, `tag`, `changedFields`, `linksChanged` |
-   | `tfs` | **`workitem.commented`** | `1.0` (same preview set) | `areaPath`, `workItemType` |
-   | `tfs` | `build.complete` | `1.0` (also `2.0`, `2.0-preview.2`) | `definitionName`, `buildStatus` |
-   | **`pipelines`** | `ms.vss-pipelines.run-state-changed-event` | `5.1-preview.1` (only) | `pipelineId`, `runStateId`, `runResultId` |
-   | **`pipelines`** | `ms.vss-pipelinechecks-events.approval-pending` | `5.1-preview.1` (only) | `pipelineId`, `stageName`, `environmentName` |
-
-   - **`ms.vss-work.work-item-comment-event` does not exist.** The work-item comment event is `workitem.commented` on the `tfs` publisher.
-   - **The two pipeline events are not on `tfs`.** They live on the `pipelines` publisher ("Pipelines policy service hooks publisher"), which also carries `ms.vss-pipelinechecks-events.approval-completed`, `ms.vss-pipelines.stage-state-changed-event`, `ms.vss-pipelines.job-state-changed-event` and `ms.vss-pipelinechecks-events.check-updated-event`. Only `5.1-preview.1` is offered.
-   - Both publishers share the same publisher-level inputs: **`projectId`** (this is how a subscription is scoped to one project), `subscriberId`, `teamId`. Empty strings in the event-level inputs mean "any", the way the web UI sends them (proven by w21).
-   - The `webHooks` consumer's `httpRequest` action takes `url`, `acceptUntrustedCerts`, `basicAuthUsername`, `basicAuthPassword`, `httpHeaders`, `resourceDetailsToSend`, `messagesToSend`, `detailedMessagesToSend`, `businessJustification` — so per-org basic auth on the relay needs no custom header scheme.
+3. ~~Capture webhook payload shape~~ **done 2026-09-13 (w22/w23)**: see "The audience problem" above and `research/spikes/results/README.md`. The Minimal set of nine hooks stays on the scratch project.
 4. Push end to end: FCM (Android) and APNs (iOS, needs a physical iPhone or a TestFlight build) from a gateway on the Hetzner box, measuring latency from hook to phone.
 5. Private publish: create the publisher, publish a hello-world extension privately, share it with `puremedia`, and confirm the install and the data-store read from the app.
 6. SignalR feed: from the relay, subscribe to a running scratch pipeline's timeline feed with a PAT and confirm lines arrive while the task runs; then decide the identity question above.
