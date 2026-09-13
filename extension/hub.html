@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boardhop</title>
+    <style>
+      /*
+       * The host writes its theme onto :root as CSS variables (SDK.applyTheme),
+       * so every colour below is a variable with a fallback. Anything the host
+       * might not send is expressed as translucent neutral, which reads
+       * correctly on a light and on a dark background.
+       */
+      :root {
+        --bh-fg: var(--text-primary-color, rgba(0, 0, 0, 0.9));
+        --bh-fg-muted: var(--text-secondary-color, rgba(128, 128, 128, 1));
+        --bh-bg: var(--background-color, #ffffff);
+        --bh-line: var(--border-subtle-color, rgba(128, 128, 128, 0.32));
+        --bh-surface: rgba(128, 128, 128, 0.06);
+        --bh-accent: var(--communication-background, #0078d4);
+        --bh-accent-fg: var(--text-on-communication-background, #ffffff);
+        --bh-ok: var(--status-success-text, #107c10);
+        --bh-warn: var(--status-warning-text, #9d5d00);
+        --bh-error: var(--status-error-text, #c4314b);
+        --bh-radius: 4px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bh-bg);
+        color: var(--bh-fg);
+        font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      #app {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px 20px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      h1 {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 8px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .subtitle,
+      .hint,
+      .note {
+        color: var(--bh-fg-muted);
+      }
+
+      .subtitle {
+        margin-top: 4px;
+      }
+
+      .hint,
+      .note {
+        font-size: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--bh-line);
+        border-radius: var(--bh-radius);
+        padding: 16px;
+        background: var(--bh-surface);
+      }
+
+      .section-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 12px;
+        max-width: 520px;
+      }
+
+      .field label {
+        font-weight: 600;
+      }
+
+      .input {
+        font: inherit;
+        color: var(--bh-fg);
+        background: var(--bh-bg);
+        border: 1px solid var(--bh-line);
+        border-radius: var(--bh-radius);
+        padding: 6px 8px;
+        min-height: 32px;
+      }
+
+      .input:focus {
+        outline: 2px solid var(--bh-accent);
+        outline-offset: -1px;
+      }
+
+      .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .button {
+        font: inherit;
+        color: var(--bh-fg);
+        background: transparent;
+        border: 1px solid var(--bh-line);
+        border-radius: var(--bh-radius);
+        padding: 6px 12px;
+        min-height: 32px;
+        cursor: pointer;
+      }
+
+      .button:hover:not(:disabled) {
+        background: rgba(128, 128, 128, 0.14);
+      }
+
+      .button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      .button-primary {
+        background: var(--bh-accent);
+        border-color: var(--bh-accent);
+        color: var(--bh-accent-fg);
+      }
+
+      .button-primary:hover:not(:disabled) {
+        filter: brightness(1.08);
+        background: var(--bh-accent);
+      }
+
+      .button-danger {
+        color: var(--bh-error);
+      }
+
+      .button.small {
+        padding: 3px 10px;
+        min-height: 26px;
+        font-size: 13px;
+      }
+
+      .status {
+        margin-top: 8px;
+        font-size: 13px;
+      }
+
+      .status-muted {
+        color: var(--bh-fg-muted);
+      }
+
+      .status-ok {
+        color: var(--bh-ok);
+      }
+
+      .status-warn {
+        color: var(--bh-warn);
+      }
+
+      .status-error {
+        color: var(--bh-error);
+      }
+
+      table.projects {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+
+      table.projects th,
+      table.projects td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--bh-line);
+        vertical-align: middle;
+      }
+
+      table.projects th {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--bh-fg-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+      }
+
+      td.project-name {
+        font-weight: 600;
+      }
+
+      td.num,
+      th:nth-child(2),
+      th:nth-child(4) {
+        white-space: nowrap;
+      }
+
+      td.num-ok {
+        color: var(--bh-ok);
+      }
+
+      td.actions {
+        text-align: right;
+      }
+
+      td.actions .buttons {
+        justify-content: flex-end;
+      }
+
+      th.actions-header {
+        text-align: right;
+      }
+
+      tr.message-row td {
+        border-bottom: 1px solid var(--bh-line);
+        padding-top: 0;
+        font-size: 13px;
+      }
+
+      .badge {
+        display: inline-block;
+        border-radius: 10px;
+        padding: 1px 8px;
+        font-size: 12px;
+        border: 1px solid currentColor;
+        white-space: nowrap;
+      }
+
+      .badge-ok {
+        color: var(--bh-ok);
+      }
+
+      .badge-warn {
+        color: var(--bh-warn);
+      }
+
+      .badge-error {
+        color: var(--bh-error);
+      }
+
+      .badge-muted {
+        color: var(--bh-fg-muted);
+      }
+
+      .disclosure p + p {
+        margin-top: 8px;
+      }
+
+      @media (max-width: 640px) {
+        #app {
+          padding: 12px;
+        }
+
+        td.actions,
+        td.actions .buttons {
+          text-align: left;
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="dist/hub.js"></script>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+{
+  "manifestVersion": 1,
+  "id": "boardhop",
+  "publisher": "KammCS",
+  "version": "0.1.0",
+  "name": "Boardhop",
+  "description": "Push notifications for Boardhop, the mobile client for Azure DevOps.",
+  "public": false,
+  "categories": ["Azure Boards", "Azure Repos", "Azure Pipelines"],
+  "tags": ["notifications", "mobile", "service hooks", "boardhop"],
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "icons": {
+    "default": "images/logo.png"
+  },
+  "content": {
+    "details": {
+      "path": "overview.md"
+    }
+  },
+  "links": {
+    "home": {
+      "uri": "https://github.com/kammcs/boardhop"
+    },
+    "support": {
+      "uri": "https://github.com/kammcs/boardhop"
+    },
+    "repository": {
+      "uri": "https://github.com/kammcs/boardhop"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "uri": "https://github.com/kammcs/boardhop"
+  },
+  "scopes": ["vso.project", "vso.hooks_write", "vso.extension.data_write"],
+  "files": [
+    {
+      "path": "dist",
+      "addressable": true
+    },
+    {
+      "path": "hub.html",
+      "addressable": true
+    },
+    {
+      "path": "images",
+      "addressable": true
+    }
+  ],
+  "contributions": [
+    {
+      "id": "boardhop-org-hub",
+      "type": "ms.vss-web.hub",
+      "targets": ["ms.vss-web.collection-admin-hub-group"],
+      "properties": {
+        "name": "Boardhop",
+        "order": 100,
+        "uri": "hub.html",
+        "icon": "images/logo.png"
+      }
+    },
+    {
+      "id": "boardhop-project-hub",
+      "type": "ms.vss-web.hub",
+      "targets": ["ms.vss-web.project-admin-hub-group"],
+      "properties": {
+        "name": "Boardhop",
+        "order": 100,
+        "uri": "hub.html",
+        "icon": "images/logo.png"
+      }
+    }
+  ]
+}

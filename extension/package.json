@@ -1,0 +1,23 @@
+{
+  "name": "boardhop-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Azure DevOps Marketplace extension for Boardhop: connects an organization to the Boardhop relay and provisions its service-hook subscriptions.",
+  "scripts": {
+    "build": "esbuild src/hub.ts --bundle --format=iife --target=es2020 --outfile=dist/hub.js",
+    "test": "esbuild test/plan.test.ts test/relay.test.ts --bundle --platform=node --format=cjs --target=node20 --outdir=dist-test && node --test dist-test/plan.test.js dist-test/relay.test.js",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && tfx extension create --manifest-globs vss-extension.json --output-path build/",
+    "publish": "npm run build && tfx extension publish --manifest-globs vss-extension.json --share-with puremedia"
+  },
+  "dependencies": {
+    "azure-devops-extension-api": "^4.1.0",
+    "azure-devops-extension-sdk": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "esbuild": "^0.25.0",
+    "tfx-cli": "^0.21.1",
+    "typescript": "^5.6.0"
+  }
+}
