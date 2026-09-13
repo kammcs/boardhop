@@ -251,7 +251,7 @@ are missing and never overwrites one that is there.
 |---|---|
 | `RELAY_CAPTURE_SECRET` | the capture endpoint's basic-auth password; generated on the box |
 | `RELAY_ADMIN_SECRET` | bearer for `/v1/admin/*`; generated on the box |
-| `APNS_KEY_ID` | Apple's ten-character Key ID. **Deliberately empty**: unknown as of 2026-09-13, and empty means APNs is off, which `/healthz` reports as `disabled (no key id)` |
+| `APNS_KEY_ID` | Apple's ten-character Key ID. `9L94ZN33Y3` since 2026-09-13; empty means APNs is off, which `/healthz` reports as `disabled (no key id)` |
 | `APNS_TEAM_ID` | `73W98CESN9` |
 | `APNS_TOPIC` | `com.kammcs.boardhop` |
 | `APNS_ENV` | `sandbox` (debug builds and TestFlight) or `production` |
@@ -261,6 +261,22 @@ are missing and never overwrites one that is there.
 
 The two files under `/secrets` are mounted read only, are never copied off the
 box or into an image, and are read by the relay process at send time only.
+
+**Changing one of these needs `up -d`, not `restart`.** Compose reads `env_file`
+when it *creates* a container, so `docker compose restart relay` brings the same
+process back with the same environment and the edit looks as though it did
+nothing — `/healthz` kept reporting `disabled (no key id)` for a full restart
+cycle this way on 2026-09-13. Use:
+
+```sh
+cd /srv/relay && docker compose up -d --force-recreate relay
+```
+
+**A key that is not an APNs key gives `403 InvalidProviderToken`.** `/healthz`
+says `ready` as soon as a key file, a key id and a team id are all present; it
+cannot tell what Apple will make of them. The first key tried here was a valid
+`.p8` for the right team and still failed, because the key had not been enabled
+for APNs. Only a real send proves the pair.
 
 ## Working on it locally
 

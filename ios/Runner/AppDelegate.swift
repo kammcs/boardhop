@@ -52,6 +52,7 @@ import UserNotifications
         // never fires.
         UIApplication.shared.registerForRemoteNotifications()
         result(self?.apnsToken)
+        self?.installNotificationCentreProxy()
         // A tap that launched the app arrives before Dart has a handler:
         // the notification centre calls its delegate as soon as the engine
         // is up, while `_initIos` only runs once Flutter is running. Hold
@@ -127,9 +128,37 @@ import UserNotifications
   /// A tap that arrived before Dart had a handler.
   private var pendingOpened: [String: String]?
 
+  /// Re-asserts the proxy whenever something else has taken the delegate.
+  ///
+  /// Ordering here is not ours to control: the notification centre's
+  /// delegate is a single slot, the engine hands it to plugins at a time
+  /// of its choosing, and `didFinishLaunchingWithOptions` runs after the
+  /// engine callback that installs this. Rather than guess the order, the
+  /// proxy is put back whenever Dart asks to register and whenever the app
+  /// becomes active, wrapping whatever it displaces.
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    installNotificationCentreProxy()
+    super.applicationDidBecomeActive(application)
+  }
+
   private func installNotificationCentreProxy() {
     let centre = UNUserNotificationCenter.current()
-    let proxy = NotificationCentreProxy(inner: centre.delegate)
+    let current = centre.delegate
+    if current is NotificationCentreProxy { return }
+    NSLog(
+      "Boardhop: taking the notification delegate from %@",
+      current.map { String(describing: type(of: $0)) } ?? "nobody")
+    // `self`, never the delegate being displaced. FLTFirebaseMessagingPlugin
+    // takes this slot when it registers and keeps whatever it found as its
+    // own forwarding target, so wrapping it made the two forward to each
+    // other and a local notification went round in a circle, never
+    // presented. The app delegate implements the three
+    // UNUserNotificationCenterDelegate selectors and fans them out to every
+    // plugin registered with `addApplicationDelegate:` — both
+    // flutter_local_notifications and Firebase register that way — so
+    // handing it what we do not claim reaches all of them and cannot come
+    // back here.
+    let proxy = NotificationCentreProxy(inner: self)
     proxy.onRemote = { [weak self] pointer, opened in
       guard let self, !pointer.isEmpty else { return }
       if opened {
@@ -256,9 +285,9 @@ private final class NotificationCentreProxy: NSObject, UNUserNotificationCenterD
     self.inner = inner
   }
 
-  /// Strong on purpose: replacing the centre's weak `delegate` can be the
-  /// last reference to the plugin's own.
-  private let inner: UNUserNotificationCenterDelegate?
+  /// The app delegate, which fans these out to the plugins. Weak because it
+  /// owns this proxy; a strong reference back would be a retain cycle.
+  private weak var inner: (any UNUserNotificationCenterDelegate)?
 
   /// `(pointer, opened)` — opened is false for a foreground arrival.
   var onRemote: (([String: String], Bool) -> Void)?
@@ -294,10 +323,12 @@ private final class NotificationCentreProxy: NSObject, UNUserNotificationCenterD
       return
     }
     onRemote?(pointer(of: notification), false)
-    // Nothing from the system: Dart raises its own notification for a
-    // foreground push through the feed's channel, the way Android does,
-    // and two banners for one event is worse than none.
-    completionHandler([])
+    // Let iOS present it. Android re-raises a foreground message itself
+    // because FCM shows nothing while the app is open, and this first
+    // copied that — but iOS does show remote pushes, so suppressing here
+    // only made the phone silent once the replacement could not be
+    // presented. Dart still hears about it through `onMessage`.
+    completionHandler([.banner, .list, .sound])
   }
 
   func userNotificationCenter(

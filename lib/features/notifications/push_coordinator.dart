@@ -152,6 +152,10 @@ class PushCoordinator {
   }
 
   Future<void> _showForeground(PushPointer pointer) async {
+    // iOS presents a remote push itself, so re-raising it here would show
+    // the same event twice. Only Android needs this: FCM delivers a
+    // foreground message silently and leaves the showing to the app.
+    if (push.platform != 'android') return;
     final accountId = accountForOrg(pointer.org);
     if (accountId == null) return;
     final (title, body) = pointer.message;
