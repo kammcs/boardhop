@@ -4,9 +4,16 @@ import 'hook_kind.dart';
 /// and whether the "reviewer" is really a group (`isContainer`), which the beta
 /// cannot expand (research/14 D9).
 class ReviewerRef {
-  const ReviewerRef({this.id, this.vote, this.isContainer = false});
+  const ReviewerRef({this.id, this.name, this.vote, this.isContainer = false});
 
   final String? id;
+
+  /// The reviewer's display name. A PR vote names no actor in the body, so the
+  /// only way to say *who* voted in the fallback line is the reviewer whose
+  /// vote changed (research/14 §2.2). Metadata, in flight only: it is never
+  /// stored and never logged.
+  final String? name;
+
   final int? vote;
   final bool isContainer;
 
@@ -14,10 +21,13 @@ class ReviewerRef {
   String toString() => 'ReviewerRef($id, vote: $vote, container: $isContainer)';
 }
 
-/// The system fields a work item **comment** touches. A `workitem.updated`
-/// whose changed fields are a subset of these is comment noise: the matching
-/// `workitem.commented` is the event that notifies (research/14 §5.2 rule 3,
-/// field list verified in w24).
+/// The system fields a work item **comment** touches (field list verified in
+/// w24). A `workitem.updated` whose changed fields are a subset of these is
+/// comment-shaped; research/14 §5.2 rule 3 as rewritten by the R2.1 finding
+/// makes that post **the** work item comment event (it is the only one of the
+/// pair that carries `revisedBy.id`), and drops `workitem.commented`. A
+/// comment-shaped update **without** `System.History` is a bare revision bump
+/// and notifies nobody. Both distinctions live in `routing/work_item_rules.dart`.
 const commentNoiseFields = <String>{
   'System.History',
   'System.CommentCount',
@@ -223,8 +233,10 @@ class RoutingView {
 
   // ------------------------------------------------------------- classifiers
 
-  /// research/14 §5.2 rule 3: a work item comment fires `workitem.commented`
-  /// **and** `workitem.updated`; the update is dropped as noise.
+  /// True when this `workitem.updated` touched only the fields a comment
+  /// touches. The rules split that further: with `System.History` it is the
+  /// comment event, without it a bare revision bump that notifies nobody
+  /// (research/14 §5.2 rule 3, `routing/work_item_rules.dart`).
   bool get isCommentNoise =>
       kind == HookKind.wiUpdated && changedFields.isNotEmpty && changedFields.every(commentNoiseFields.contains);
 
@@ -543,6 +555,7 @@ List<ReviewerRef> _reviewersOf(Object? value) => [
     if (_map(entry) case final reviewer?)
       ReviewerRef(
         id: _str(reviewer['id']),
+        name: _str(reviewer['displayName']),
         vote: reviewer['vote'] is int ? reviewer['vote']! as int : null,
         isContainer: reviewer['isContainer'] == true,
       ),

@@ -2,8 +2,16 @@ import 'dart:async';
 
 import 'package:boardhop_relay/src/gateway/pointer.dart';
 import 'package:boardhop_relay/src/hooks/hook_event.dart';
+import 'package:boardhop_relay/src/hooks/routing_view.dart';
 import 'package:boardhop_relay/src/identity.dart';
 import 'package:boardhop_relay/src/log.dart';
+import 'package:boardhop_relay/src/routing/notification.dart';
+import 'package:boardhop_relay/src/routing/prefs.dart';
+import 'package:boardhop_relay/src/routing/routing_state.dart';
+import 'package:boardhop_relay/src/routing/rule_engine.dart';
+import 'package:boardhop_relay/src/routing/send_ledger.dart';
+import 'package:boardhop_relay/src/routing/sink.dart';
+import 'package:boardhop_relay/src/routing/verb.dart';
 
 /// A push transport that records instead of dialling Apple or Google.
 class FakeSender implements PushSender {
@@ -65,5 +73,80 @@ IdentityValidator fakeValidator(Map<String, String> usersByToken, {Set<String>? 
     final id = usersByToken[bearer];
     if (id == null) return null;
     return AdoIdentity(id: id, descriptor: 'aad.$id');
+  };
+}
+
+/// A preferences source that hands the same [UserPrefs] to everybody, with an
+/// optional per-person time zone. R2.3 replaces the production one with a
+/// table; the engine only ever sees this interface.
+class FixedPrefsSource implements PrefsSource {
+  FixedPrefsSource(this.prefs, {this.tzOffsetMinutes});
+
+  final UserPrefs prefs;
+  final int? tzOffsetMinutes;
+
+  @override
+  UserPrefs prefsFor(String org, String userId) => prefs;
+
+  @override
+  int? timeZoneOffsetMinutes(String org, String userId) => tzOffsetMinutes;
+}
+
+/// Preferences that say yes to everything: the way to test a rule without the
+/// §6 defaults hiding half of it.
+class AllOnPrefs implements UserPrefs {
+  const AllOnPrefs();
+
+  @override
+  bool allows(Verb verb, {required bool isMention, String? artifactKey}) => true;
+
+  @override
+  bool quietHoursSuppress(DateTime nowUtc, int? tzOffsetMinutes) => false;
+}
+
+/// Quiet hours that cover everything, to prove what they do and do not stop.
+class AlwaysQuietPrefs implements UserPrefs {
+  const AlwaysQuietPrefs();
+
+  @override
+  bool allows(Verb verb, {required bool isMention, String? artifactKey}) => true;
+
+  @override
+  bool quietHoursSuppress(DateTime nowUtc, int? tzOffsetMinutes) => true;
+}
+
+/// The rule engine with in-memory state, ledger and sink — everything the
+/// tests need and nothing that touches a disk or a socket.
+class RoutingHarness {
+  RoutingHarness({UserPrefs prefs = const DefaultPrefs(), DateTime? now, int? maxFanOut, int? maxPerUserPerHour})
+    : state = MemoryRoutingState(),
+      sink = RecordingNotificationSink(),
+      sends = MemorySendLedger() {
+    engine = RuleEngine(
+      state: state,
+      prefs: FixedPrefsSource(prefs),
+      sink: sink,
+      sends: sends,
+      maxRecipientsPerEvent: maxFanOut ?? RuleEngine.maxFanOut,
+      maxPerUserPerHour: maxPerUserPerHour ?? RuleEngine.maxPerUserHourly,
+      clock: () => now ?? DateTime.now().toUtc(),
+    );
+  }
+
+  final MemoryRoutingState state;
+  final RecordingNotificationSink sink;
+  final MemorySendLedger sends;
+  late final RuleEngine engine;
+
+  /// Processes one view and returns only the notifications it produced.
+  Future<List<Notification>> run(RoutingView view) async {
+    final before = sink.notifications.length;
+    await engine.process(HookEvent(view: view));
+    return sink.notifications.sublist(before);
+  }
+
+  /// Every identity the notifications of one run reached.
+  Set<String> recipientsOf(List<Notification> notifications) => {
+    for (final notification in notifications) ...notification.recipients,
   };
 }

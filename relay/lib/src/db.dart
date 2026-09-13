@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
@@ -114,8 +115,181 @@ class HookSubscriptionRow {
   };
 }
 
+/// What the relay remembers about one pull request, so the R2.2 rules can tell
+/// *what changed* (research/14 §5.1). The payload is rendered at delivery time
+/// and carries no before/after, so "who was added as a reviewer" and "did the
+/// source commit move" are diffs against this row.
+///
+/// Ids and votes only: no title, no description, no name.
+class PrStateRow {
+  const PrStateRow({
+    required this.org,
+    required this.prId,
+    this.status,
+    this.isDraft,
+    this.sourceCommit,
+    this.reviewers = const <String, int>{},
+    this.authorId,
+    this.updatedAt,
+  });
+
+  factory PrStateRow.fromSql(Map<String, Object?> row) => PrStateRow(
+    org: row['org']! as String,
+    prId: row['pr_id']! as String,
+    status: row['status'] as String?,
+    isDraft: row['is_draft'] == null ? null : (row['is_draft']! as int) != 0,
+    sourceCommit: row['source_commit'] as String?,
+    reviewers: _decodeVotes(row['reviewers_json'] as String?),
+    authorId: row['author_id'] as String?,
+    updatedAt: row['updated_at'] as String?,
+  );
+
+  final String org;
+  final String prId;
+  final String? status;
+  final bool? isDraft;
+  final String? sourceCommit;
+
+  /// Reviewer identity id → the vote as last delivered (10, 5, 0, −5, −10).
+  final Map<String, int> reviewers;
+  final String? authorId;
+  final String? updatedAt;
+}
+
+/// The participants of one pull request comment thread, accumulated from every
+/// comment event the relay has seen on it. The v2 comment payload does not
+/// carry the thread, so this is the only way to know who else is in it.
+class PrThreadStateRow {
+  const PrThreadStateRow({
+    required this.org,
+    required this.prId,
+    required this.threadId,
+    this.participantIds = const <String>[],
+    this.updatedAt,
+  });
+
+  factory PrThreadStateRow.fromSql(Map<String, Object?> row) => PrThreadStateRow(
+    org: row['org']! as String,
+    prId: row['pr_id']! as String,
+    threadId: row['thread_id']! as String,
+    participantIds: _decodeIds(row['participant_ids_json'] as String?),
+    updatedAt: row['updated_at'] as String?,
+  );
+
+  final String org;
+  final String prId;
+  final String threadId;
+  final List<String> participantIds;
+  final String? updatedAt;
+}
+
+/// One pipeline run's requester, kept from `run-state-changed` at queue time:
+/// the approval events name the requester only by display name (w25).
+class RunStateRow {
+  const RunStateRow({
+    required this.org,
+    required this.runId,
+    this.pipelineId,
+    this.requestedForId,
+    this.requestedById,
+    this.createdAt,
+  });
+
+  factory RunStateRow.fromSql(Map<String, Object?> row) => RunStateRow(
+    org: row['org']! as String,
+    runId: row['run_id']! as String,
+    pipelineId: row['pipeline_id'] as String?,
+    requestedForId: row['requested_for_id'] as String?,
+    requestedById: row['requested_by_id'] as String?,
+    createdAt: row['created_at'] as String?,
+  );
+
+  final String org;
+  final String runId;
+  final String? pipelineId;
+  final String? requestedForId;
+  final String? requestedById;
+  final String? createdAt;
+}
+
+/// The last known result of one definition on one branch, which is all that
+/// "fixed" detection needs (research/14 §2.3, D3).
+class BuildStateRow {
+  const BuildStateRow({
+    required this.org,
+    required this.projectId,
+    required this.definitionId,
+    required this.branch,
+    this.lastResult,
+    this.buildId,
+    this.updatedAt,
+  });
+
+  factory BuildStateRow.fromSql(Map<String, Object?> row) => BuildStateRow(
+    org: row['org']! as String,
+    projectId: row['project_id']! as String,
+    definitionId: row['definition_id']! as String,
+    branch: row['branch']! as String,
+    lastResult: row['last_result'] as String?,
+    buildId: row['build_id'] as String?,
+    updatedAt: row['updated_at'] as String?,
+  );
+
+  final String org;
+  final String projectId;
+  final String definitionId;
+  final String branch;
+  final String? lastResult;
+  final String? buildId;
+  final String? updatedAt;
+
+  /// The three results a later success counts as a fix of.
+  bool get wasFailure => const {'failed', 'partiallysucceeded', 'canceled'}.contains(lastResult?.toLowerCase());
+}
+
+/// The one deliberate exception to "no names in the state tables": the app's
+/// routes take a project **name** and the pipelines publisher sends only an id
+/// (research/14 §5.1, §2.1 note), so the relay keeps the map it sees.
+class ProjectRow {
+  const ProjectRow({required this.org, required this.projectId, required this.projectName, this.updatedAt});
+
+  final String org;
+  final String projectId;
+  final String projectName;
+  final String? updatedAt;
+}
+
+Map<String, int> _decodeVotes(String? json) {
+  if (json == null || json.isEmpty) return const <String, int>{};
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) return const <String, int>{};
+    return {
+      for (final entry in decoded.entries)
+        if (entry.key is String && entry.value is int) entry.key! as String: entry.value! as int,
+    };
+  } catch (_) {
+    return const <String, int>{};
+  }
+}
+
+List<String> _decodeIds(String? json) {
+  if (json == null || json.isEmpty) return const <String>[];
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is! List) return const <String>[];
+    return [
+      for (final value in decoded)
+        if (value is String) value,
+    ];
+  } catch (_) {
+    return const <String>[];
+  }
+}
+
 /// The relay's store: organizations (kill switch, hook secret), the devices
-/// registered for them and the service-hook registry.
+/// registered for them, the service-hook registry and the small per-artifact
+/// routing state of research/14 §5.1.
 class RelayDb {
   RelayDb._(this._db, this.path);
 
@@ -125,16 +299,26 @@ class RelayDb {
   /// 1 — the R0 skeleton (`meta` only).
   /// 2 — R1: `orgs` and `devices`.
   /// 3 — R2.1: `hook_subscriptions` and `hook_deliveries`.
-  static const schemaVersion = 3;
+  /// 4 — R2.2: the routing state of research/14 §5.1 plus `notification_sends`.
+  static const schemaVersion = 4;
 
   /// Delivery rows older than this are pruned; Azure DevOps stops retrying one
   /// delivery long before it (research/14 §5.2 rule 4).
   static const deliveryRetention = Duration(hours: 24);
 
+  /// `pr_state`, `pr_thread_state`, `run_state` and `build_state` rows expire
+  /// this long after their last update (research/14 §5.1).
+  static const routingStateRetention = Duration(days: 90);
+
+  /// Long enough for the hourly per-user cap and for "one notification per
+  /// person per event" to outlive every retry of that event.
+  static const sendLedgerRetention = Duration(hours: 24);
+
   /// Pruning is opportunistic: one sweep every this many inserts.
   static const _pruneEvery = 200;
 
   var _deliveryInserts = 0;
+  var _routingWrites = 0;
 
   static var _libraryResolved = false;
 
@@ -245,6 +429,83 @@ class RelayDb {
       ');',
     );
     db.execute('CREATE INDEX IF NOT EXISTS hook_deliveries_age ON hook_deliveries (received_at);');
+
+    // R2.2, research/14 §5.1. Every column below is an id, a status word, a
+    // commit sha, a branch ref, a vote or a timestamp — deliberately nothing
+    // that could hold a title, a display name or any text from a body. The one
+    // exception is `projects.project_name`, which exists because the app's
+    // routes take a project name and the pipelines publisher sends only an id.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS pr_state ('
+      '  org           TEXT NOT NULL,'
+      '  pr_id         TEXT NOT NULL,'
+      '  status        TEXT,'
+      '  is_draft      INTEGER,'
+      '  source_commit TEXT,'
+      '  reviewers_json TEXT NOT NULL DEFAULT \'{}\','
+      '  author_id     TEXT,'
+      '  updated_at    TEXT NOT NULL,'
+      '  PRIMARY KEY (org, pr_id)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS pr_state_age ON pr_state (updated_at);');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS pr_thread_state ('
+      '  org                  TEXT NOT NULL,'
+      '  pr_id                TEXT NOT NULL,'
+      '  thread_id            TEXT NOT NULL,'
+      '  participant_ids_json TEXT NOT NULL DEFAULT \'[]\','
+      '  updated_at           TEXT NOT NULL,'
+      '  PRIMARY KEY (org, pr_id, thread_id)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS pr_thread_state_age ON pr_thread_state (updated_at);');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS run_state ('
+      '  org               TEXT NOT NULL,'
+      '  run_id            TEXT NOT NULL,'
+      '  pipeline_id       TEXT,'
+      '  requested_for_id  TEXT,'
+      '  requested_by_id   TEXT,'
+      '  created_at        TEXT NOT NULL,'
+      '  PRIMARY KEY (org, run_id)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS run_state_age ON run_state (created_at);');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS build_state ('
+      '  org           TEXT NOT NULL,'
+      '  project_id    TEXT NOT NULL,'
+      '  definition_id TEXT NOT NULL,'
+      '  branch        TEXT NOT NULL,'
+      '  last_result   TEXT,'
+      '  build_id      TEXT,'
+      '  updated_at    TEXT NOT NULL,'
+      '  PRIMARY KEY (org, project_id, definition_id, branch)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS build_state_age ON build_state (updated_at);');
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS projects ('
+      '  org          TEXT NOT NULL,'
+      '  project_id   TEXT NOT NULL,'
+      '  project_name TEXT NOT NULL,'
+      '  updated_at   TEXT NOT NULL,'
+      '  PRIMARY KEY (org, project_id)'
+      ');',
+    );
+    // The per-user hourly cap and the "one notification per person per event"
+    // guarantee of research/14 §5.2 rules 2 and 6, as four columns of ids.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS notification_sends ('
+      '  org       TEXT NOT NULL,'
+      '  event_key TEXT NOT NULL,'
+      '  user_id   TEXT NOT NULL,'
+      '  sent_at   TEXT NOT NULL,'
+      '  PRIMARY KEY (org, event_key, user_id)'
+      ');',
+    );
+    db.execute('CREATE INDEX IF NOT EXISTS notification_sends_user ON notification_sends (org, user_id, sent_at);');
 
     db.execute('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;', [
       'schema_version',
@@ -360,6 +621,170 @@ class RelayDb {
   int hookDeliveryCount() {
     final rows = _db.select('SELECT COUNT(*) AS n FROM hook_deliveries;');
     return rows.isEmpty ? 0 : rows.first['n']! as int;
+  }
+
+  // --------------------------------------------------------- routing state
+
+  PrStateRow? prState(String org, String prId) {
+    final rows = _db.select('SELECT * FROM pr_state WHERE org = ? AND pr_id = ?;', [org, prId]);
+    return rows.isEmpty ? null : PrStateRow.fromSql(rows.first);
+  }
+
+  void savePrState(PrStateRow row) {
+    _db.execute(
+      'INSERT INTO pr_state (org, pr_id, status, is_draft, source_commit, reviewers_json, author_id, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT (org, pr_id) DO UPDATE SET '
+      '  status = excluded.status, is_draft = excluded.is_draft, source_commit = excluded.source_commit, '
+      '  reviewers_json = excluded.reviewers_json, author_id = excluded.author_id, '
+      '  updated_at = excluded.updated_at;',
+      [
+        row.org,
+        row.prId,
+        row.status,
+        row.isDraft == null ? null : (row.isDraft! ? 1 : 0),
+        row.sourceCommit,
+        jsonEncode(row.reviewers),
+        row.authorId,
+        row.updatedAt ?? _now(),
+      ],
+    );
+    _afterRoutingWrite();
+  }
+
+  PrThreadStateRow? prThreadState(String org, String prId, String threadId) {
+    final rows = _db.select('SELECT * FROM pr_thread_state WHERE org = ? AND pr_id = ? AND thread_id = ?;', [
+      org,
+      prId,
+      threadId,
+    ]);
+    return rows.isEmpty ? null : PrThreadStateRow.fromSql(rows.first);
+  }
+
+  void savePrThreadState(PrThreadStateRow row) {
+    _db.execute(
+      'INSERT INTO pr_thread_state (org, pr_id, thread_id, participant_ids_json, updated_at) '
+      'VALUES (?, ?, ?, ?, ?) '
+      'ON CONFLICT (org, pr_id, thread_id) DO UPDATE SET '
+      '  participant_ids_json = excluded.participant_ids_json, updated_at = excluded.updated_at;',
+      [row.org, row.prId, row.threadId, jsonEncode(row.participantIds), row.updatedAt ?? _now()],
+    );
+    _afterRoutingWrite();
+  }
+
+  RunStateRow? runState(String org, String runId) {
+    final rows = _db.select('SELECT * FROM run_state WHERE org = ? AND run_id = ?;', [org, runId]);
+    return rows.isEmpty ? null : RunStateRow.fromSql(rows.first);
+  }
+
+  void saveRunState(RunStateRow row) {
+    _db.execute(
+      'INSERT INTO run_state (org, run_id, pipeline_id, requested_for_id, requested_by_id, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT (org, run_id) DO UPDATE SET '
+      '  pipeline_id = COALESCE(excluded.pipeline_id, run_state.pipeline_id), '
+      '  requested_for_id = COALESCE(excluded.requested_for_id, run_state.requested_for_id), '
+      '  requested_by_id = COALESCE(excluded.requested_by_id, run_state.requested_by_id);',
+      [row.org, row.runId, row.pipelineId, row.requestedForId, row.requestedById, row.createdAt ?? _now()],
+    );
+    _afterRoutingWrite();
+  }
+
+  BuildStateRow? buildState(String org, String projectId, String definitionId, String branch) {
+    final rows = _db.select(
+      'SELECT * FROM build_state WHERE org = ? AND project_id = ? AND definition_id = ? AND branch = ?;',
+      [org, projectId, definitionId, branch],
+    );
+    return rows.isEmpty ? null : BuildStateRow.fromSql(rows.first);
+  }
+
+  void saveBuildState(BuildStateRow row) {
+    _db.execute(
+      'INSERT INTO build_state (org, project_id, definition_id, branch, last_result, build_id, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT (org, project_id, definition_id, branch) DO UPDATE SET '
+      '  last_result = excluded.last_result, build_id = excluded.build_id, updated_at = excluded.updated_at;',
+      [row.org, row.projectId, row.definitionId, row.branch, row.lastResult, row.buildId, row.updatedAt ?? _now()],
+    );
+    _afterRoutingWrite();
+  }
+
+  /// The project name for an id, when some payload has carried both.
+  String? projectName(String org, String projectId) {
+    final rows = _db.select('SELECT project_name FROM projects WHERE org = ? AND project_id = ?;', [org, projectId]);
+    return rows.isEmpty ? null : rows.first['project_name'] as String?;
+  }
+
+  void saveProject(String org, String projectId, String projectName) {
+    _db.execute(
+      'INSERT INTO projects (org, project_id, project_name, updated_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (org, project_id) DO UPDATE SET project_name = excluded.project_name, '
+      '  updated_at = excluded.updated_at;',
+      [org, projectId, projectName, _now()],
+    );
+  }
+
+  /// Drops routing state untouched since [before]. Returns how many rows went.
+  int pruneRoutingState(DateTime before) {
+    final cutoff = before.toUtc().toIso8601String();
+    var removed = 0;
+    for (final statement in [
+      'DELETE FROM pr_state WHERE updated_at < ?;',
+      'DELETE FROM pr_thread_state WHERE updated_at < ?;',
+      'DELETE FROM run_state WHERE created_at < ?;',
+      'DELETE FROM build_state WHERE updated_at < ?;',
+    ]) {
+      _db.execute(statement, [cutoff]);
+      removed += _db.updatedRows;
+    }
+    return removed;
+  }
+
+  void _afterRoutingWrite() {
+    if (++_routingWrites % _pruneEvery != 0) return;
+    final now = DateTime.now().toUtc();
+    pruneRoutingState(now.subtract(routingStateRetention));
+    pruneNotificationSends(now.subtract(sendLedgerRetention));
+  }
+
+  // ------------------------------------------------------ notification sends
+
+  /// Claims the right to notify [userId] about [eventKey]. False means this
+  /// person has already been notified about this event (research/14 §5.2
+  /// rule 2), which is also what makes a replayed event send nothing twice.
+  bool claimNotificationSend({required String org, required String eventKey, required String userId, DateTime? at}) {
+    _db.execute(
+      'INSERT INTO notification_sends (org, event_key, user_id, sent_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (org, event_key, user_id) DO NOTHING;',
+      [org, eventKey, userId, (at ?? DateTime.now().toUtc()).toIso8601String()],
+    );
+    return _db.updatedRows > 0;
+  }
+
+  /// How many notifications this identity has been sent in this org since
+  /// [since] — the hourly cap of research/14 §5.2 rule 6.
+  int notificationSendCount({required String org, required String userId, required DateTime since}) {
+    final rows = _db.select(
+      'SELECT COUNT(*) AS n FROM notification_sends WHERE org = ? AND user_id = ? AND sent_at >= ?;',
+      [org, userId, since.toUtc().toIso8601String()],
+    );
+    return rows.isEmpty ? 0 : rows.first['n']! as int;
+  }
+
+  int pruneNotificationSends(DateTime before) {
+    _db.execute('DELETE FROM notification_sends WHERE sent_at < ?;', [before.toUtc().toIso8601String()]);
+    return _db.updatedRows;
+  }
+
+  /// Every column of every table, for the schema assertion in `dart test`.
+  Map<String, List<String>> schemaColumns() {
+    final out = <String, List<String>>{};
+    for (final table in _db.select("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;")) {
+      final name = table['name']! as String;
+      if (name.startsWith('sqlite_')) continue;
+      out[name] = [for (final column in _db.select('PRAGMA table_info($name);')) column['name']! as String];
+    }
+    return out;
   }
 
   // --------------------------------------------------------------- devices

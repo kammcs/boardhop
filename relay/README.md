@@ -6,7 +6,7 @@ push gateway forwards an opaque pointer to the phone. This directory is the
 relay's home in the monorepo — a plain Dart package (no Flutter) that ships as a
 container.
 
-What it does today (phases R1 and R2.1):
+What it does today (phases R1, R2.1 and R2.2):
 
 - `GET /healthz` — `{"ok":true,"version":"<git sha>","uptime":<seconds>,"db":"ok",
   "apns":"disabled (no key id)","fcm":"ready"}`.
@@ -14,6 +14,9 @@ What it does today (phases R1 and R2.1):
   subscription registry, delivery dedup and a fast 200 backed by an in-process
   queue, plus the `/v1/admin/orgs/{org}/…` routes that configure it. See
   "Ingest" below.
+- **Routing** — the audience rule engine of research/14 §2: one routed event
+  becomes zero or more notifications, each with a verb, an anchor, a deep link,
+  a collapse key and a set of identity ids. See "Routing" below.
 - **Device registration** — `POST /v1/devices`, `DELETE /v1/devices/{id}`,
   `POST /v1/devices/{id}/heartbeat`, each authenticated with the user's own
   Azure DevOps access token.
@@ -25,8 +28,11 @@ What it does today (phases R1 and R2.1):
   HTTP basic auth, user `hook`; every post is written as one JSON file under
   `/data/capture/{name}/`.
 
-Turning a routed event into an audience is the next phase (R2.2); the design is
-research/14 §2 and §5, and "The audience problem" in research/06.
+Turning a notification into a push is the next phase (R2.3): the pointer gains
+`actor`, `verb`, `detail`, `anchor`, `runId`, `subId` and `sentAt`, the prefs
+table and `GET/PUT /v1/prefs` arrive, and the gateway replaces the logging sink.
+Until then the engine writes one `notification` line per notification and sends
+nothing.
 
 ## What runs on the box
 
@@ -233,8 +239,92 @@ or a branch. The only durable trace of an event is the four-column
 `hook_deliveries` row, which is ids and a timestamp. `dart test` asserts both:
 a synthetic payload carrying a sentinel string in its title, description,
 comment content, `System.History` and `message.text` produces no log line and no
-byte in the sqlite file containing it. R2.2 swaps the processor for the audience
-rule engine; nothing else about the wiring changes.
+byte in the sqlite file containing it. In R2.2 the processor is the `RuleEngine`
+below and the `hook routed` line gains candidate, recipient and drop **counts**;
+`LoggingHookProcessor` stays for the tests and for a relay with no database.
+
+## Routing (R2.2)
+
+What turns one routed event into notifications. The design is research/14 §2
+(the event → audience table), §5.2 (the six rules) and §6 (the preferences).
+
+```
+receive → auth → dedup → RoutingView → rules → actor → collapse → prefs → caps → sink
+          └────────── R2.1 ────────┘   └───────────── R2.2 ──────────────────────┘
+```
+
+1. **Rules.** One pure function per family — `work_item_rules.dart`,
+   `pull_request_rules.dart`, `build_rules.dart`, `approval_rules.dart` — takes
+   the `RoutingView` and the routing state and returns `Candidate`s, each a
+   `(userId, verb, detail?, anchor?)`. The same call advances the state, because
+   a service-hook body is **rendered at delivery time** (w24) and says nothing
+   about what changed: "who was added as a reviewer", "did the source commit
+   move" and "was the last build on this branch red" are diffs, not fields.
+2. **Actor.** Whoever caused the event is removed from every audience (§5.2
+   rule 1). Two exceptions: builds, because you want to hear that your own push
+   failed, and the lone approver of their own run. Only `pr.created`, the PR
+   comment event, `workitem.*`, `build.complete` and `approval-completed` name
+   their actor at all; a PR vote's actor is the reviewer whose vote moved
+   against `pr_state`, and a reviewer-list or status change names nobody (there
+   is no `closedBy` in the payload), so those go out with the verb alone.
+3. **Collapse.** Several rules can select the same person; the highest
+   `Verb.priority` wins and that person gets exactly one notification (rule 2):
+   `mentioned` > `assigned`/`reviewRequested` > `voted`/`stateChanged`/approvals
+   > `commented`/`replied` > `edited`/`pushed`.
+4. **Preferences.** `UserPrefs.allows(verb, isMention:, artifactKey:)` and
+   `quietHoursSuppress(now, tzOffset)`. R2.2 ships `DefaultPrefs`, the §6
+   defaults: everything on except `workItems.anyChangeOnMine` (`edited`),
+   `pullRequests.pushes` (`pushed`) and plain build successes
+   (`buildSucceeded`; failures and "fixed" are on, D3). Approvals are exempt
+   from quiet hours (D5). `PrefsSource` is the seam R2.3 backs with a table.
+5. **Caps.** At most 50 recipients per event and 60 per person per hour per
+   org (rule 6), counted in `notification_sends`, which is also what makes
+   "one notification per person per event" survive a replay.
+6. **Sink.** `NotificationSink.deliver(Notification)`. R2.2's only
+   implementation logs `{"msg":"notification", …}` with ids, the kind, the verb,
+   the anchor, the collapse key and a recipient **count**. R2.3 puts the push
+   gateway behind the same interface.
+
+**The verbs** (`lib/src/routing/verb.dart`, research/14 §3.2): `assigned`,
+`reassigned`, `stateChanged`, `edited`, `created`, `commented`, `replied`,
+`mentioned`, `reviewRequested`, `voted`, `prCompleted`, `prAbandoned`,
+`prPublished`, `pushed`, `mergeFailed`, `buildFailed`, `buildPartial`,
+`buildCanceled`, `buildSucceeded`, `buildFixed`, `approvalPending`,
+`approvalCompleted`, `test`. The relay sends the enum name; the app turns it
+into words. `detail` is validated against a **closed list per verb** — vote
+labels, build results, approval and merge statuses — and anything free-form (a
+state name, a stage name) is capped at 40 characters.
+
+**Deep links and collapse keys** are org-relative and exactly research/14 §2:
+`/projects/{project}/work-items/{id}[?comment={id}]` (`wi.{id}`,
+`wi.{id}.comments`), `/pull-requests/{id}[?thread={id}|?tab=files]` (`pr.{id}`,
+`pr.{id}.t{threadId}`), `/projects/{p}/pipelines/runs/{id}` (`build.{id}`),
+`/projects/{p}/pipelines?tab=approvals&approval={id}` (`approval.{id}`, and a
+completed approval keeps that collapse key but opens the run). The relay never
+names an account; the app prefixes `/a/{accountId}/orgs/{org}`.
+
+**The state tables** (schema 4, research/14 §5.1, pruned after 90 days):
+
+| table | what it holds | why |
+|---|---|---|
+| `pr_state` | `status, is_draft, source_commit, reviewers_json` (id → vote), `author_id` | added-reviewer, vote, push and draft→published detection |
+| `pr_thread_state` | `participant_ids_json` per `(pr, thread)` | the comment audience: the v2 payload carries the comment but not the thread |
+| `run_state` | `pipeline_id, requested_for_id, requested_by_id` | the approval events name the requester only by display name (w25) |
+| `build_state` | `last_result, build_id` per `(project, definition, branch)` | "fixed" detection |
+| `projects` | `project_id → project_name` | the app's routes take a name; the pipelines publisher sends only an id |
+| `notification_sends` | `(org, event_key, user_id, sent_at)` | one per person per event, and the hourly cap |
+
+**What is never stored.** No title, no display name, no comment, no description,
+no field value, no branch — every column above is an id, a status word, a commit
+sha, a vote or a timestamp. The one deliberate exception is
+`projects.project_name`, which exists only so a route can be built, and `dart
+test` asserts the column list of every other routing table against the words
+`title`, `name`, `text`, `content`, `description`, `comment`, `body` and
+`message`. The three content-adjacent things a notification carries — `title`,
+`actorName` and `detail` — live **only** inside the in-flight `Notification`:
+they are never written to the database and never logged, which `dart test`
+proves by pushing a sentinel string through every event kind and grepping both
+the log lines and the sqlite file for it.
 
 ## Device registration (`/v1/devices`)
 

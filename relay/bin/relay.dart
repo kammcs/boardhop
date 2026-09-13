@@ -11,6 +11,11 @@ import 'package:boardhop_relay/src/hooks/ingest.dart';
 import 'package:boardhop_relay/src/identity.dart';
 import 'package:boardhop_relay/src/log.dart';
 import 'package:boardhop_relay/src/registration.dart';
+import 'package:boardhop_relay/src/routing/prefs.dart';
+import 'package:boardhop_relay/src/routing/routing_state.dart';
+import 'package:boardhop_relay/src/routing/rule_engine.dart';
+import 'package:boardhop_relay/src/routing/send_ledger.dart';
+import 'package:boardhop_relay/src/routing/sink.dart';
 import 'package:boardhop_relay/src/server.dart';
 
 Future<void> main(List<String> args) async {
@@ -37,9 +42,20 @@ Future<void> main(List<String> args) async {
   logEvent('push gateway', fields: {'apns': gateway.apns.status, 'fcm': gateway.fcm.status});
 
   // The ingest hand-off: `POST /hooks/{org}` validates and enqueues, and this
-  // one consumer does the work. R2.2 replaces LoggingHookProcessor with the
-  // audience rule engine; nothing else about the wiring changes.
-  final hookQueue = HookQueue(processor: const LoggingHookProcessor());
+  // one consumer does the work — the R2.2 audience engine (research/14 §2).
+  // Without a database there is no routing state and no send ledger, so the
+  // relay falls back to the R2.1 logging processor and says so.
+  final HookProcessor processor = db == null
+      ? const LoggingHookProcessor()
+      : RuleEngine(
+          state: DbRoutingState(db),
+          prefs: const DefaultPrefsSource(),
+          // R2.3 puts the push gateway behind this interface.
+          sink: const LoggingNotificationSink(),
+          sends: DbSendLedger(db),
+        );
+  if (db == null) logEvent('routing disabled: no database', level: 'warn');
+  final hookQueue = HookQueue(processor: processor);
 
   final server = RelayServer(
     version: version,

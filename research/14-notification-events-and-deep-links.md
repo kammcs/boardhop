@@ -265,6 +265,17 @@ None of these change relay or app code; they feed §2 and §8 and are the first 
 | D9 | Group reviewers and approvers | **Skipped in the beta and disclosed** to puremedia and on the prefs screen. Group expansion arrives with the service principal (s40). |
 | D10 | `git.pullrequest.merged`, `approval-completed` | **Both in the beta** (dispatcher's call on the recommendation): merge failures to the author; completed approvals replace the pending notification. `stage-state-changed` and `run-state-changed` stay out. |
 
+## 8a. R2.1 and R2.2 notes (2026-09-13, from the dispatcher's review)
+
+- **PR status changes have no actor.** The `git.pullrequest.updated` body carries `closedDate` but no `closedBy`, so the relay cannot tell whether the author completed or abandoned their own PR. The author is notified either way (as the web's own e-mail does); a `pr_state`-based guess was rejected as unreliable. Accepted for the beta.
+- **A vote's actor** is the reviewer whose `vote` differs from `pr_state`; when two votes moved in one delivery the author still hears, with no actor and no vote label.
+- **PR validation builds do not yet notify the PR author:** `build.complete.triggerInfo["pr.number"]` is unverified (the scratch repo has no build policy), so `RoutingView` does not read it. Revisit when a customer pipeline with PR validation is in scope.
+- **`run_state` is filled only by `run-state-changed`,** so an approval on a run queued before the relay started has no requester on record and every approver is asked. Acceptable.
+- **`edited`** is computed from the changed fields minus a housekeeping set (comment noise plus `System.Reason`, board-column fields and the StateChange/Activated/Resolved/Closed dates), so a state change never also reads as an edit.
+- Deep link for `approval-completed` is the project-scoped run route (`/projects/{p}/pipelines/runs/{runId}`), matching `Routes.pipelineRun`.
+- The one relay-side text column is `projects.project_name`; a schema test pins every other routing table to id-only columns.
+- Known test flake, untouched: `capture_test.dart` "caps the directory at maxFilesPerName" fails about one run in five under a full-suite load (timestamped filenames collide); it is the spike-3 recorder, not relay storage.
+
 ## 9. Build plan (R2, dispatcher and Opus subagents)
 
 Phases, each one subagent brief, each reviewed and committed by the dispatcher after `dart analyze`/`dart test` (relay) and `flutter analyze`/`flutter test` (app), with the emulator and the live relay as the acceptance rig:
