@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Local notifications for new activity (Android 13+ runtime prompt). -->
@@ -54,6 +55,45 @@
                     android:scheme="msauth" />
             </intent-filter>
         </activity>
+
+        <!-- With the Installations registration below in force the SDK sends
+             FCM_REGISTERED instead of NEW_TOKEN, and firebase_messaging's
+             service only handles NEW_TOKEN, so the token never reaches Dart.
+             BoardhopMessagingService is that service plus onRegistered. -->
+        <service
+            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
+            tools:node="remove" />
+        <service
+            android:name=".BoardhopMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- No FCM registration until the user turns notifications on: the
+             app calls setAutoInitEnabled(true) from PushService.refreshToken().
+             It also wins a race — with auto-init on, the SDK emits onNewToken
+             during the ContentProvider start, before any Dart listener exists,
+             and the token is never seen again. -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+
+        <!-- Opt in to FCM's Firebase-Installations registration. Without it
+             GmsRegistrationClient.isV1RegistrationEnabled() is false and the
+             SDK falls back to the legacy IID path, which answers
+             "FCM Registration failed!" on this Play services build. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+
+        <!-- Pushed notifications land in the same channel as the polled ones
+             (created at startup by NotificationService), so they look alike
+             and share the user's per-channel settings. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="activity" />
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -98,10 +98,120 @@ the capture secret over ssh without ever printing it.
 
 As of 2026-09-13 the box serves `GET /healthz` and the spike-3 capture endpoint
 `POST|GET /capture/{name}` (HTTP basic, user `hook`, per-post JSON files capped
-at 1 MB each and 200 files per name). Device registration, the event→user
-mapping and the gateway are the next phase; `/srv/relay/secrets` is mounted
-read-only at `/secrets` and waits for the APNs `.p8` (B2) and the FCM service
-account (B3).
+at 1 MB each and 200 files per name), plus everything in "R1 notes" below.
+`/srv/relay/secrets` is mounted read-only at `/secrets` and holds the APNs `.p8`
+(B2) and the FCM service account (B3).
+
+## R1 notes (2026-09-13): device registration and the push gateway
+
+**What landed.**
+
+- **Relay.** `POST /v1/devices`, `DELETE /v1/devices/{id}`,
+  `POST /v1/devices/{id}/heartbeat` and `POST /v1/test-push`, each
+  authenticated with **the user's own Azure DevOps access token**, validated
+  once against the org with `GET /_apis/connectionData?api-version=7.1-preview`
+  and then dropped — never stored, never logged. Stored per device:
+  `(id, org, userId, userDescriptor, platform, token, appVersion, locale,
+  createdAt, lastSeenAt)`, idempotent on `(org, token)`. A token bucket per org
+  (120, refilling 1/s) and an `orgs` kill-switch table sit in front. A device
+  belonging to someone else answers 404, like one that does not exist.
+  `GET /v1/admin/devices?org=` (guarded by `RELAY_ADMIN_SECRET`) returns counts
+  and platforms only.
+- **Gateway.** `PushPointer` — `org`, `eventType`, `artifactType`
+  (workItem | pullRequest | build | approval), `artifactId`, `project`, optional
+  `title` truncated to 80, optional `deepLink` — is the only thing
+  `PushSender.send` accepts, so the pointer-only promise above is enforced by
+  the type rather than by review. APNs goes over HTTP/2 (`http2`; Dart's
+  `HttpClient` is 1.1 only) with an ES256 JWT from the `.p8` cached for 50
+  minutes and a collapse id per artifact; FCM goes over HTTP v1 with a
+  service-account token. `410`/`BadDeviceToken` and `UNREGISTERED`/`NOT_FOUND`
+  delete the device row. One log line per send carries the platform, status and
+  push id, and **at most the last six characters of the device token**.
+- **App.** `lib/features/notifications/`: `PushRegistrar` (register, daily
+  heartbeat, delete on sign-out, re-register after a 401 or a token rotation),
+  `PushService` (FCM on Android; on iOS a method channel to the Runner, because
+  there is no Firebase iOS app), `PushCoordinator` (which signed-in account an
+  organization belongs to, foreground pushes shown through the feed's existing
+  `flutter_local_notifications` channel, taps routed through the existing
+  router) and a push row on the Activity feed with a **Send test** button.
+  Registration follows the same opt-in as the local notifications: turning them
+  off unregisters.
+
+**Getting an FCM token on Android took three changes, and the reason is worth
+keeping.** `FirebaseMessaging.getToken()` failed on the Pixel 10 Pro emulator
+(Android 17, Play services 26.33) with `java.io.IOException: FCM Registration
+failed!` — a message that wraps the real cause and never shows it. The Firebase
+project was fine: `GET /v1/admin/fcm-check` on the relay (a `validate_only` send
+to a bogus token) answered `INVALID_ARGUMENT`, which means the service account
+authenticated and FCM accepted the call. The fault was the client registration
+path:
+
+1. `firebase-messaging` 25.x only uses the Firebase-Installations ("v1")
+   registration when the app's manifest carries
+   `firebase_messaging_installation_id_enabled = true`
+   (`GmsRegistrationClient.isV1RegistrationEnabled()` reads exactly that key and
+   otherwise returns false). Without it the SDK takes the legacy Play-services
+   path, which now fails. With it, registration succeeds.
+2. Under that flag the SDK **disables** `getToken()` and `deleteToken()` and
+   wants `register()` / `unregister()`, which `firebase_messaging` does not
+   expose. Hence the `com.kammcs.boardhop/push` method channel in
+   `MainActivity.kt` — the same channel name the iOS Runner answers.
+3. `register()` returns `Task<Void>`; the token is reported separately. And
+   here is the trap: with the Installations registration in force,
+   `FirebaseMessaging.invokeOnRegistrationChanged` still **logs** "Invoking
+   onNewToken" but sends the intent action
+   `com.google.firebase.messaging.FCM_REGISTERED`, which
+   `FirebaseMessagingService` dispatches to **`onRegistered`** — and
+   `firebase_messaging` only overrides `onNewToken`. The token was therefore
+   minted, logged, delivered to the plugin's service, and silently dropped.
+   `BoardhopMessagingService` (the plugin's service plus an `onRegistered` that
+   posts into the plugin's own `FlutterFirebaseTokenLiveData`) replaces it in
+   the manifest, and `MainActivity` observes that same LiveData and forwards
+   the token over the push channel.
+4. Even so, the token is announced once. With Firebase auto-init on that
+   happens during the `ContentProvider` start, before any Dart listener exists.
+   So auto-init is off in the manifest
+   (`firebase_messaging_auto_init_enabled = false`), the app calls
+   `setAutoInitEnabled(true)` only once the user has turned notifications on —
+   which is the privacy behaviour we want anyway, no FCM registration for
+   someone who never opts in — and `PushService` writes the token to shared
+   preferences, because later launches get no repeat.
+
+A last surprise: a token from this registration path is **22 characters**, not
+the ~160 of a classic FCM token, and FCM accepts it (`/v1/test-push` came back
+with a message id). The relay's token sanity check was loosened to 16
+characters because of it.
+
+**Verified on the Pixel 10 Pro emulator (Android, puremedia):** registration,
+the `devices` row, a test push arriving in the foreground and in the shade with
+the app backgrounded, and the tap opening the deep link.
+
+**Unverified.**
+
+- **APNs is off.** Apple's ten-character **Key ID** for the `.p8` is still
+  unknown (NEXT-STEPS item 19, B2), and without it no JWT can be signed;
+  `/healthz` reports `apns: disabled (no key id)` and every APNs send is skipped
+  rather than attempted. Nothing on the Apple path — the JWT, the HTTP/2
+  connection, the 410 handling — has ever run.
+- **The whole iOS client side is unbuilt.** The `com.kammcs.boardhop/push`
+  method channel in `AppDelegate.swift`, the `aps-environment` entitlement and
+  the `remote-notification` background mode were written on Windows and have
+  never been compiled. A pushed notification **tapped** on iOS also has no route
+  home yet: `UNUserNotificationCenter`'s delegate belongs to
+  `flutter_local_notifications`, which forwards only its own notifications, so
+  only foreground and `didReceiveRemoteNotification` deliveries reach Dart.
+  Settle that when the Key ID and a physical iPhone (B4) exist — APNs does not
+  reach the simulator.
+- The relay still has no event→user mapping: the only thing that sends today is
+  `/v1/test-push`. "The audience problem" above is unchanged and is the next
+  decision.
+
+**One thing to remember before CI exists.** `android/app/google-services.json`
+is gitignored (it carries the Firebase Android API key) and the
+`com.google.gms.google-services` Gradle plugin **fails the Android build when it
+is missing**. A clean clone — and any CI runner, whenever Kelly decides to have
+one — therefore needs that file supplied as a secret, exactly like `.env` and
+`android/secret.properties`.
 
 ## Spikes before building
 

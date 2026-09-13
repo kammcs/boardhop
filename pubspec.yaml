@@ -63,6 +63,11 @@ dependencies:
   image_picker: 1.2.3
   # Any other file for work item attachments (SAF / UIDocumentPicker); pinned.
   file_picker: 10.3.10
+  # Push on Android only (research/06 R1): FCM device token and delivery.
+  # iOS takes the APNs token straight from the Runner, so no Firebase iOS app.
+  # Both are BSD-3, free, and pinned.
+  firebase_core: 4.14.0
+  firebase_messaging: 16.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

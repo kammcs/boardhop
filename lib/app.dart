@@ -23,6 +23,9 @@ import 'data/repositories/repo_repository.dart';
 import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/write_queue.dart';
+import 'features/notifications/push_coordinator.dart';
+import 'features/notifications/push_registrar.dart';
+import 'features/notifications/push_service.dart';
 import 'router.dart';
 import 'theme/theme.dart';
 
@@ -58,6 +61,10 @@ class AccountDeps {
       db: db,
       userId: accountId,
     );
+    pushRegistrar = PushRegistrar(
+      accountId: accountId,
+      accessToken: () => root.auth.accessToken(accountId: accountId),
+    );
     activitySync = ActivitySync(
       activity: activity,
       orgs: orgs,
@@ -84,6 +91,7 @@ class AccountDeps {
   late final ActivityRepository activity;
   late final AccountRepository account;
   late final ActivitySync activitySync;
+  late final PushRegistrar pushRegistrar;
 
   /// What the pages under `/a/{account}` read from the context.
   List<RepositoryProvider<Object>> get providers => [
@@ -99,6 +107,7 @@ class AccountDeps {
     RepositoryProvider<RepoRepository>.value(value: repos),
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
+    RepositoryProvider<PushRegistrar>.value(value: pushRegistrar),
     RepositoryProvider<AvatarStore>.value(value: avatars),
     RepositoryProvider<AccountRepository>.value(value: account),
   ];
@@ -112,12 +121,16 @@ class AppDependencies {
     required this.client,
     required this.db,
     required this.notifications,
+    required this.push,
   });
 
   final AuthService auth;
   final AdoClient client;
   final AppDatabase db;
   final NotificationService notifications;
+
+  /// The platform push token and the messages it brings (research/06 R1).
+  final PushService push;
 
   final Map<String, AccountDeps> _accounts = {};
 
@@ -132,6 +145,7 @@ class AppDependencies {
   Future<void> removeAccount(String accountId) async {
     final deps = _accounts.remove(accountId);
     deps?.activitySync.stop();
+    deps?.pushRegistrar.dispose();
     final others = <String>{};
     for (final row in await db.select(db.organizations).get()) {
       if (row.userId != accountId) others.add(row.name);
@@ -186,8 +200,18 @@ class _BoardhopAppState extends State<BoardhopApp> {
   late final AuthBloc _authBloc = AuthBloc(
     widget.deps.auth,
     onAccountRemoved: widget.deps.removeAccount,
+    // The relay's DELETE needs a token, so it has to run before MSAL forgets
+    // the account.
+    onAccountSigningOut: (id) => _push.signOut(id),
   )..add(const AuthStarted());
   late final _router = buildRouter(_authBloc, widget.deps);
+  late final PushCoordinator _push = PushCoordinator(
+    push: widget.deps.push,
+    notifications: widget.deps.notifications,
+    registrarFor: (id) => widget.deps.forAccount(id).pushRegistrar,
+    orgFor: (id) => widget.deps.forAccount(id).orgs.lastOpened(),
+    openRoute: _openRoute,
+  );
   StreamSubscription<String>? _taps;
   StreamSubscription<AuthState>? _auth;
 
@@ -203,6 +227,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
     // Notification taps open their item; a cold-start tap waits for the
     // first frame so the router exists.
     _taps = deps.notifications.taps.listen(_openRoute);
+    _push.start();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final launch = deps.notifications.takeLaunchRoute();
       if (launch != null) _openRoute(launch);
@@ -217,10 +242,12 @@ class _BoardhopAppState extends State<BoardhopApp> {
         for (final id in ids) {
           deps.forAccount(id).activitySync.start();
         }
+        unawaited(_push.syncAccounts(ids));
       } else if (state is AuthSignedOut) {
         for (final bound in deps.boundAccounts.toList()) {
           bound.activitySync.stop();
         }
+        unawaited(_push.syncAccounts(const []));
       }
     });
   }
@@ -234,6 +261,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
   void dispose() {
     _taps?.cancel();
     _auth?.cancel();
+    _push.dispose();
     for (final bound in widget.deps.boundAccounts) {
       bound.activitySync.stop();
     }
@@ -251,6 +279,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.client),
         RepositoryProvider.value(value: deps.db),
         RepositoryProvider.value(value: deps.notifications),
+        RepositoryProvider.value(value: deps.push),
       ],
       child: BlocProvider.value(
         value: _authBloc,

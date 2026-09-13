@@ -81,6 +81,23 @@ class NotificationService {
           if (payload != null && payload.isNotEmpty) _taps.add(payload);
         },
       );
+      // Create the channel up front. A pushed notification names this
+      // channel (research/06 R1) and Android drops one whose channel does
+      // not exist yet, which would otherwise happen before the first polled
+      // notification of the install.
+      await plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              channelId,
+              'Activity',
+              description:
+                  'Pull requests waiting for you, work item changes and builds',
+              importance: Importance.defaultImportance,
+            ),
+          );
       final launch = await plugin.getNotificationAppLaunchDetails();
       if (launch?.didNotificationLaunchApp == true) {
         _launchRoute = launch?.notificationResponse?.payload;

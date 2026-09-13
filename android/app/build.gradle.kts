@@ -3,6 +3,9 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    // Firebase Cloud Messaging (research/06 R1). Must come before the Flutter
+    // plugin so the google-services task is wired into every variant.
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -81,4 +84,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // MainActivity calls FirebaseMessaging.register()/unregister() directly;
+    // the firebase_messaging plugin keeps this off the app's compile classpath.
+    // Same version the plugin resolves, so Gradle picks one.
+    implementation("com.google.firebase:firebase-messaging:25.1.2")
 }

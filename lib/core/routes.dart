@@ -13,4 +13,31 @@ abstract final class Routes {
 
   static String project(String accountId, String org, String project) =>
       '${Routes.org(accountId, org)}/projects/${Uri.encodeComponent(project)}';
+
+  static String activity(String accountId, String org) =>
+      '${Routes.org(accountId, org)}/activity';
+
+  static String pullRequest(String accountId, String org, String id) =>
+      '${Routes.org(accountId, org)}/pull-requests/${Uri.encodeComponent(id)}';
+
+  static String workItem(
+    String accountId,
+    String org,
+    String project,
+    String id,
+  ) =>
+      '${Routes.project(accountId, org, project)}'
+      '/work-items/${Uri.encodeComponent(id)}';
+
+  static String pipelines(String accountId, String org, String project) =>
+      '${Routes.project(accountId, org, project)}/pipelines';
+
+  static String pipelineRun(
+    String accountId,
+    String org,
+    String project,
+    String id,
+  ) =>
+      '${Routes.pipelines(accountId, org, project)}'
+      '/runs/${Uri.encodeComponent(id)}';
 }

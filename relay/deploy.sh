@@ -46,6 +46,33 @@ run "if [ ! -s $REMOTE/relay.env ]; then
        echo 'RELAY_CAPTURE_SECRET already present'
      fi"
 
+# The admin secret for GET /v1/admin/devices. Same rules as the capture
+# secret: generated on the box, never printed, never committed.
+run "if ! grep -q '^RELAY_ADMIN_SECRET=' $REMOTE/relay.env 2>/dev/null; then
+       umask 077
+       echo \"RELAY_ADMIN_SECRET=\$(openssl rand -hex 32)\" >> $REMOTE/relay.env
+       echo 'generated a new RELAY_ADMIN_SECRET'
+     else
+       echo 'RELAY_ADMIN_SECRET already present'
+     fi"
+
+# Push gateway settings. Not secret in themselves (the .p8 and the service
+# account under $REMOTE/secrets are), so they carry defaults; an existing line
+# is never overwritten. APNS_KEY_ID is deliberately empty: Apple's Key ID for
+# the authentication key is not known yet, and an empty value means "APNs
+# disabled", which /healthz reports.
+GATEWAY_SETTINGS="APNS_KEY_ID= APNS_TEAM_ID=73W98CESN9 APNS_TOPIC=com.kammcs.boardhop APNS_ENV=sandbox APNS_KEY_FILE=/secrets/apns-authkey.p8 FCM_PROJECT_ID=boardhop-d4b8f FCM_SERVICE_ACCOUNT=/secrets/fcm-service-account.json"
+
+run "umask 077
+     for kv in $GATEWAY_SETTINGS; do
+       key=\${kv%%=*}
+       if ! grep -q \"^\$key=\" $REMOTE/relay.env 2>/dev/null; then
+         echo \"\$kv\" >> $REMOTE/relay.env
+         echo \"added \$key\"
+       fi
+     done
+     chmod 600 $REMOTE/relay.env"
+
 say "copying the source tree to $REMOTE/src"
 if [ "$LOCAL" = 1 ]; then
   tar -C "$SRC" -cf - --exclude=.dart_tool --exclude=build --exclude=.env . | tar -C "$REMOTE/src" -xf -

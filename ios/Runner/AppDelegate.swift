@@ -12,7 +12,90 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    registerDisplayChannel(messenger: engineBridge.applicationRegistrar.messenger())
+    let messenger = engineBridge.applicationRegistrar.messenger()
+    registerDisplayChannel(messenger: messenger)
+    registerPushChannel(messenger: messenger)
+  }
+
+  // MARK: - Push (research/06 R1)
+  //
+  // iOS talks to APNs directly: there is no Firebase iOS app and no
+  // GoogleService-Info.plist, so the only push credential anywhere is the
+  // team's .p8 on the relay. The Runner registers for remote notifications
+  // and hands the device token to Dart over this channel; permission itself
+  // comes from the existing local-notifications prompt
+  // (NotificationService.setEnabled), so the user is asked once.
+  //
+  // UNVERIFIED: written on Windows for a session with no Mac. It has never
+  // been compiled or run, and APNs is disabled on the relay until Apple's
+  // Key ID for the .p8 is known.
+
+  private var pushChannel: FlutterMethodChannel?
+
+  /// Hex APNs token, kept so a late `register` call can be answered at once.
+  private var apnsToken: String?
+
+  private func registerPushChannel(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "com.kammcs.boardhop/push", binaryMessenger: messenger)
+    pushChannel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "register":
+        // Safe to call repeatedly; iOS answers with the same token unless it
+        // rotated. Does not prompt: without permission the delegate simply
+        // never fires.
+        UIApplication.shared.registerForRemoteNotifications()
+        result(self?.apnsToken)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+    apnsToken = hex
+    pushChannel?.invokeMethod("onToken", arguments: hex)
+    super.application(
+      application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    // Expected on the simulator without a paired Apple ID, and whenever the
+    // user has not granted notifications. Never log the token; there is none.
+    NSLog("Boardhop: remote notification registration failed: \(error.localizedDescription)")
+    super.application(
+      application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    // The pointer's `data` keys sit at the top level of the APNs payload
+    // alongside `aps`; hand the string ones to Dart and let it decide.
+    var pointer: [String: String] = [:]
+    for (key, value) in userInfo {
+      if let key = key as? String, key != "aps", let value = value as? String {
+        pointer[key] = value
+      }
+    }
+    if !pointer.isEmpty {
+      pushChannel?.invokeMethod(
+        application.applicationState == .active ? "onMessage" : "onOpened",
+        arguments: pointer)
+    }
+    super.application(
+      application, didReceiveRemoteNotification: userInfo,
+      fetchCompletionHandler: completionHandler)
   }
 
   /// The display channel, read by lib/core/display_cutout.dart.

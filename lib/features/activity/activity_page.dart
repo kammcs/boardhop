@@ -9,6 +9,7 @@ import '../../core/http/ado_exceptions.dart';
 import '../../core/util/format.dart';
 import '../../data/models/activity.dart';
 import '../../core/notifications/notification_service.dart';
+import '../notifications/push_status_tile.dart';
 import '../../data/activity_sync.dart';
 import '../../data/models/pull_request.dart';
 import '../../data/repositories/activity_repository.dart';
@@ -223,6 +224,15 @@ class _ActivityPageState extends State<ActivityPage>
                           child: const Text('Turn on'),
                         ),
                       ),
+              ),
+              // Push (research/06 R1): only meaningful once the local
+              // notifications are on, since the relay is woken from the same
+              // opt-in and shows through the same channel.
+              ListenableBuilder(
+                listenable: notifications.enabledNotifier,
+                builder: (context, _) => notifications.enabled
+                    ? PushStatusTile(org: widget.org)
+                    : const SizedBox.shrink(),
               ),
               if (visible.isEmpty && _loadedOnce && !_loading)
                 Padding(

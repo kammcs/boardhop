@@ -81,7 +81,8 @@ class AuthSignedIn extends AuthState {
 typedef AccountRemovedCallback = Future<void> Function(String accountId);
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc(this._auth, {this._onAccountRemoved}) : super(const AuthUnknown()) {
+  AuthBloc(this._auth, {this._onAccountRemoved, this._onAccountSigningOut})
+    : super(const AuthUnknown()) {
     on<AuthStarted>(_onStarted);
     on<AuthSignInRequested>(_onSignIn);
     on<AuthSignOutRequested>(_onSignOut);
@@ -90,6 +91,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   final AuthService _auth;
   final AccountRemovedCallback? _onAccountRemoved;
+
+  /// Called *before* MSAL forgets the account, while a token can still be
+  /// acquired for it: the push relay's `DELETE /v1/devices/{id}` needs one.
+  final AccountRemovedCallback? _onAccountSigningOut;
 
   AuthState _fromAccounts(List<Account> accounts, {String? error}) =>
       accounts.isEmpty
@@ -134,6 +139,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     final ids = id == null ? [for (final a in _auth.knownAccounts) a.id] : [id];
     if (id == null) emit(const AuthBusy());
     for (final accountId in ids) {
+      await _onAccountSigningOut?.call(accountId);
       await _auth.removeAccount(accountId);
       await _onAccountRemoved?.call(accountId);
     }

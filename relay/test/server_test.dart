@@ -3,13 +3,37 @@ import 'dart:io';
 
 import 'package:boardhop_relay/src/auth.dart';
 import 'package:boardhop_relay/src/capture.dart';
+import 'package:boardhop_relay/src/gateway/gateway.dart';
+import 'package:boardhop_relay/src/registration.dart';
 import 'package:boardhop_relay/src/server.dart';
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
+import 'support.dart';
+
 const secret = 's3cr3t-capture-key';
 
 String basic(String user, String pass) => 'Basic ${base64.encode(utf8.encode('$user:$pass'))}';
+
+/// A server with the R1 pieces faked: this file only covers /healthz and the
+/// capture endpoint (registration has its own test file).
+RelayServer buildServer({
+  required String captureSecret,
+  required CaptureStore captures,
+  DateTime? startedAt,
+  String dbStatus = 'absent',
+}) {
+  final gateway = PushGateway(apns: FakeSender(ready: false), fcm: FakeSender(), db: null);
+  return RelayServer(
+    version: 'test-sha',
+    captureSecret: captureSecret,
+    captures: captures,
+    startedAt: startedAt,
+    dbStatus: dbStatus,
+    gateway: gateway,
+    registrations: Registrations(db: null, validator: fakeValidator(const {}), gateway: gateway),
+  );
+}
 
 void main() {
   late Directory tmp;
@@ -17,8 +41,7 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('relay_test_');
-    server = RelayServer(
-      version: 'test-sha',
+    server = buildServer(
       captureSecret: secret,
       captures: CaptureStore(tmp, maxBodyBytes: 64, maxFilesPerName: 3),
       startedAt: DateTime.now().subtract(const Duration(seconds: 7)),
@@ -87,7 +110,7 @@ void main() {
     });
 
     test('rejects everything when no secret is configured', () async {
-      final locked = RelayServer(version: 'v', captureSecret: '', captures: CaptureStore(tmp));
+      final locked = buildServer(captureSecret: '', captures: CaptureStore(tmp));
       final r = await Future.value(
         locked.handler(
           Request(
