@@ -23,6 +23,8 @@ Start with **[00-feasibility-summary.md](00-feasibility-summary.md)**. It holds 
 | [12-dartnative-evaluation.md](12-dartnative-evaluation.md) | DartNative versus Flutter verdict and iPhone Duo readiness plan (reconciled) |
 | [12a-dartnative-findings.md](12a-dartnative-findings.md) | DartNative maturity, tooling, dependency compatibility, risks (sourced) |
 | [12b-iphone-duo-and-flutter.md](12b-iphone-duo-and-flutter.md) | iPhone Duo facts, iOS 27.1 APIs, Flutter and peer readiness, Boardhop impact (sourced) |
+| [13-ios-walkthrough-plan.md](13-ios-walkthrough-plan.md) | iOS simulator walkthrough plan (reports in `walkthroughs/`) |
+| [14-notification-events-and-deep-links.md](14-notification-events-and-deep-links.md) | Relay R2: hook event → audience → pointer → deep link map, device enrichment, preferences, dedup, build phases |
 | [verification/](verification/) | Reproducible anonymous API probes and captured results |
 
 Re-run the probes with:
