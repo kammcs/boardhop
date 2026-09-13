@@ -5,6 +5,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'auth.dart';
 import 'capture.dart';
+import 'cors.dart';
 import 'gateway/gateway.dart';
 import 'hooks/ingest.dart';
 import 'log.dart';
@@ -42,8 +43,13 @@ class RelayServer {
   /// "ok", "absent" or an error string; reported by /healthz.
   final String dbStatus;
 
-  Handler get handler =>
-      const Pipeline().addMiddleware(jsonRequestLog()).addMiddleware(_errorsAsJson).addHandler(_router.call);
+  Handler get handler => const Pipeline()
+      .addMiddleware(jsonRequestLog())
+      // Outside the error handler, so a 500 the hub provokes is still readable
+      // in its console rather than an opaque "network error".
+      .addMiddleware(hubCors())
+      .addMiddleware(_errorsAsJson)
+      .addHandler(_router.call);
 
   Router get _router {
     final router = Router()
@@ -65,7 +71,12 @@ class RelayServer {
         ..post('/hooks/<org>', ingest.receive)
         ..put('/v1/admin/orgs/<org>/hook-secret', ingest.putHookSecret)
         ..put('/v1/admin/orgs/<org>/subscriptions', ingest.putSubscriptions)
-        ..get('/v1/admin/orgs/<org>/subscriptions', ingest.getSubscriptions);
+        ..get('/v1/admin/orgs/<org>/subscriptions', ingest.getSubscriptions)
+        // The same three, authenticated with the org's own hook key: what the
+        // Marketplace extension's hub calls from the browser.
+        ..get('/v1/orgs/<org>/subscriptions', ingest.orgSubscriptions)
+        ..put('/v1/orgs/<org>/projects/<projectId>/subscriptions', ingest.orgPutProjectSubscriptions)
+        ..delete('/v1/orgs/<org>/projects/<projectId>/subscriptions', ingest.orgDeleteProjectSubscriptions);
     }
 
     return router..all('/<ignored|.*>', (Request _) => jsonError(404, 'not found'));

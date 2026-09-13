@@ -629,6 +629,64 @@ class RelayDb {
     return rows.length;
   }
 
+  /// Replaces **one project's** rows and keeps every other project's, in one
+  /// transaction — the `mergeRegistry` rule of `tool/src/hooks_lib.dart`, moved
+  /// into the store so the extension's hub can provision one project at a time
+  /// without unregistering the others.
+  ///
+  /// A row survives when its `project_id` is not [projectId] *and* its `sub_id`
+  /// is not in [rows]; a row with no project belongs to no project and survives
+  /// too. An empty [rows] therefore clears the project and touches nothing else.
+  ({int project, int total}) replaceProjectHookSubscriptions(
+    String org,
+    String projectId,
+    List<HookSubscriptionRow> rows,
+  ) {
+    ensureOrg(org);
+    final now = _now();
+    _db.execute('BEGIN IMMEDIATE;');
+    try {
+      _db.execute('DELETE FROM hook_subscriptions WHERE org = ? AND project_id = ?;', [org, projectId]);
+      for (final row in rows) {
+        // A subscription id that moved project is taken from the new set,
+        // whatever project the old row claimed.
+        _db.execute('DELETE FROM hook_subscriptions WHERE org = ? AND sub_id = ?;', [org, row.subId]);
+        _db.execute(
+          'INSERT INTO hook_subscriptions (org, sub_id, event_type, kind, project_id, project_name, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?);',
+          [org, row.subId, row.eventType, row.kind, row.projectId, row.projectName, row.createdAt ?? now],
+        );
+      }
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+    return hookSubscriptionCounts(org, projectId);
+  }
+
+  /// Removes one project's rows. Returns how many went and what the org has
+  /// left.
+  ({int removed, int total}) deleteProjectHookSubscriptions(String org, String projectId) {
+    _db.execute('DELETE FROM hook_subscriptions WHERE org = ? AND project_id = ?;', [org, projectId]);
+    final removed = _db.updatedRows;
+    return (removed: removed, total: _hookSubscriptionCount(org, null));
+  }
+
+  /// How many rows the org has, and how many of them are [projectId]'s.
+  ({int project, int total}) hookSubscriptionCounts(String org, String projectId) =>
+      (project: _hookSubscriptionCount(org, projectId), total: _hookSubscriptionCount(org, null));
+
+  int _hookSubscriptionCount(String org, String? projectId) {
+    final rows = projectId == null
+        ? _db.select('SELECT COUNT(*) AS n FROM hook_subscriptions WHERE org = ?;', [org])
+        : _db.select('SELECT COUNT(*) AS n FROM hook_subscriptions WHERE org = ? AND project_id = ?;', [
+            org,
+            projectId,
+          ]);
+    return (rows.first['n'] as int?) ?? 0;
+  }
+
   // --------------------------------------------------------- hook deliveries
 
   /// Records one delivery attempt. False means this `(org, subId, activityId)`

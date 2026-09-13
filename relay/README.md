@@ -212,6 +212,68 @@ enabled if it is new. Without `RELAY_ADMIN_SECRET` all three routes answer 404,
 as `/v1/admin/devices` does. The secret is hashed the moment it arrives: it is
 never logged, echoed in the response, or stored.
 
+### Org-key provisioning (`/v1/orgs/{org}`)
+
+The same three operations, authenticated with the **org's own hook secret**
+instead of the relay admin secret, so the Marketplace extension's hub
+(`extension/` in this repo) can register the subscriptions it just created
+without ever holding a relay-wide credential. The hub is a browser page Azure
+DevOps serves, so these are the only routes with CORS.
+
+```
+GET    /v1/orgs/{org}/subscriptions
+PUT    /v1/orgs/{org}/projects/{projectId}/subscriptions
+DELETE /v1/orgs/{org}/projects/{projectId}/subscriptions
+Authorization: Basic aG9vazo…    (user `hook`, password = the org's hook secret)
+```
+
+**Auth is the ingest wall.** The credential and the check are the ones
+`POST /hooks/{org}` uses — user `hook`, the secret compared as a sha256 hash in
+constant time — and every way of failing it (unknown org, an org with no secret,
+a disabled org, a wrong secret, no credentials at all) answers the identical
+**404 with an empty JSON object**, byte for byte the same as ingest's. The log
+line is the same `{"msg":"hook rejected","org":"…","reason":"bad-secret"}` reason
+code and nothing more.
+
+**`PUT` replaces one project, not the org.** Rows whose `project_id` is another
+project are kept, and so is a row with no project; a `subId` in the body is taken
+from the body whatever project it used to claim. Everything happens in one
+transaction, an empty array clears the project, and every row's `projectId` must
+equal the one in the path (400 otherwise). The `kind`/`eventType` validation is
+the admin PUT's, so an unknown kind or a mismatched pair is a 400 that changes
+nothing. Body cap 1 MB (413), JSON content type required (415).
+
+```sh
+K='<the org hook secret>'   # what tool/hooks.dart secret wrote; never printed
+
+curl -sS -u "hook:$K" https://boardhop.relay.kammcs.com/v1/orgs/puremedia/subscriptions
+→ {"org":"puremedia","subscriptions":[{"subId":"…","eventType":"workitem.updated",
+     "kind":"wi.updated","projectId":"…","projectName":"DevOps Mobile App",
+     "createdAt":"2026-09-13T20:54:29.085980Z"}]}
+
+curl -sS -u "hook:$K" -X PUT -H 'Content-Type: application/json'   -d '[{"subId":"…","eventType":"workitem.updated","kind":"wi.updated",
+        "projectId":"<projectId>","projectName":"DevOps Mobile App"}]'   https://boardhop.relay.kammcs.com/v1/orgs/puremedia/projects/<projectId>/subscriptions
+→ {"org":"puremedia","projectId":"…","subscriptions":1,"total":14}
+
+curl -sS -u "hook:$K" -X DELETE   https://boardhop.relay.kammcs.com/v1/orgs/puremedia/projects/<projectId>/subscriptions
+→ {"org":"puremedia","projectId":"…","removed":1,"total":13}
+```
+
+**CORS, and only here.** Paths under `/v1/orgs/` answer a preflight `OPTIONS`
+with 204, `Access-Control-Allow-Methods: GET, PUT, DELETE, OPTIONS`,
+`Access-Control-Allow-Headers: Authorization, Content-Type`,
+`Access-Control-Max-Age: 600` and `Vary: Origin`; real responses — the 404 wall
+and the 400s included, so the hub can read its own errors — carry
+`Access-Control-Allow-Origin` and `Vary: Origin`. The allowed origins are
+`https://*.vsassets.io` (at any depth — `kammcs.gallerycdn.vsassets.io` is where
+a published extension's files are served from), `https://dev.azure.com`,
+`https://*.visualstudio.com`, and `http://localhost` / `https://localhost` on any
+port for local hub development. The origin is **echoed** only when it matched;
+`*` is never sent, `Access-Control-Allow-Credentials` is never sent (the hub sets
+the Authorization header itself and there are no cookies), and a disallowed or
+absent origin gets no CORS headers at all — its preflight gets the 404 wall.
+Every other route, `/v1/admin/orgs/{org}/…` included, is untouched.
+
 **Dedup and the fast 200.** `X-VSS-ActivityId` is unique per delivery *attempt*,
 so `hook_deliveries (org, sub_id, activity_id, received_at)` makes a retry a
 no-op: 200, one `hook duplicate` log line, no processing. The body's `id` is the
