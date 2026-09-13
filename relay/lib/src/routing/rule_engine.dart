@@ -3,6 +3,7 @@ import '../hooks/hook_event.dart';
 import '../hooks/hook_kind.dart';
 import '../hooks/routing_view.dart';
 import '../log.dart';
+import '../verb.dart';
 import 'approval_rules.dart';
 import 'build_rules.dart';
 import 'candidate.dart';
@@ -13,7 +14,6 @@ import 'pull_request_rules.dart';
 import 'routing_state.dart';
 import 'send_ledger.dart';
 import 'sink.dart';
-import 'verb.dart';
 import 'work_item_rules.dart';
 
 /// The audience engine (research/14 §2 and §5.2): one service-hook event in,
@@ -90,15 +90,19 @@ class RuleEngine implements HookProcessor {
     final allowed = <Candidate>[];
     for (final candidate in chosen.values) {
       final settings = prefs.prefsFor(view.org, candidate.userId);
-      final isMention = candidate.verb == Verb.mentioned;
-      if (!settings.allows(candidate.verb, isMention: isMention, artifactKey: artifactKey)) {
+      if (!settings.allows(
+        candidate.verb,
+        reason: candidate.reason,
+        detail: candidate.detail,
+        artifactKey: artifactKey,
+      )) {
         dropped++;
         continue;
       }
       // "Quiet, not lost" (§5.2 rule 7): a suppressed notification is dropped,
-      // not queued. Approvals are exempt by default (D5).
-      if (!candidate.verb.isApproval &&
-          settings.quietHoursSuppress(now, prefs.timeZoneOffsetMinutes(view.org, candidate.userId))) {
+      // not queued. Approvals are exempt by default, which the preferences
+      // decide (D5), not this loop.
+      if (settings.quietHoursSuppress(candidate.verb, now, prefs.timeZoneOffsetMinutes(view.org, candidate.userId))) {
         dropped++;
         continue;
       }
@@ -185,7 +189,7 @@ class RuleEngine implements HookProcessor {
             runId: view.runId,
             anchor: group.first.anchor,
           ),
-          collapseKey: collapseKeyFor(type, artifactId, group.first.anchor),
+          collapseKey: collapseKeyFor(view.org, type, artifactId, group.first.anchor),
           recipients: {for (final candidate in group) candidate.userId},
         ),
     ];

@@ -6,13 +6,14 @@ import 'package:boardhop_relay/src/hooks/hook_event.dart';
 import 'package:boardhop_relay/src/hooks/hook_kind.dart';
 import 'package:boardhop_relay/src/hooks/routing_view.dart';
 import 'package:boardhop_relay/src/routing/links.dart';
+import 'package:boardhop_relay/src/routing/candidate.dart';
 import 'package:boardhop_relay/src/routing/notification.dart';
 import 'package:boardhop_relay/src/routing/prefs.dart';
 import 'package:boardhop_relay/src/routing/routing_state.dart';
 import 'package:boardhop_relay/src/routing/rule_engine.dart';
 import 'package:boardhop_relay/src/routing/send_ledger.dart';
 import 'package:boardhop_relay/src/routing/sink.dart';
-import 'package:boardhop_relay/src/routing/verb.dart';
+import 'package:boardhop_relay/src/verb.dart';
 import 'package:test/test.dart';
 
 import 'hook_fixtures.dart';
@@ -298,7 +299,7 @@ void main() {
       );
       final sent = notifications.firstWhere((n) => n.recipients.contains(bobId));
       expect(sent.deepLink, '/projects/Contoso%20Demo/work-items/15545?comment=4');
-      expect(sent.collapseKey, 'wi.15545.comments');
+      expect(sent.collapseKey, '$fixtureOrg.wi.15545.comments');
       expect(sent.anchor, 'comment:4');
       expect(sent.title, startsWith('#15545 · '));
     });
@@ -320,7 +321,7 @@ void main() {
       );
       final sent = notifications.first;
       expect(sent.deepLink, '/projects/Contoso%20Demo/work-items/15545');
-      expect(sent.collapseKey, 'wi.15545');
+      expect(sent.collapseKey, '$fixtureOrg.wi.15545');
       expect(sent.detail, 'Done');
     });
 
@@ -329,7 +330,7 @@ void main() {
       final notifications = await harness.run(viewOf(HookKind.prComment, pullRequestComment(subId: 'sub')));
       final sent = notifications.first;
       expect(sent.deepLink, '/pull-requests/8348?thread=4821');
-      expect(sent.collapseKey, 'pr.8348.t4821');
+      expect(sent.collapseKey, '$fixtureOrg.pr.8348.t4821');
       expect(sent.title, startsWith('!8348 · '));
     });
 
@@ -345,21 +346,21 @@ void main() {
         ),
       );
       expect(notifications.single.deepLink, '/pull-requests/8348?tab=files');
-      expect(notifications.single.collapseKey, 'pr.8348');
+      expect(notifications.single.collapseKey, '$fixtureOrg.pr.8348');
     });
 
     test('a new PR is the plain PR route', () async {
       final harness = RoutingHarness();
       final notifications = await harness.run(viewOf(HookKind.prCreated, pullRequestCreated(subId: 'sub')));
       expect(notifications.single.deepLink, '/pull-requests/8348');
-      expect(notifications.single.collapseKey, 'pr.8348');
+      expect(notifications.single.collapseKey, '$fixtureOrg.pr.8348');
     });
 
     test('a build points at the run', () async {
       final harness = RoutingHarness();
       final notifications = await harness.run(viewOf(HookKind.buildComplete, buildComplete(subId: 'sub')));
       expect(notifications.single.deepLink, '/projects/Contoso%20Demo/pipelines/runs/20163');
-      expect(notifications.single.collapseKey, 'build.20163');
+      expect(notifications.single.collapseKey, '$fixtureOrg.build.20163');
       expect(notifications.single.title, 'contoso-scratch · 20260913.1');
     });
 
@@ -373,7 +374,7 @@ void main() {
       );
       const approvalId = '44444444-eeee-4eee-8eee-444444444444';
       expect(notifications.single.deepLink, '/projects/Contoso%20Demo/pipelines?tab=approvals&approval=$approvalId');
-      expect(notifications.single.collapseKey, 'approval.$approvalId');
+      expect(notifications.single.collapseKey, '$fixtureOrg.approval.$approvalId');
       expect(notifications.single.title, 'contoso-scratch → Deploy');
       expect(notifications.single.runId, '20163');
     });
@@ -396,7 +397,7 @@ void main() {
         ),
       );
       expect(notifications.single.deepLink, '/projects/Contoso%20Demo/pipelines/runs/20163');
-      expect(notifications.single.collapseKey, 'approval.44444444-eeee-4eee-8eee-444444444444');
+      expect(notifications.single.collapseKey, '$fixtureOrg.approval.44444444-eeee-4eee-8eee-444444444444');
       expect(notifications.single.detail, 'approved');
     });
 
@@ -639,8 +640,9 @@ class _MentionsOnlyPrefs implements UserPrefs {
   const _MentionsOnlyPrefs();
 
   @override
-  bool allows(Verb verb, {required bool isMention, String? artifactKey}) => isMention;
+  bool allows(Verb verb, {required CandidateReason reason, String? detail, String? artifactKey}) =>
+      reason == CandidateReason.mention;
 
   @override
-  bool quietHoursSuppress(DateTime nowUtc, int? tzOffsetMinutes) => false;
+  bool quietHoursSuppress(Verb verb, DateTime nowUtc, int? tzOffsetMinutes) => false;
 }

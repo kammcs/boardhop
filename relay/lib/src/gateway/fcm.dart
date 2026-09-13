@@ -16,7 +16,6 @@ class FcmSender implements PushSender {
   FcmSender({
     required this.projectId,
     required this.serviceAccountFile,
-    this.androidChannelId = 'activity',
     this.timeout = const Duration(seconds: 15),
     this.baseClient,
   });
@@ -33,11 +32,6 @@ class FcmSender implements PushSender {
 
   /// Path to the service-account JSON, mounted read-only at `/secrets`.
   final String serviceAccountFile;
-
-  /// The notification channel the Android app already owns (see
-  /// `lib/core/notifications/notification_service.dart`), so a pushed
-  /// notification looks exactly like a polled one.
-  final String androidChannelId;
 
   final Duration timeout;
 
@@ -135,18 +129,38 @@ class FcmSender implements PushSender {
     project: '',
   );
 
+  /// How long FCM holds a message for a phone that is offline. An hour: a
+  /// pointer older than that is answered by the app's own poll, not by a push
+  /// (research/14 §3.3).
+  static const ttl = '3600s';
+
   /// The v1 `message` object. Pure function, so the shape is testable without
   /// a service account.
-  Map<String, Object?> message(String deviceToken, PushPointer pointer) => {
-    'token': deviceToken,
-    'notification': {'title': pointer.notificationTitle, 'body': pointer.notificationBody},
-    'data': pointer.toData(),
-    'android': {
-      'priority': 'high',
-      'collapse_key': pointer.collapseId,
-      'notification': {'channel_id': androidChannelId, 'tag': pointer.collapseId},
-    },
-  };
+  ///
+  /// **Data-only** (research/06 decision point 4, research/14 §3.3): there is
+  /// no `notification` block, because the app posts the notification itself
+  /// after enrichment — a `notification` block would make the OS show the
+  /// un-enriched line as well and the app could not redact it on the lock
+  /// screen (D7). The fallback line travels as data so the service can post it
+  /// when the fetch fails.
+  ///
+  /// `collapse_key` is the artifact **family**, not the exact key: FCM allows
+  /// four collapse keys per device at a time, and the exact key is the
+  /// notification tag the app uses instead.
+  Map<String, Object?> message(String deviceToken, PushPointer pointer) {
+    final subtitle = pointer.notificationSubtitle;
+    return {
+      'token': deviceToken,
+      'data': {
+        ...pointer.toData(),
+        'fallbackTitle': pointer.notificationTitle,
+        'fallbackBody': pointer.notificationBody,
+        if (subtitle != null) 'fallbackSubtitle': subtitle,
+        'collapseKey': pointer.collapseId,
+      },
+      'android': {'priority': 'HIGH', 'ttl': ttl, 'collapse_key': pointer.collapseFamily},
+    };
+  }
 
   Future<auth.AutoRefreshingAuthClient> _authClient() async {
     final existing = _client;

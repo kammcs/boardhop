@@ -11,25 +11,32 @@ PushArtifactType artifactTypeOf(HookKind kind) {
   return PushArtifactType.build;
 }
 
-/// The prefix the collapse key, the artifact key and the mute list share.
-String artifactPrefix(PushArtifactType type) => switch (type) {
-  PushArtifactType.workItem => 'wi',
-  PushArtifactType.pullRequest => 'pr',
-  PushArtifactType.build => 'build',
-  PushArtifactType.approval => 'approval',
-};
+/// The prefix the collapse key, the artifact key, the mute list and FCM's
+/// per-family collapse key share. Defined once, on the pointer's own type.
+String artifactPrefix(PushArtifactType type) => type.family;
 
 /// research/14 §2's collapse keys: one per artifact, with a thread or comment
 /// suffix so a discussion and a state change on the same artifact do not eat
 /// each other in the shade.
-String collapseKeyFor(PushArtifactType type, String artifactId, String? anchor) {
-  final base = '${artifactPrefix(type)}.$artifactId';
-  return switch (type) {
+///
+/// **Org-scoped**: a phone registered for two organizations would otherwise
+/// collapse `pr.8348` in one against `pr.8348` in the other. Capped from the
+/// **left**, because the artifact and its suffix are the distinguishing part —
+/// [PushPointer.collapseId] trims the same way.
+String collapseKeyFor(String org, PushArtifactType type, String artifactId, String? anchor) {
+  final base = '$org.${artifactPrefix(type)}.$artifactId';
+  final key = switch (type) {
     PushArtifactType.workItem => Anchors.commentId(anchor) == null ? base : '$base.comments',
     PushArtifactType.pullRequest => Anchors.threadId(anchor) == null ? base : '$base.t${Anchors.threadId(anchor)}',
     _ => base,
   };
+  return capCollapseKey(key);
 }
+
+/// APNs caps `apns-collapse-id` at 64 bytes; the tail is what identifies the
+/// artifact, so an over-long key loses its head.
+String capCollapseKey(String key) =>
+    key.length <= PushPointer.maxCollapseKey ? key : key.substring(key.length - PushPointer.maxCollapseKey);
 
 /// research/14 §3.1: the alert heading is the artifact line — the id the relay
 /// prefixes, then the artifact's own title. Metadata, nothing else.

@@ -5,13 +5,14 @@ import 'package:boardhop_relay/src/hooks/hook_event.dart';
 import 'package:boardhop_relay/src/hooks/routing_view.dart';
 import 'package:boardhop_relay/src/identity.dart';
 import 'package:boardhop_relay/src/log.dart';
+import 'package:boardhop_relay/src/routing/candidate.dart';
 import 'package:boardhop_relay/src/routing/notification.dart';
 import 'package:boardhop_relay/src/routing/prefs.dart';
 import 'package:boardhop_relay/src/routing/routing_state.dart';
 import 'package:boardhop_relay/src/routing/rule_engine.dart';
 import 'package:boardhop_relay/src/routing/send_ledger.dart';
 import 'package:boardhop_relay/src/routing/sink.dart';
-import 'package:boardhop_relay/src/routing/verb.dart';
+import 'package:boardhop_relay/src/verb.dart';
 
 /// A push transport that records instead of dialling Apple or Google.
 class FakeSender implements PushSender {
@@ -98,33 +99,39 @@ class AllOnPrefs implements UserPrefs {
   const AllOnPrefs();
 
   @override
-  bool allows(Verb verb, {required bool isMention, String? artifactKey}) => true;
+  bool allows(Verb verb, {required CandidateReason reason, String? detail, String? artifactKey}) => true;
 
   @override
-  bool quietHoursSuppress(DateTime nowUtc, int? tzOffsetMinutes) => false;
+  bool quietHoursSuppress(Verb verb, DateTime nowUtc, int? tzOffsetMinutes) => false;
 }
 
-/// Quiet hours that cover everything, to prove what they do and do not stop.
-class AlwaysQuietPrefs implements UserPrefs {
-  const AlwaysQuietPrefs();
-
-  @override
-  bool allows(Verb verb, {required bool isMention, String? artifactKey}) => true;
-
-  @override
-  bool quietHoursSuppress(DateTime nowUtc, int? tzOffsetMinutes) => true;
+/// Quiet hours that cover the whole day, to prove what they do and do not
+/// stop. This is the **real** [StoredPrefs] with an all-day window (start ==
+/// end), so the approval exemption under test is the shipped one.
+class AlwaysQuietPrefs extends StoredPrefs {
+  const AlwaysQuietPrefs()
+    : super(
+        const PushPrefs(
+          quietHours: QuietHours(enabled: true, start: '00:00', end: '00:00'),
+        ),
+      );
 }
 
 /// The rule engine with in-memory state, ledger and sink — everything the
 /// tests need and nothing that touches a disk or a socket.
 class RoutingHarness {
-  RoutingHarness({UserPrefs prefs = const DefaultPrefs(), DateTime? now, int? maxFanOut, int? maxPerUserPerHour})
-    : state = MemoryRoutingState(),
-      sink = RecordingNotificationSink(),
-      sends = MemorySendLedger() {
+  RoutingHarness({
+    UserPrefs prefs = const DefaultPrefs(),
+    DateTime? now,
+    int? tzOffsetMinutes,
+    int? maxFanOut,
+    int? maxPerUserPerHour,
+  }) : state = MemoryRoutingState(),
+       sink = RecordingNotificationSink(),
+       sends = MemorySendLedger() {
     engine = RuleEngine(
       state: state,
-      prefs: FixedPrefsSource(prefs),
+      prefs: FixedPrefsSource(prefs, tzOffsetMinutes: tzOffsetMinutes),
       sink: sink,
       sends: sends,
       maxRecipientsPerEvent: maxFanOut ?? RuleEngine.maxFanOut,

@@ -1,9 +1,9 @@
 import '../db.dart';
 import '../hooks/hook_kind.dart';
 import '../hooks/routing_view.dart';
+import '../verb.dart';
 import 'candidate.dart';
 import 'routing_state.dart';
-import 'verb.dart';
 
 /// A build's actor is `requestedBy` — and research/14 §5.2 rule 1 makes builds
 /// the exception to "never the actor": you want to hear that your own push
@@ -33,9 +33,9 @@ List<Candidate> evaluateBuild(RoutingView view, RoutingState state) {
   // A success (or a fix) is the requester's business alone; a failure is also
   // the business of whoever queued it, when that is somebody else.
   final out = <Candidate>[
-    if (requestedFor != null) candidate(requestedFor, verb, detail: detail),
+    if (requestedFor != null) candidate(requestedFor, verb, CandidateReason.requester, detail: detail),
     if (!verb.isSuccessLike && requestedBy != null && requestedBy != requestedFor)
-      candidate(requestedBy, verb, detail: detail),
+      candidate(requestedBy, verb, CandidateReason.requester, detail: detail),
   ];
   // A scheduled or CI build requested for a build service account has nobody
   // to notify; such an identity never registers a device, so the device lookup

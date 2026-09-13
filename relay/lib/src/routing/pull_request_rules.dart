@@ -1,9 +1,9 @@
 import '../db.dart';
 import '../hooks/hook_kind.dart';
 import '../hooks/routing_view.dart';
+import '../verb.dart';
 import 'candidate.dart';
 import 'routing_state.dart';
-import 'verb.dart';
 
 /// Who caused a pull request event.
 ///
@@ -81,7 +81,9 @@ List<ReviewerRef> _people(RoutingView view) => [
 List<Candidate> _created(RoutingView view) {
   // A draft tells nobody; its reviewers hear when it leaves draft.
   if (view.isDraft == true) return const [];
-  return [for (final reviewer in _people(view)) candidate(reviewer.id!, Verb.reviewRequested)];
+  return [
+    for (final reviewer in _people(view)) candidate(reviewer.id!, Verb.reviewRequested, CandidateReason.reviewer),
+  ];
 }
 
 /// The payload lists the reviewers as they are at delivery time, so "added" is
@@ -89,7 +91,8 @@ List<Candidate> _created(RoutingView view) {
 /// and every current reviewer counts as added.
 List<Candidate> _reviewersUpdated(RoutingView view, PrStateRow? prior) => [
   for (final reviewer in _people(view))
-    if (prior == null || !prior.reviewers.containsKey(reviewer.id)) candidate(reviewer.id!, Verb.reviewRequested),
+    if (prior == null || !prior.reviewers.containsKey(reviewer.id))
+      candidate(reviewer.id!, Verb.reviewRequested, CandidateReason.reviewer),
 ];
 
 /// A vote that is not a reset goes to the author; the label comes from the
@@ -100,19 +103,21 @@ List<Candidate> _voted(RoutingView view, PrStateRow? prior) {
   if (author == null) return const [];
   if (!_people(view).any((reviewer) => (reviewer.vote ?? 0) != 0)) return const [];
   final voter = changedVoter(view, prior);
-  return [candidate(author, Verb.voted, detail: Verb.voteLabel(voter?.vote))];
+  return [candidate(author, Verb.voted, CandidateReason.author, detail: Verb.voteLabel(voter?.vote))];
 }
 
 List<Candidate> _statusUpdated(RoutingView view, PrStateRow? prior) {
   // draft → published: the reviewers are being asked for the first time.
   if (prior?.isDraft == true && view.isDraft == false) {
-    return [for (final reviewer in _people(view)) candidate(reviewer.id!, Verb.reviewRequested)];
+    return [
+      for (final reviewer in _people(view)) candidate(reviewer.id!, Verb.reviewRequested, CandidateReason.reviewer),
+    ];
   }
   final author = view.prAuthorId;
   if (author == null) return const [];
   return switch (view.prStatus?.toLowerCase()) {
-    'completed' => [candidate(author, Verb.prCompleted)],
-    'abandoned' => [candidate(author, Verb.prAbandoned)],
+    'completed' => [candidate(author, Verb.prCompleted, CandidateReason.author)],
+    'abandoned' => [candidate(author, Verb.prAbandoned, CandidateReason.author)],
     _ => const <Candidate>[],
   };
 }
@@ -126,7 +131,7 @@ List<Candidate> _pushed(RoutingView view, PrStateRow? prior) {
   return [
     for (final reviewer in _people(view))
       if ((reviewer.vote ?? 0) != 0 || (prior.reviewers[reviewer.id] ?? 0) != 0)
-        candidate(reviewer.id!, Verb.pushed, anchor: Anchors.files),
+        candidate(reviewer.id!, Verb.pushed, CandidateReason.votedReviewer, anchor: Anchors.files),
   ];
 }
 
@@ -145,11 +150,11 @@ List<Candidate> _commented(RoutingView view, RoutingState state, String prId) {
       : state.thread(view.org, prId, threadId)?.participantIds ?? const <String>[];
 
   final out = <Candidate>[
-    for (final id in view.mentionIds) candidate(id, Verb.mentioned, anchor: anchor),
-    if (view.prAuthorId != null) candidate(view.prAuthorId!, verb, anchor: anchor),
-    for (final id in participants) candidate(id, verb, anchor: anchor),
+    for (final id in view.mentionIds) candidate(id, Verb.mentioned, CandidateReason.mention, anchor: anchor),
+    if (view.prAuthorId != null) candidate(view.prAuthorId!, verb, CandidateReason.author, anchor: anchor),
+    for (final id in participants) candidate(id, verb, CandidateReason.threadParticipant, anchor: anchor),
     for (final reviewer in _people(view))
-      if ((reviewer.vote ?? 0) != 0) candidate(reviewer.id!, verb, anchor: anchor),
+      if ((reviewer.vote ?? 0) != 0) candidate(reviewer.id!, verb, CandidateReason.votedReviewer, anchor: anchor),
   ];
 
   // This comment's author is a participant of the thread from now on.
@@ -166,7 +171,7 @@ List<Candidate> _merged(RoutingView view) {
   final author = view.prAuthorId;
   final status = view.mergeStatus;
   if (author == null || status == null || status.toLowerCase() == 'succeeded') return const [];
-  return [candidate(author, Verb.mergeFailed, detail: status)];
+  return [candidate(author, Verb.mergeFailed, CandidateReason.author, detail: status)];
 }
 
 void _remember(RoutingView view, RoutingState state, String prId, PrStateRow? prior) {

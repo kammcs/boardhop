@@ -6,6 +6,8 @@ import 'gateway/pointer.dart';
 import 'identity.dart';
 import 'log.dart';
 import 'responses.dart';
+import 'routing/prefs.dart';
+import 'verb.dart';
 
 /// A token bucket per organization. Generous on purpose: the app registers
 /// once per install, heartbeats once a day and pushes a test on demand, so the
@@ -68,6 +70,9 @@ class Registrations {
   /// this only keeps out the obviously wrong.
   static final _tokenPattern = RegExp(r'^[A-Za-z0-9_:.\-]{16,4096}$');
 
+  /// UTC-14 to UTC+14, the whole range of real offsets (research/14 §6).
+  static const maxTzOffsetMinutes = 840;
+
   // ------------------------------------------------------------ POST /v1/devices
 
   Future<Response> register(Request request) async {
@@ -86,6 +91,7 @@ class Registrations {
     if (org is! String || !isValidOrg(org)) return jsonError(400, 'bad org');
     if (platform is! String || !_platforms.contains(platform)) return jsonError(400, 'bad platform');
     if (token is! String || !_tokenPattern.hasMatch(token)) return jsonError(400, 'bad token');
+    if (!_validTzOffset(body['tzOffsetMinutes'])) return jsonError(400, 'bad tzOffsetMinutes');
 
     if (!limiter.allow(org)) return jsonError(429, 'too many registrations for this organization');
     if (!store.orgEnabled(org)) return jsonError(403, 'organization disabled');
@@ -102,6 +108,7 @@ class Registrations {
       token: token,
       appVersion: _short(body['appVersion']),
       locale: _short(body['locale']),
+      tzOffsetMinutes: body['tzOffsetMinutes'] as int?,
     );
     logEvent(
       'device registered',
@@ -139,11 +146,13 @@ class Registrations {
     if (rotated != null && (rotated is! String || !_tokenPattern.hasMatch(rotated))) {
       return jsonError(400, 'bad token');
     }
+    if (!_validTzOffset(body['tzOffsetMinutes'])) return jsonError(400, 'bad tzOffsetMinutes');
     final updated = db!.heartbeat(
       device.id,
       token: rotated as String?,
       appVersion: _short(body['appVersion']),
       locale: _short(body['locale']),
+      tzOffsetMinutes: body['tzOffsetMinutes'] as int?,
     );
     if (updated == null) return jsonError(404, 'unknown device');
     return jsonResponse(200, {
@@ -196,7 +205,7 @@ class Registrations {
   /// The fixed pointer `/v1/test-push` sends. Points at the relay itself
   /// rather than an artifact, so a tap lands on the org's activity feed unless
   /// the caller passed a deep link.
-  static PushPointer testPointer(String org, {String? deepLink}) => PushPointer(
+  static PushPointer testPointer(String org, {String? deepLink, DateTime? sentAt}) => PushPointer(
     org: org,
     eventType: 'boardhop.test',
     artifactType: PushArtifactType.build,
@@ -204,7 +213,46 @@ class Registrations {
     project: '',
     title: 'Push is working',
     deepLink: deepLink ?? '/activity',
+    verb: Verb.test,
+    sentAt: sentAt ?? DateTime.now().toUtc(),
   );
+
+  // ------------------------------------------------ GET/PUT /v1/prefs?org=
+
+  /// This person's push preferences for one org (research/14 §6, D5). Stored
+  /// per `(org, userId)` rather than per device, so two phones agree and a
+  /// reinstall keeps them; the defaults come back when nothing is stored.
+  Future<Response> getPrefs(Request request) async {
+    final resolved = await _callerInOrg(request);
+    if (resolved is _Denied) return resolved.response;
+    final caller = resolved as _Caller;
+    return jsonResponse(200, PushPrefs.decode(db!.userPrefs(caller.org, caller.userId)).toJson());
+  }
+
+  /// Replaces the document. Every key and every value is checked against §6:
+  /// an unknown key or a value outside its closed list is a **400**, so a typo
+  /// in the app can never silently switch a notification off. `notActor` is
+  /// reported but not editable (§5.2 rule 1).
+  Future<Response> putPrefs(Request request) async {
+    final resolved = await _callerInOrg(request);
+    if (resolved is _Denied) return resolved.response;
+    final caller = resolved as _Caller;
+
+    final body = await readJsonObject(request);
+    if (body == null) return jsonError(400, 'expected a JSON object');
+    final parsed = PrefsParser.parse(body);
+    final prefs = parsed.prefs;
+    if (prefs == null) return jsonError(400, parsed.error ?? 'bad preferences');
+
+    db!.saveUserPrefs(org: caller.org, userId: caller.userId, prefsJson: prefs.encode());
+    // Counts and switches only: a preference document holds no content, and
+    // the log does not need the document to say that it changed.
+    logEvent(
+      'prefs saved',
+      fields: {'org': caller.org, 'quietHours': prefs.quietHours.enabled, 'muted': prefs.mutedArtifacts.length},
+    );
+    return jsonResponse(200, prefs.toJson());
+  }
 
   // -------------------------------------------------- GET /v1/admin/devices?org=
 
@@ -259,6 +307,33 @@ class Registrations {
     return _Owned(device);
   }
 
+  /// The `?org=` routes' common front door: a valid org, inside its rate
+  /// bucket and kill switch, and a bearer the org recognises. Exactly the
+  /// checks `/v1/devices` makes, and the bearer is dropped the same way.
+  Future<_Ownership> _callerInOrg(Request request) async {
+    final store = db;
+    if (store == null) return _Denied(jsonError(503, 'database unavailable'));
+
+    final bearer = bearerOf(request);
+    if (bearer == null) return _Denied(bearerUnauthorized());
+
+    final org = request.url.queryParameters['org'];
+    if (org == null || !isValidOrg(org)) return _Denied(jsonError(400, 'bad org'));
+    if (!limiter.allow(org)) return _Denied(jsonError(429, 'too many requests for this organization'));
+    if (!store.orgEnabled(org)) return _Denied(jsonError(403, 'organization disabled'));
+
+    final identity = await validator(org, bearer);
+    if (identity == null) return _Denied(bearerUnauthorized());
+    return _Caller(org, identity.id);
+  }
+
+  /// Null (absent) is fine; anything else must be a whole number of minutes
+  /// inside [maxTzOffsetMinutes].
+  static bool _validTzOffset(Object? value) {
+    if (value == null) return true;
+    return value is int && value >= -maxTzOffsetMinutes && value <= maxTzOffsetMinutes;
+  }
+
   /// Short free-text fields (app version, locale) are capped so a client
   /// cannot grow a row without limit.
   static String? _short(Object? value, {int max = 64}) {
@@ -289,4 +364,11 @@ class _Owned extends _Ownership {
 class _Denied extends _Ownership {
   const _Denied(this.response);
   final Response response;
+}
+
+/// A caller who proved who they are in one organization; no token is kept.
+class _Caller extends _Ownership {
+  const _Caller(this.org, this.userId);
+  final String org;
+  final String userId;
 }

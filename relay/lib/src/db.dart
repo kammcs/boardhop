@@ -25,6 +25,7 @@ class DeviceRow {
     this.userDescriptor,
     this.appVersion,
     this.locale,
+    this.tzOffsetMinutes,
   });
 
   factory DeviceRow.fromSql(Map<String, Object?> row) => DeviceRow(
@@ -36,6 +37,7 @@ class DeviceRow {
     userDescriptor: row['user_descriptor'] as String?,
     appVersion: row['app_version'] as String?,
     locale: row['locale'] as String?,
+    tzOffsetMinutes: row['tz_offset_minutes'] as int?,
     createdAt: DateTime.parse(row['created_at']! as String),
     lastSeenAt: DateTime.parse(row['last_seen_at']! as String),
   );
@@ -52,6 +54,12 @@ class DeviceRow {
   final String? userDescriptor;
   final String? appVersion;
   final String? locale;
+
+  /// Minutes east of UTC, as the app reports it on registration and with the
+  /// heartbeat. The quiet window of research/14 §6 is in the device's local
+  /// time and the relay has no other way to know it. Range -840..840.
+  final int? tzOffsetMinutes;
+
   final DateTime createdAt;
   final DateTime lastSeenAt;
 
@@ -300,7 +308,8 @@ class RelayDb {
   /// 2 — R1: `orgs` and `devices`.
   /// 3 — R2.1: `hook_subscriptions` and `hook_deliveries`.
   /// 4 — R2.2: the routing state of research/14 §5.1 plus `notification_sends`.
-  static const schemaVersion = 4;
+  /// 5 — R2.3: `user_prefs` (research/14 §6) and `devices.tz_offset_minutes`.
+  static const schemaVersion = 5;
 
   /// Delivery rows older than this are pruned; Azure DevOps stops retrying one
   /// delivery long before it (research/14 §5.2 rule 4).
@@ -507,10 +516,36 @@ class RelayDb {
     );
     db.execute('CREATE INDEX IF NOT EXISTS notification_sends_user ON notification_sends (org, user_id, sent_at);');
 
+    // R2.3, research/14 §6 and D5. The document is a JSON blob of switches and
+    // closed vocabularies — `on`, `mentionsOnly`, `failures`, `"22:00"`, a list
+    // of `(family, id, until)` mutes — so this table holds no content either.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS user_prefs ('
+      '  org        TEXT NOT NULL,'
+      '  user_id    TEXT NOT NULL,'
+      '  prefs_json TEXT NOT NULL,'
+      '  updated_at TEXT NOT NULL,'
+      '  PRIMARY KEY (org, user_id)'
+      ');',
+    );
+    // Additive, and guarded: a database created at schema 2 already has
+    // `devices` and only needs the column.
+    _addColumn(db, 'devices', 'tz_offset_minutes', 'INTEGER');
+
     db.execute('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;', [
       'schema_version',
       '$schemaVersion',
     ]);
+  }
+
+  /// `ALTER TABLE ... ADD COLUMN`, but only when the column is not there yet:
+  /// SQLite has no `IF NOT EXISTS` for a column and the migration re-runs on
+  /// every start.
+  static void _addColumn(Database db, String table, String column, String type) {
+    for (final row in db.select('PRAGMA table_info($table);')) {
+      if (row['name'] == column) return;
+    }
+    db.execute('ALTER TABLE $table ADD COLUMN $column $type;');
   }
 
   String get sqliteVersion => sqlite3.version.libVersion;
@@ -776,6 +811,37 @@ class RelayDb {
     return _db.updatedRows;
   }
 
+  // ------------------------------------------------------------ user prefs
+
+  /// The stored preference document for one identity in one org, or null when
+  /// they have never saved one (research/14 §6). The relay keeps the JSON as it
+  /// was validated; parsing it is the routing layer's business.
+  String? userPrefs(String org, String userId) {
+    final rows = _db.select('SELECT prefs_json FROM user_prefs WHERE org = ? AND user_id = ?;', [org, userId]);
+    return rows.isEmpty ? null : rows.first['prefs_json'] as String?;
+  }
+
+  void saveUserPrefs({required String org, required String userId, required String prefsJson}) {
+    ensureOrg(org);
+    _db.execute(
+      'INSERT INTO user_prefs (org, user_id, prefs_json, updated_at) VALUES (?, ?, ?, ?) '
+      'ON CONFLICT (org, user_id) DO UPDATE SET prefs_json = excluded.prefs_json, '
+      '  updated_at = excluded.updated_at;',
+      [org, userId, prefsJson, _now()],
+    );
+  }
+
+  /// The time-zone offset of this identity's most recently seen device, for the
+  /// quiet window. Null when no device of theirs has reported one.
+  int? timeZoneOffsetMinutes(String org, String userId) {
+    final rows = _db.select(
+      'SELECT tz_offset_minutes FROM devices WHERE org = ? AND user_id = ? AND tz_offset_minutes IS NOT NULL '
+      'ORDER BY last_seen_at DESC LIMIT 1;',
+      [org, userId],
+    );
+    return rows.isEmpty ? null : rows.first['tz_offset_minutes'] as int?;
+  }
+
   /// Every column of every table, for the schema assertion in `dart test`.
   Map<String, List<String>> schemaColumns() {
     final out = <String, List<String>>{};
@@ -799,6 +865,7 @@ class RelayDb {
     String? userDescriptor,
     String? appVersion,
     String? locale,
+    int? tzOffsetMinutes,
   }) {
     final now = _now();
     final existing = _db.select('SELECT id, created_at FROM devices WHERE org = ? AND token = ?;', [org, token]);
@@ -806,16 +873,17 @@ class RelayDb {
     final createdAt = existing.isEmpty ? now : existing.first['created_at']! as String;
     _db.execute(
       'INSERT INTO devices (id, org, user_id, user_descriptor, platform, token, app_version, locale, '
-      '                     created_at, last_seen_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+      '                     tz_offset_minutes, created_at, last_seen_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
       'ON CONFLICT (org, token) DO UPDATE SET '
       '  user_id = excluded.user_id, '
       '  user_descriptor = excluded.user_descriptor, '
       '  platform = excluded.platform, '
       '  app_version = excluded.app_version, '
       '  locale = excluded.locale, '
+      '  tz_offset_minutes = COALESCE(excluded.tz_offset_minutes, devices.tz_offset_minutes), '
       '  last_seen_at = excluded.last_seen_at;',
-      [id, org, userId, userDescriptor, platform, token, appVersion, locale, createdAt, now],
+      [id, org, userId, userDescriptor, platform, token, appVersion, locale, tzOffsetMinutes, createdAt, now],
     );
     return deviceById(id)!;
   }
@@ -836,13 +904,13 @@ class RelayDb {
 
   /// Moves the device's `last_seen_at` and, when the platform rotated it, its
   /// token. Returns the refreshed row, or null when the device is gone.
-  DeviceRow? heartbeat(String id, {String? token, String? appVersion, String? locale}) {
+  DeviceRow? heartbeat(String id, {String? token, String? appVersion, String? locale, int? tzOffsetMinutes}) {
     final current = deviceById(id);
     if (current == null) return null;
     _db.execute(
       'UPDATE devices SET last_seen_at = ?, token = ?, app_version = COALESCE(?, app_version), '
-      'locale = COALESCE(?, locale) WHERE id = ?;',
-      [_now(), token ?? current.token, appVersion, locale, id],
+      'locale = COALESCE(?, locale), tz_offset_minutes = COALESCE(?, tz_offset_minutes) WHERE id = ?;',
+      [_now(), token ?? current.token, appVersion, locale, tzOffsetMinutes, id],
     );
     return deviceById(id);
   }

@@ -54,6 +54,8 @@ class RelayServer {
       ..delete('/v1/devices/<deviceId>', registrations.unregister)
       ..post('/v1/devices/<deviceId>/heartbeat', registrations.heartbeat)
       ..post('/v1/test-push', registrations.testPush)
+      ..get('/v1/prefs', registrations.getPrefs)
+      ..put('/v1/prefs', registrations.putPrefs)
       ..get('/v1/admin/devices', registrations.adminDevices)
       ..get('/v1/admin/fcm-check', registrations.adminFcmCheck);
 

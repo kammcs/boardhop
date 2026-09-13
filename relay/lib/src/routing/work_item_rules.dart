@@ -1,8 +1,8 @@
 import '../hooks/hook_kind.dart';
 import '../hooks/routing_view.dart';
+import '../verb.dart';
 import 'candidate.dart';
 import 'routing_state.dart';
-import 'verb.dart';
 
 /// The fields a work item update touches that are nobody's business: the
 /// comment noise set plus the bookkeeping a state change drags along. A change
@@ -74,7 +74,7 @@ void _rememberProject(RoutingView view, RoutingState state) {
 List<Candidate> _created(RoutingView view) {
   final assignee = view.assigneeId;
   if (assignee == null) return const [];
-  return [candidate(assignee, Verb.created)];
+  return [candidate(assignee, Verb.created, CandidateReason.assignee)];
 }
 
 /// The comment-shaped update. Assignee and creator hear "commented"; anyone
@@ -83,10 +83,10 @@ List<Candidate> _created(RoutingView view) {
 List<Candidate> _comment(RoutingView view) {
   final anchor = view.commentId == null ? null : Anchors.comment(view.commentId!);
   final out = <Candidate>[
-    for (final id in view.mentionIds) candidate(id, Verb.mentioned, anchor: anchor),
-    if (view.assigneeId != null) candidate(view.assigneeId!, Verb.commented, anchor: anchor),
+    for (final id in view.mentionIds) candidate(id, Verb.mentioned, CandidateReason.mention, anchor: anchor),
+    if (view.assigneeId != null) candidate(view.assigneeId!, Verb.commented, CandidateReason.assignee, anchor: anchor),
     if (view.creatorId != null && view.creatorId != view.assigneeId)
-      candidate(view.creatorId!, Verb.commented, anchor: anchor),
+      candidate(view.creatorId!, Verb.commented, CandidateReason.creator, anchor: anchor),
   ];
   return out;
 }
@@ -100,22 +100,24 @@ List<Candidate> _updated(RoutingView view) {
   if (changed.contains('System.History') && view.mentionIds.isNotEmpty) {
     final anchor = view.commentId == null ? null : Anchors.comment(view.commentId!);
     for (final id in view.mentionIds) {
-      out.add(candidate(id, Verb.mentioned, anchor: anchor));
+      out.add(candidate(id, Verb.mentioned, CandidateReason.mention, anchor: anchor));
     }
   }
 
   if (changed.contains('System.AssignedTo')) {
-    if (view.assigneeId != null) out.add(candidate(view.assigneeId!, Verb.assigned));
+    if (view.assigneeId != null) out.add(candidate(view.assigneeId!, Verb.assigned, CandidateReason.assignee));
     if (view.previousAssigneeId != null && view.previousAssigneeId != view.assigneeId) {
-      out.add(candidate(view.previousAssigneeId!, Verb.reassigned));
+      out.add(candidate(view.previousAssigneeId!, Verb.reassigned, CandidateReason.previousAssignee));
     }
   }
 
   if (changed.contains('System.State')) {
     final detail = view.newState;
-    if (view.assigneeId != null) out.add(candidate(view.assigneeId!, Verb.stateChanged, detail: detail));
+    if (view.assigneeId != null) {
+      out.add(candidate(view.assigneeId!, Verb.stateChanged, CandidateReason.assignee, detail: detail));
+    }
     if (view.creatorId != null && view.creatorId != view.assigneeId) {
-      out.add(candidate(view.creatorId!, Verb.stateChanged, detail: detail));
+      out.add(candidate(view.creatorId!, Verb.stateChanged, CandidateReason.creator, detail: detail));
     }
   }
 
@@ -126,7 +128,7 @@ List<Candidate> _updated(RoutingView view) {
     (field) => !workItemHousekeepingFields.contains(field) && field != 'System.AssignedTo' && field != 'System.State',
   );
   if (meaningful.isNotEmpty && view.assigneeId != null) {
-    out.add(candidate(view.assigneeId!, Verb.edited));
+    out.add(candidate(view.assigneeId!, Verb.edited, CandidateReason.assignee));
   }
   return out;
 }

@@ -56,7 +56,7 @@ Conventions used in the tables:
 
 - **Audience** lists who is notified; **minus actor** is implied everywhere (§5.2).
 - **Verb** is what the app renders after the actor: "Javier Perez *replied on* !8261".
-- **Collapse key** is what repeated notifications share so they replace each other in the shade (APNs `apns-collapse-id` and thread id, FCM `tag`, Android `notificationId`). Today `PushPointer.collapseId` is `org.type.id`; R2 keeps that per artifact and adds the thread suffix in the comment cases so a comment thread and a state change on the same PR do not eat each other.
+- **Collapse key** is what repeated notifications share so they replace each other in the shade (APNs `apns-collapse-id` and thread id, FCM `tag`, Android `notificationId`). The tables write it without the org for brevity; the relay emits `{org}.{key}` (R2.3), e.g. `contoso.pr.8348.t4821`, so a phone registered for two orgs never collapses two artifacts together, and adds the thread suffix in the comment cases so a comment thread and a state change on the same PR do not eat each other. Android's FCM `collapse_key` is the artifact family only (four per device), the exact key is the notification tag.
 - **Route** is the app's account-scoped path; `{acct}` is filled in by `PushPointer.route(accountId)`. "+query" marks a query parameter the router does not read yet (§4).
 - **Title** in the pointer is the artifact's title (work item title, PR title, `definition.name · buildNumber`). Nothing else.
 
@@ -231,7 +231,7 @@ Where: **on the relay, per `(org, userId)`**, not per device, so two phones agre
 | `pullRequests.comments` | on | on / mentions only / my threads only / off |
 | `pullRequests.completedAbandoned` | on | |
 | `pullRequests.pushes` | **off** | |
-| `builds` | failures | failures / failures and fixed / all / off |
+| `builds` | failuresAndFixed (D3) | failures / failuresAndFixed / all / off |
 | `approvals` | on | |
 | `quietHours` | off | `{start: "22:00", end: "07:00"}` in the device's local time; **approvals are exempt** by default (`quietHours.exceptApprovals` on). A notification suppressed by quiet hours is dropped, not delayed (dropped ones still appear in the Activity feed when the app is opened). |
 | `notActor` | on, **not editable** | the rule in §5.2; shown in the UI as a fixed line so people know why they do not hear about their own edits |
@@ -274,6 +274,7 @@ None of these change relay or app code; they feed §2 and §8 and are the first 
 - **`edited`** is computed from the changed fields minus a housekeeping set (comment noise plus `System.Reason`, board-column fields and the StateChange/Activated/Resolved/Closed dates), so a state change never also reads as an edit.
 - Deep link for `approval-completed` is the project-scoped run route (`/projects/{p}/pipelines/runs/{runId}`), matching `Routes.pipelineRun`.
 - The one relay-side text column is `projects.project_name`; a schema test pins every other routing table to id-only columns.
+- **R2.3 choices (2026-09-13):** `UserPrefs.allows` takes verb, reason and detail (`votes: rejectionsAndWaitsOnly` needs the vote label) and quiet hours take the verb, so `quietHours.exceptApprovals: false` can silence approvals; `myThreadsOnly` keeps thread participants and mentions only, not the PR author; `mergeFailed`/`prCompleted`/`prAbandoned` fall under `pullRequests.completedAbandoned` and `prPublished` under `reviewRequested`; the build fallback body is "Build failed" (one pointer serves many recipients, so it cannot say "requested by you"); `POST /v1/test-push` sends the data-only Android shape, so the R1 app shows nothing for it until R2.4 posts the notification itself; `Verb` lives in `lib/src/verb.dart` above both `gateway/` and `routing/`, and `routing/` imports `gateway/`, never the reverse.
 - Known test flake, untouched: `capture_test.dart` "caps the directory at maxFilesPerName" fails about one run in five under a full-suite load (timestamped filenames collide); it is the spike-3 recorder, not relay storage.
 
 ## 9. Build plan (R2, dispatcher and Opus subagents)

@@ -1,6 +1,6 @@
 import '../gateway/pointer.dart';
 import '../hooks/hook_kind.dart';
-import 'verb.dart';
+import '../verb.dart';
 
 /// One notification, addressed to everybody who should get exactly this line.
 ///

@@ -57,6 +57,10 @@ class ApnsSender implements PushSender {
 
   final Duration timeout;
 
+  /// The `UNNotificationCategory` the Notification Service Extension is
+  /// registered for; without it the extension is never invoked.
+  static const category = 'boardhop.pointer';
+
   static const _jwtLifetime = Duration(minutes: 50);
 
   String? _jwt;
@@ -80,7 +84,7 @@ class ApnsSender implements PushSender {
   Future<PushResult> send(String deviceToken, PushPointer pointer) async {
     if (!ready) return PushResult(PushOutcome.skipped, error: status);
     try {
-      final body = utf8.encode(jsonEncode(_payload(pointer)));
+      final body = utf8.encode(jsonEncode(payload(pointer)));
       final connection = await _connect();
       final stream = connection.makeRequest([
         Header.ascii(':method', 'POST'),
@@ -128,14 +132,39 @@ class ApnsSender implements PushSender {
     }
   }
 
-  Map<String, Object?> _payload(PushPointer pointer) => {
-    'aps': {
-      'alert': {'title': pointer.notificationTitle, 'body': pointer.notificationBody},
-      'sound': 'default',
-      'thread-id': pointer.collapseId,
-    },
-    ...pointer.toData(),
-  };
+  /// The APNs payload (research/14 §3.3). Pure function, so the shape is
+  /// testable without a key.
+  ///
+  /// - `mutable-content: 1` wakes the Notification Service Extension, which is
+  ///   what enriches the line with the user's own token (R2.7);
+  /// - `thread-id` and the `apns-collapse-id` header are both the collapse key,
+  ///   so replies stack under one header and a repeat replaces its predecessor;
+  /// - `interruption-level: active` for **everything**, approvals included
+  ///   (decision D6: no time-sensitive entitlement in the beta);
+  /// - the `category` is what makes the extension run for every pointer;
+  /// - the pointer's `data` map sits at the **top level**, beside `aps`, which
+  ///   is where both the extension and `didReceiveRemoteNotification` read it.
+  ///
+  /// The alert carries the fallback lines and nothing else: no comment
+  /// preview, no build log, no approval instructions.
+  Map<String, Object?> payload(PushPointer pointer) {
+    final subtitle = pointer.notificationSubtitle;
+    return {
+      'aps': {
+        'alert': {
+          'title': pointer.notificationTitle,
+          if (subtitle != null) 'subtitle': subtitle,
+          'body': pointer.notificationBody,
+        },
+        'sound': 'default',
+        'thread-id': pointer.collapseId,
+        'mutable-content': 1,
+        'interruption-level': 'active',
+        'category': category,
+      },
+      ...pointer.toData(),
+    };
+  }
 
   /// The ES256 JWT Apple wants, re-minted every 50 minutes.
   String _authToken() {

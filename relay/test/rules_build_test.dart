@@ -2,7 +2,7 @@ import 'package:boardhop_relay/src/hooks/hook_kind.dart';
 import 'package:boardhop_relay/src/routing/build_rules.dart';
 import 'package:boardhop_relay/src/routing/candidate.dart';
 import 'package:boardhop_relay/src/routing/routing_state.dart';
-import 'package:boardhop_relay/src/routing/verb.dart';
+import 'package:boardhop_relay/src/verb.dart';
 import 'package:test/test.dart';
 
 import 'hook_fixtures.dart';

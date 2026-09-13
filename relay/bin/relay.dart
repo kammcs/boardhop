@@ -11,11 +11,11 @@ import 'package:boardhop_relay/src/hooks/ingest.dart';
 import 'package:boardhop_relay/src/identity.dart';
 import 'package:boardhop_relay/src/log.dart';
 import 'package:boardhop_relay/src/registration.dart';
+import 'package:boardhop_relay/src/routing/gateway_sink.dart';
 import 'package:boardhop_relay/src/routing/prefs.dart';
 import 'package:boardhop_relay/src/routing/routing_state.dart';
 import 'package:boardhop_relay/src/routing/rule_engine.dart';
 import 'package:boardhop_relay/src/routing/send_ledger.dart';
-import 'package:boardhop_relay/src/routing/sink.dart';
 import 'package:boardhop_relay/src/server.dart';
 
 Future<void> main(List<String> args) async {
@@ -49,9 +49,13 @@ Future<void> main(List<String> args) async {
       ? const LoggingHookProcessor()
       : RuleEngine(
           state: DbRoutingState(db),
-          prefs: const DefaultPrefsSource(),
-          // R2.3 puts the push gateway behind this interface.
-          sink: const LoggingNotificationSink(),
+          // Per-user preferences from `user_prefs`, with the §6 defaults for
+          // anybody who has never saved one.
+          prefs: DbPrefsSource(db),
+          // R2.3: the notifications go out through the push gateway. A relay
+          // with both transports disabled still routes and still logs; every
+          // send comes back `skipped`.
+          sink: GatewayNotificationSink(db: db, gateway: gateway),
           sends: DbSendLedger(db),
         );
   if (db == null) logEvent('routing disabled: no database', level: 'warn');

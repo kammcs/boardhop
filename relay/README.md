@@ -6,7 +6,7 @@ push gateway forwards an opaque pointer to the phone. This directory is the
 relay's home in the monorepo — a plain Dart package (no Flutter) that ships as a
 container.
 
-What it does today (phases R1, R2.1 and R2.2):
+What it does today (phases R1, R2.1, R2.2 and R2.3):
 
 - `GET /healthz` — `{"ok":true,"version":"<git sha>","uptime":<seconds>,"db":"ok",
   "apns":"disabled (no key id)","fcm":"ready"}`.
@@ -20,19 +20,23 @@ What it does today (phases R1, R2.1 and R2.2):
 - **Device registration** — `POST /v1/devices`, `DELETE /v1/devices/{id}`,
   `POST /v1/devices/{id}/heartbeat`, each authenticated with the user's own
   Azure DevOps access token.
-- **Push gateway** — APNs (HTTP/2, ES256 JWT from the `.p8`) and FCM HTTP v1,
-  behind a pointer-only contract, plus `POST /v1/test-push`.
+- **Push gateway** — APNs (HTTP/2, ES256 JWT from the `.p8`, `mutable-content`
+  for the enrichment extension) and FCM HTTP v1 (**data-only**, HIGH), behind a
+  pointer-only contract, plus `POST /v1/test-push`. A routed notification now
+  goes out through it: `GatewayNotificationSink` looks the recipients' devices
+  up and sends one pointer to each.
+- **Preferences** — `GET/PUT /v1/prefs?org=`, per `(org, userId)`, with quiet
+  hours, muted artifacts and the §6 defaults. See "Preferences" below.
 - `GET /v1/admin/devices?org=` — counts and platforms, never a token.
 - `POST /capture/{name}` and `GET /capture/{name}` — the recorder for
   **research/06 spike 3** (what a "Minimal" hook payload actually contains).
   HTTP basic auth, user `hook`; every post is written as one JSON file under
   `/data/capture/{name}/`.
 
-Turning a notification into a push is the next phase (R2.3): the pointer gains
-`actor`, `verb`, `detail`, `anchor`, `runId`, `subId` and `sentAt`, the prefs
-table and `GET/PUT /v1/prefs` arrive, and the gateway replaces the logging sink.
-Until then the engine writes one `notification` line per notification and sends
-nothing.
+Next is the app's half (R2.4-R2.7): the pointer's new fields in
+`lib/features/notifications/`, the preferences screen, the deep-link anchors and
+the two enrichment services (Android `onMessageReceived`, the iOS Notification
+Service Extension) that turn the fallback line into the real one.
 
 ## What runs on the box
 
@@ -271,19 +275,25 @@ receive → auth → dedup → RoutingView → rules → actor → collapse → 
    `Verb.priority` wins and that person gets exactly one notification (rule 2):
    `mentioned` > `assigned`/`reviewRequested` > `voted`/`stateChanged`/approvals
    > `commented`/`replied` > `edited`/`pushed`.
-4. **Preferences.** `UserPrefs.allows(verb, isMention:, artifactKey:)` and
-   `quietHoursSuppress(now, tzOffset)`. R2.2 ships `DefaultPrefs`, the §6
-   defaults: everything on except `workItems.anyChangeOnMine` (`edited`),
-   `pullRequests.pushes` (`pushed`) and plain build successes
-   (`buildSucceeded`; failures and "fixed" are on, D3). Approvals are exempt
-   from quiet hours (D5). `PrefsSource` is the seam R2.3 backs with a table.
+4. **Preferences.** `UserPrefs.allows(verb, reason:, detail:, artifactKey:)`
+   and `quietHoursSuppress(verb, now, tzOffset)`. The **reason** a rule picked
+   somebody — `author`, `assignee`, `creator`, `reviewer`, `votedReviewer`,
+   `threadParticipant`, `mention`, `approver`, `requester`, `previousAssignee` —
+   travels on the `Candidate`, because "mentions only" and "my threads only" are
+   the same verb with a different reason. R2.3 backs the interface with
+   `user_prefs` through `DbPrefsSource`; a person with no row is on the §6
+   defaults ("Preferences" below).
 5. **Caps.** At most 50 recipients per event and 60 per person per hour per
    org (rule 6), counted in `notification_sends`, which is also what makes
    "one notification per person per event" survive a replay.
-6. **Sink.** `NotificationSink.deliver(Notification)`. R2.2's only
-   implementation logs `{"msg":"notification", …}` with ids, the kind, the verb,
-   the anchor, the collapse key and a recipient **count**. R2.3 puts the push
-   gateway behind the same interface.
+6. **Sink.** `NotificationSink.deliver(Notification)`.
+   `GatewayNotificationSink` (R2.3) looks each recipient's devices up
+   (`devicesFor(org, userId)`), builds one `PushPointer` with `sentAt = now` and
+   sends it to every device; somebody with no registered device is simply not
+   reached, because the relay keeps no inbox (§5.2 rule 7). It logs the same
+   `{"msg":"notification", …}` line as before plus device and outcome counts.
+   `LoggingNotificationSink` stays for the tests and for a relay with no
+   gateway.
 
 **The verbs** (`lib/src/routing/verb.dart`, research/14 §3.2): `assigned`,
 `reassigned`, `stateChanged`, `edited`, `created`, `commented`, `replied`,
@@ -296,14 +306,18 @@ labels, build results, approval and merge statuses — and anything free-form (a
 state name, a stage name) is capped at 40 characters.
 
 **Deep links and collapse keys** are org-relative and exactly research/14 §2:
-`/projects/{project}/work-items/{id}[?comment={id}]` (`wi.{id}`,
-`wi.{id}.comments`), `/pull-requests/{id}[?thread={id}|?tab=files]` (`pr.{id}`,
-`pr.{id}.t{threadId}`), `/projects/{p}/pipelines/runs/{id}` (`build.{id}`),
-`/projects/{p}/pipelines?tab=approvals&approval={id}` (`approval.{id}`, and a
-completed approval keeps that collapse key but opens the run). The relay never
+`/projects/{project}/work-items/{id}[?comment={id}]`
+(`{org}.wi.{id}`, `{org}.wi.{id}.comments`),
+`/pull-requests/{id}[?thread={id}|?tab=files]` (`{org}.pr.{id}`,
+`{org}.pr.{id}.t{threadId}`), `/projects/{p}/pipelines/runs/{id}`
+(`{org}.build.{id}`), `/projects/{p}/pipelines?tab=approvals&approval={id}`
+(`{org}.approval.{id}`, and a completed approval keeps that collapse key but
+opens the run). Collapse keys are **org-scoped**, so a phone registered for two
+organizations never collapses two different artifacts together, and capped at
+APNs' 64 bytes from the left, where the org prefix is the expendable part. The relay never
 names an account; the app prefixes `/a/{accountId}/orgs/{org}`.
 
-**The state tables** (schema 4, research/14 §5.1, pruned after 90 days):
+**The state tables** (schema 5, research/14 §5.1, pruned after 90 days):
 
 | table | what it holds | why |
 |---|---|---|
@@ -313,6 +327,7 @@ names an account; the app prefixes `/a/{accountId}/orgs/{org}`.
 | `build_state` | `last_result, build_id` per `(project, definition, branch)` | "fixed" detection |
 | `projects` | `project_id → project_name` | the app's routes take a name; the pipelines publisher sends only an id |
 | `notification_sends` | `(org, event_key, user_id, sent_at)` | one per person per event, and the hourly cap |
+| `user_prefs` | `prefs_json` per `(org, user_id)` | research/14 §6; switches and closed vocabularies, no free text |
 
 **What is never stored.** No title, no display name, no comment, no description,
 no field value, no branch — every column above is an id, a status word, a commit
@@ -356,33 +371,104 @@ POST   /v1/devices/{deviceId}/heartbeat → 200  (moves lastSeenAt, takes a rota
   WHERE org='x'"` stops that org, and only that org, with a 403.
 
 Stored per device: `(id, org, user_id, user_descriptor, platform, token,
-app_version, locale, created_at, last_seen_at)`. No name, no mail, no token of
-the user's.
+app_version, locale, tz_offset_minutes, created_at, last_seen_at)`. No name, no
+mail, no token of the user's. `tzOffsetMinutes` (minutes east of UTC, −840..840)
+is accepted on registration and on every heartbeat, and is the only thing that
+makes quiet hours the device's local time rather than UTC.
 
 ## Push gateway (`lib/src/gateway/`)
 
-Everything that leaves for Apple or Google goes through `PushPointer`, which
-holds exactly `org`, `eventType`, `artifactType` (workItem | pullRequest |
-build | approval), `artifactId`, `project`, an optional `title` truncated to 80
-characters, and an optional `deepLink`. `PushSender.send` takes that type and
-nothing else, so there is no way to smuggle a comment body or a diff past the
-boundary — the promise in research/06 is a compile-time one.
+Everything that leaves for Apple or Google goes through `PushPointer`.
+`PushSender.send` takes that type and nothing else, so there is no way to
+smuggle a comment body or a diff past the boundary — the promise in research/06
+is a compile-time one. **v2** (R2.3, research/14 §3.2) is:
+
+| field | what it holds |
+|---|---|
+| `org`, `eventType`, `artifactType` (workItem \| pullRequest \| build \| approval), `artifactId`, `project` | ids |
+| `title` | the artifact line the relay built, `#15545 · …` / `!8348 · …`, truncated to 80 |
+| `deepLink` | org-relative route, anchors included; the app prefixes `/a/{accountId}/orgs/{org}` |
+| `actor`, `actorId` | display name capped at 60, and the identity GUID; both absent for a service identity |
+| `verb` | one of the closed `Verb` names, validated on construction; the app turns it into words |
+| `detail` | the verb's own metadata — a vote label, a build result, a state or stage name — from a closed list per verb, else capped at 40 |
+| `anchor` | `comment:{id}`, `thread:{id}`, `approval:{id}` or `tab:files`, by regex |
+| `runId`, `subId` | the approval's run, and the subscription that produced it (support only, never shown) |
+| `sentAt` | ISO-8601 UTC, so enrichment can skip a pointer older than 10 minutes |
+| `collapseKey` | the routed key (`contoso.pr.8348.t4821`); `collapseId` falls back to `{org}.{type}.{id}` |
+
+`Verb` lives in `lib/src/verb.dart` — above both directories, because
+`routing/` produces verbs and `gateway/` validates and renders them. The
+dependency between the two runs in exactly **one** direction: `routing/` imports
+`gateway/`, never the other way, which is why the `Notification` → `PushPointer`
+adapter (`routing/push_pointer_adapter.dart`) sits on the routing side. A test
+pins the longest legal pointer under 1 KB.
+
+**The fallback line** (research/14 §3.1) is what the OS shows before enrichment
+runs, or when it fails: the **title** is the artifact line, the **subtitle** is
+the project (the pointer carries no repository name), and the **body** is
+`{actor} {verb phrase}` — "Ada Example assigned you", "Ada Example replied on
+!8348", "Build failed", "Needs your approval" — or the phrase alone when the
+event named no actor. The English phrase table is one function in
+`lib/src/verb.dart`; the app localises the verb itself.
 
 - **APNs** (`apns.dart`): `api.sandbox.push.apple.com` or `api.push.apple.com`
   by `APNS_ENV`, HTTP/2 through the `http2` package (Dart's `HttpClient` speaks
   1.1 only), ES256 JWT from the `.p8` re-minted every 50 minutes,
   `apns-topic: com.kammcs.boardhop`, `apns-push-type: alert`,
-  `apns-collapse-id` per artifact. A `410`, `BadDeviceToken` or `Unregistered`
+  `apns-collapse-id` = the collapse key. The payload is an alert with
+  `mutable-content: 1` (which wakes the Notification Service Extension),
+  `thread-id` = the collapse key, `category: boardhop.pointer` and
+  `interruption-level: active` for **everything**, approvals included (D6: no
+  time-sensitive entitlement in the beta). The pointer's `data` map sits at the
+  **top level**, beside `aps`. A `410`, `BadDeviceToken` or `Unregistered`
   deletes the device row.
+
+  ```json
+  {"aps":{"alert":{"title":"!8348 · Tidy the thing","subtitle":"Contoso Demo",
+                   "body":"Ada Example replied on !8348"},
+          "sound":"default","thread-id":"contoso.pr.8348.t4821","mutable-content":1,
+          "interruption-level":"active","category":"boardhop.pointer"},
+   "org":"contoso","eventType":"ms.vss-code.git-pullrequest-comment-event",
+   "artifactType":"pullRequest","artifactId":"8348","project":"Contoso Demo",
+   "title":"!8348 · Tidy the thing","deepLink":"/pull-requests/8348?thread=4821",
+   "actor":"Ada Example","actorId":"aaaaaaaa-…","verb":"replied",
+   "anchor":"thread:4821","subId":"…","sentAt":"2026-09-13T16:00:00.000Z"}
+  ```
+
 - **FCM** (`fcm.dart`): HTTP v1 against
   `https://fcm.googleapis.com/v1/projects/$FCM_PROJECT_ID/messages:send` with a
-  service-account OAuth2 token from `googleapis_auth` (refreshed before
-  expiry). The message carries `notification` (so the OS shows it when the app
-  is closed), `data` (the pointer, which the app routes on) and
-  `android.notification.channel_id = "activity"`, the app's own channel.
-  `UNREGISTERED` / `NOT_FOUND` deletes the device row.
+  service-account OAuth2 token from `googleapis_auth` (refreshed before expiry).
+  The message is **data-only**: there is no `notification` block any more,
+  because the app posts the notification itself after enrichment (research/06
+  decision point 4) and needs to control the lock-screen version (D7). `data` is
+  the pointer plus `fallbackTitle`, `fallbackBody`, `fallbackSubtitle` and
+  `collapseKey`; `android.collapse_key` is the artifact **family** (`wi`, `pr`,
+  `build`, `approval`), because FCM allows four collapse keys per device and the
+  exact key is the app's notification tag. `UNREGISTERED` / `NOT_FOUND` deletes
+  the device row.
+
+  ```json
+  {"message":{"token":"<device token>",
+    "data":{"org":"contoso","eventType":"ms.vss-code.git-pullrequest-comment-event",
+            "artifactType":"pullRequest","artifactId":"8348","project":"Contoso Demo",
+            "title":"!8348 · Tidy the thing","deepLink":"/pull-requests/8348?thread=4821",
+            "actor":"Ada Example","actorId":"aaaaaaaa-…","verb":"replied",
+            "anchor":"thread:4821","subId":"…","sentAt":"2026-09-13T16:00:00.000Z",
+            "fallbackTitle":"!8348 · Tidy the thing",
+            "fallbackBody":"Ada Example replied on !8348",
+            "fallbackSubtitle":"Contoso Demo","collapseKey":"contoso.pr.8348.t4821"},
+    "android":{"priority":"HIGH","ttl":"3600s","collapse_key":"pr"}}}
+  ```
+
+  `POST /v1/test-push` sends the same data-only shape (verb `test`,
+  `fallbackTitle` "Boardhop", `fallbackBody` "Push is working"), so until R2.4
+  teaches the app to post a data-only message itself, a test push arrives as
+  data the app handles rather than as an OS notification.
+
 - One JSON log line per send: platform, org, device id, **the last six
   characters of the token only**, artifact, outcome, status and the APNs/FCM id.
+  One `notification` line per fan-out on top of that, with recipient, device and
+  outcome **counts** and no title, name or detail.
 
 ```
 POST /v1/test-push
@@ -393,6 +479,68 @@ Authorization: Bearer <the user's Azure DevOps access token>
 
 It can only ever reach the caller's own devices in that org, which is what
 makes it safe to keep as the support route.
+
+## Preferences (`/v1/prefs`)
+
+Per `(org, userId)` on the relay, not per device, so two phones agree and a
+reinstall keeps them (research/14 §6, decision D5). Same auth as `/v1/devices`:
+the user's own Azure DevOps token, validated once against the org through
+`connectionData` and then dropped, the same per-org rate bucket and the same
+kill switch.
+
+```
+GET /v1/prefs?org=puremedia
+Authorization: Bearer <the user's Azure DevOps access token>
+→ 200 (the document below; the defaults when nothing is stored)
+
+PUT /v1/prefs?org=puremedia
+{"builds":"all","quietHours":{"enabled":true,"start":"23:00","end":"06:30"}}
+→ 200 (the stored document)
+→ 400 {"error":"unknown preference \"buidls\" in body"}
+```
+
+The document, with its defaults:
+
+```json
+{"enabled": true,
+ "workItems": {"assigned": true, "stateChanged": true, "comments": "on",
+               "anyChangeOnMine": false},
+ "pullRequests": {"reviewRequested": true, "votes": "on", "comments": "on",
+                  "completedAbandoned": true, "pushes": false},
+ "builds": "failuresAndFixed",
+ "approvals": true,
+ "quietHours": {"enabled": false, "start": "22:00", "end": "07:00",
+                "exceptApprovals": true},
+ "mutedArtifacts": [],
+ "notActor": true}
+```
+
+- **Closed vocabularies.** `workItems.comments` is `on | mentionsOnly | off`;
+  `pullRequests.votes` is `on | rejectionsAndWaitsOnly | off`;
+  `pullRequests.comments` is `on | mentionsOnly | myThreadsOnly | off`;
+  `builds` is `failures | failuresAndFixed | all | off` (the default is D3's
+  "failures plus fixed"). Everything else is a switch.
+- **A typo is a 400.** An unknown key at any level, a value outside its list, a
+  `start` that is not `HH:mm`: the PUT is refused and nothing changes, because a
+  silently ignored key would silently switch a notification off. A key left out
+  keeps its default.
+- **`notActor` is reported, not editable** — it is §5.2 rule 1, shown in the app
+  as a fixed line. A client that tries to set it gets
+  `{"error":"notActor is not editable"}`.
+- **`mutedArtifacts`** is `[{type, id, until}]`: "mute this PR for a day". `type`
+  is the family (`wi`, `pr`, `build`, `approval`; the `PushArtifactType` names
+  are accepted and normalised), `until` is ISO-8601 or absent for "until it is
+  removed". A mute drops **everything** about that artifact, mentions included.
+- **Quiet hours** are evaluated on the relay in the **device's** local time,
+  from the `tzOffsetMinutes` the app sends with `POST /v1/devices` and each
+  heartbeat (−840..840; anything else is a 400, and the window falls back to UTC
+  when no device has reported one). A window that ends before it starts crosses
+  midnight; `start == end` is all day. Approvals are exempt unless
+  `exceptApprovals` is turned off. A suppressed notification is **dropped, not
+  delayed** — it still appears in the Activity feed when the app is next opened.
+- Stored in `user_prefs (org, user_id, prefs_json, updated_at)`, schema 5. The
+  document holds switches and closed vocabularies only, so this table has no
+  more content in it than the others.
 
 ### Sending a test push with curl
 

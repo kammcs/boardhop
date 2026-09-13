@@ -1,9 +1,9 @@
 import '../db.dart';
 import '../hooks/hook_kind.dart';
 import '../hooks/routing_view.dart';
+import '../verb.dart';
 import 'candidate.dart';
 import 'routing_state.dart';
-import 'verb.dart';
 
 /// `approval-pending` has no actor: the pipeline reached a checkpoint, nobody
 /// did anything. `approval-completed` names the person who decided in
@@ -31,7 +31,7 @@ List<Candidate> evaluateApproval(RoutingView view, RoutingState state) {
         // Approving your own run is common on a small team, so the requester is
         // skipped only when somebody else can approve instead.
         if (id != requester || approvers.length == 1)
-          candidate(id, Verb.approvalPending, detail: detail, anchor: anchor),
+          candidate(id, Verb.approvalPending, CandidateReason.approver, detail: detail, anchor: anchor),
     ];
   }
 
@@ -39,9 +39,9 @@ List<Candidate> evaluateApproval(RoutingView view, RoutingState state) {
   // dropped by the engine, as everywhere outside builds.
   final detail = _status(view.approvalStatus);
   return [
-    for (final id in approvers) candidate(id, Verb.approvalCompleted, detail: detail),
+    for (final id in approvers) candidate(id, Verb.approvalCompleted, CandidateReason.approver, detail: detail),
     if (requester != null && !approvers.contains(requester))
-      candidate(requester, Verb.approvalCompleted, detail: detail),
+      candidate(requester, Verb.approvalCompleted, CandidateReason.requester, detail: detail),
   ];
 }
 

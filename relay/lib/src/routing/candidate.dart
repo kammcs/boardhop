@@ -1,14 +1,50 @@
-import 'verb.dart';
+import '../verb.dart';
+
+/// **Why** a rule selected somebody (research/14 §6): the preferences need it,
+/// because "mentions only" and "my threads only" are narrowings of the same
+/// verb. The verb says what happened; the reason says what this person is to
+/// the artifact.
+enum CandidateReason {
+  /// The pull request's author.
+  author,
+
+  /// The work item's current assignee.
+  assignee,
+
+  /// The work item's creator.
+  creator,
+
+  /// A reviewer of the pull request, voted or not.
+  reviewer,
+
+  /// A reviewer whose vote is already cast, so a push or a comment matters.
+  votedReviewer,
+
+  /// Already in the comment thread (`pr_thread_state`).
+  threadParticipant,
+
+  /// Named in the text — the one reason every "… only" setting keeps.
+  mention,
+
+  /// An approver of a pipeline checkpoint.
+  approver,
+
+  /// Who queued the run or the build.
+  requester,
+
+  /// Who the work item was assigned to until this change.
+  previousAssignee,
+}
 
 /// One person a rule selected, with what to tell them.
 ///
 /// Rules produce candidates; the engine drops the actor, collapses several
 /// candidates for one person down to the highest-priority verb, applies
 /// preferences and the caps, and only then builds notifications.
-typedef Candidate = ({String userId, Verb verb, String? detail, String? anchor});
+typedef Candidate = ({String userId, Verb verb, CandidateReason reason, String? detail, String? anchor});
 
-Candidate candidate(String userId, Verb verb, {String? detail, String? anchor}) =>
-    (userId: userId, verb: verb, detail: detail, anchor: anchor);
+Candidate candidate(String userId, Verb verb, CandidateReason reason, {String? detail, String? anchor}) =>
+    (userId: userId, verb: verb, reason: reason, detail: detail, anchor: anchor);
 
 /// Who caused the event, when the payload says. `null` for the events whose
 /// body names nobody: a PR vote (no `votedBy`), a reviewer list change and a
