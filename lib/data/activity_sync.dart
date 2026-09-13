@@ -39,8 +39,12 @@ class ActivitySync with WidgetsBindingObserver {
   final JsonCache _cache;
   final Duration interval;
 
-  static const maxRemembered = 500;
-  static String notifiedKey(String org) => 'activity:notified:$org';
+  static const maxRemembered = ActivityRepository.maxNotified;
+
+  /// The same key `ActivityRepository.insertPushed` writes, so a pushed
+  /// notification and the poll's notification never both go out for one
+  /// artifact (research/14 §4.2).
+  static String notifiedKey(String org) => ActivityRepository.notifiedKey(org);
 
   Timer? _timer;
   bool _running = false;

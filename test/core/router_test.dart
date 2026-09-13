@@ -38,4 +38,41 @@ void main() {
     );
     expect(item.pathParameters['id'], '15503');
   });
+
+  // research/14 §4.2: a pushed pointer's anchor rides along as a query
+  // string. The pages read it from R2.5 on; until then the router has to
+  // tolerate a parameter no page asks for, or every anchored tap is an error
+  // page.
+  test('the pushed anchors resolve to the same pages', () {
+    final auth = AuthBloc(_AuthService());
+    addTearDown(auth.close);
+    final router = buildRouter(auth, _Deps());
+    addTearDown(router.dispose);
+
+    final org = Routes.org('u1', 'contoso');
+    final project = Routes.project('u1', 'contoso', 'DevOps Mobile App');
+    final anchored = {
+      '$project/work-items/15545?comment=1998234':
+          '$project/work-items/15545',
+      '$org/pull-requests/8336?thread=4821': '$org/pull-requests/8336',
+      '$org/pull-requests/8336?tab=files': '$org/pull-requests/8336',
+      '$project/pipelines?tab=approvals&approval=18': '$project/pipelines',
+    };
+    anchored.forEach((withAnchor, plain) {
+      final match = router.configuration.findMatch(Uri.parse(withAnchor));
+      expect(match.isError, isFalse, reason: withAnchor);
+      final bare = router.configuration.findMatch(Uri.parse(plain));
+      expect(
+        match.matches.last.route,
+        same(bare.matches.last.route),
+        reason: withAnchor,
+      );
+    });
+
+    final approval = router.configuration.findMatch(
+      Uri.parse('$project/pipelines?tab=approvals&approval=18'),
+    );
+    expect(approval.uri.queryParameters['tab'], 'approvals');
+    expect(approval.uri.queryParameters['approval'], '18');
+  });
 }

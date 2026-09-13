@@ -12,7 +12,10 @@ class NotificationService {
   NotificationService._(this._plugin, this._prefs, bool enabled)
     : enabledNotifier = ValueNotifier(enabled);
 
-  static const _prefKey = 'notifications.activity';
+  /// The shared-preferences key behind [enabled]. Public because the push
+  /// background isolate (`push_background.dart`) has no service instance and
+  /// reads the same opt-in straight out of shared preferences.
+  static const enabledPrefKey = 'notifications.activity';
   static const channelId = 'activity';
 
   static Future<NotificationService> create() async {
@@ -26,7 +29,7 @@ class NotificationService {
     final service = NotificationService._(
       plugin,
       prefs,
-      prefs?.getBool(_prefKey) ?? false,
+      prefs?.getBool(enabledPrefKey) ?? false,
     );
     await service._init();
     return service;
@@ -117,7 +120,7 @@ class NotificationService {
     } else {
       enabledNotifier.value = false;
     }
-    await _prefs?.setBool(_prefKey, enabled);
+    await _prefs?.setBool(enabledPrefKey, enabled);
     return enabled;
   }
 
@@ -150,11 +153,21 @@ class NotificationService {
     return true;
   }
 
+  /// Posts one notification. [route] is what a tap carries back on [taps]:
+  /// an in-app route for the polled ones, and a `push:{json}` pointer payload
+  /// for the pushed ones (see `push_background.dart`).
+  ///
+  /// [tag], [groupKey] and [subtitle] are the pushed notifications' shape
+  /// (research/14 §4.1): the relay's collapse key replaces one notification
+  /// with the next on the same artifact, and the family groups them.
   Future<void> show({
     required int id,
     required String title,
     required String body,
     required String route,
+    String? tag,
+    String? groupKey,
+    String? subtitle,
   }) async {
     final plugin = _plugin;
     if (plugin == null || !enabled) return;
@@ -163,7 +176,7 @@ class NotificationService {
         id: id,
         title: title,
         body: body,
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             channelId,
             'Activity',
@@ -171,8 +184,11 @@ class NotificationService {
                 'Pull requests waiting for you, work item changes and builds',
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
+            tag: tag,
+            groupKey: groupKey,
+            subText: subtitle,
           ),
-          iOS: DarwinNotificationDetails(),
+          iOS: const DarwinNotificationDetails(),
         ),
         payload: route,
       );

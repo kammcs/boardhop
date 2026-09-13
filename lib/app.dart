@@ -19,6 +19,7 @@ import 'data/repositories/board_repository.dart';
 import 'data/repositories/pipeline_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/pull_request_repository.dart';
+import 'data/repositories/push_prefs_repository.dart';
 import 'data/repositories/repo_repository.dart';
 import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/work_item_repository.dart';
@@ -65,6 +66,11 @@ class AccountDeps {
       accountId: accountId,
       accessToken: () => root.auth.accessToken(accountId: accountId),
     );
+    pushPrefs = PushPrefsRepository(
+      accountId: accountId,
+      accessToken: () => root.auth.accessToken(accountId: accountId),
+      db: db,
+    );
     activitySync = ActivitySync(
       activity: activity,
       orgs: orgs,
@@ -92,6 +98,7 @@ class AccountDeps {
   late final AccountRepository account;
   late final ActivitySync activitySync;
   late final PushRegistrar pushRegistrar;
+  late final PushPrefsRepository pushPrefs;
 
   /// What the pages under `/a/{account}` read from the context.
   List<RepositoryProvider<Object>> get providers => [
@@ -108,6 +115,7 @@ class AccountDeps {
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
     RepositoryProvider<PushRegistrar>.value(value: pushRegistrar),
+    RepositoryProvider<PushPrefsRepository>.value(value: pushPrefs),
     RepositoryProvider<AvatarStore>.value(value: avatars),
     RepositoryProvider<AccountRepository>.value(value: account),
   ];
@@ -211,6 +219,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
     registrarFor: (id) => widget.deps.forAccount(id).pushRegistrar,
     orgFor: (id) => widget.deps.forAccount(id).orgs.lastOpened(),
     openRoute: _openRoute,
+    activityFor: (id) => widget.deps.forAccount(id).activity,
   );
   StreamSubscription<String>? _taps;
   StreamSubscription<AuthState>? _auth;
@@ -226,11 +235,14 @@ class _BoardhopAppState extends State<BoardhopApp> {
     final deps = widget.deps;
     // Notification taps open their item; a cold-start tap waits for the
     // first frame so the router exists.
-    _taps = deps.notifications.taps.listen(_openRoute);
+    // A polled notification carries its route; a pushed one carries the
+    // pointer (`push:{json}`), which the coordinator turns into a route for
+    // the account that organization belongs to.
+    _taps = deps.notifications.taps.listen(_onNotificationPayload);
     _push.start();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final launch = deps.notifications.takeLaunchRoute();
-      if (launch != null) _openRoute(launch);
+      if (launch != null) _onNotificationPayload(launch);
     });
     // Background polling for every signed-in account, and only for those.
     _auth = _authBloc.stream.listen((state) {
@@ -250,6 +262,11 @@ class _BoardhopAppState extends State<BoardhopApp> {
         unawaited(_push.syncAccounts(const []));
       }
     });
+  }
+
+  void _onNotificationPayload(String payload) {
+    if (_push.handleTapPayload(payload)) return;
+    _openRoute(payload);
   }
 
   void _openRoute(String route) {

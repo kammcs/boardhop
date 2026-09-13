@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/notifications/notification_service.dart';
+import '../../data/models/activity.dart';
+import '../../data/repositories/activity_repository.dart';
+import 'push_background.dart';
 import 'push_pointer.dart';
 import 'push_registrar.dart';
 import 'push_service.dart';
+import 'push_verbs.dart';
 
 /// Ties the platform token, the relay registration and the existing local
 /// notifications together.
@@ -20,7 +24,13 @@ import 'push_service.dart';
 /// * heartbeat once a day at app start;
 /// * `DELETE` on sign-out, before MSAL forgets the account;
 /// * a foreground push is shown through the feed's own notification channel,
-///   because the OS shows nothing while the app is in front.
+///   because the OS shows nothing while the app is in front (on Android the
+///   relay's message is data-only, so nothing is shown in **any** state unless
+///   the app posts it: the background and terminated states are
+///   `push_background.dart`);
+/// * every pointer that arrives is also written into the Activity feed at
+///   once, so the feed and the notifications agree without waiting for the
+///   next poll (research/14 §4.2).
 class PushCoordinator {
   PushCoordinator({
     required this.push,
@@ -28,6 +38,7 @@ class PushCoordinator {
     required this.registrarFor,
     required this.orgFor,
     required this.openRoute,
+    this.activityFor,
   });
 
   final PushService push;
@@ -40,6 +51,10 @@ class PushCoordinator {
   final Future<String?> Function(String accountId) orgFor;
 
   final void Function(String route) openRoute;
+
+  /// The per-account activity feed, so a pushed pointer lands in it straight
+  /// away. Null in tests that only care about routing.
+  final ActivityRepository Function(String accountId)? activityFor;
 
   final Set<String> _accounts = {};
   StreamSubscription<PushPointer>? _foreground;
@@ -152,19 +167,36 @@ class PushCoordinator {
   }
 
   Future<void> _showForeground(PushPointer pointer) async {
-    // iOS presents a remote push itself, so re-raising it here would show
-    // the same event twice. Only Android needs this: FCM delivers a
-    // foreground message silently and leaves the showing to the app.
-    if (push.platform != 'android') return;
     final accountId = accountForOrg(pointer.org);
     if (accountId == null) return;
+    unawaited(_insertIntoFeed(pointer, accountId));
+    // iOS presents a remote push itself, so re-raising it here would show
+    // the same event twice. Only Android needs this: the relay's message is
+    // data-only, so the OS shows nothing at all and the app posts it.
+    if (push.platform != 'android') return;
+    if (pointer.isStale) return;
     final (title, body) = pointer.message;
     await notifications.show(
       id: pointer.notificationId,
       title: title,
       body: body,
-      route: pointer.route(accountId),
+      // The same payload the background isolate posts, so a tap routes
+      // through one path whichever state the app was in.
+      route: pushPayloadFor(pointer),
+      tag: pointer.tag,
+      groupKey: pointer.groupKey,
+      subtitle: pointer.subtitle,
     );
+  }
+
+  /// A tap on a notification the background isolate posted: its payload is
+  /// the pointer as JSON behind [pushPayloadPrefix], not a route. Returns true
+  /// when this was such a payload, so the caller knows not to treat it as one.
+  bool handleTapPayload(String payload) {
+    final pointer = pointerFromPayload(payload);
+    if (pointer == null) return payload.startsWith(pushPayloadPrefix);
+    _open(pointer);
+    return true;
   }
 
   void _open(PushPointer pointer) {
@@ -173,7 +205,23 @@ class PushCoordinator {
       debugPrint('Push: no signed-in account for ${pointer.org}');
       return;
     }
+    unawaited(_insertIntoFeed(pointer, accountId));
     openRoute(pointer.route(accountId));
+  }
+
+  /// Writes the pointer into that account's Activity feed and marks its key
+  /// announced, so the next poll neither duplicates the row nor notifies
+  /// again (research/14 §4.2).
+  Future<void> _insertIntoFeed(PushPointer pointer, String accountId) async {
+    final repository = activityFor?.call(accountId);
+    if (repository == null) return;
+    final item = pushedActivityItem(pointer, accountId);
+    if (item == null) return;
+    try {
+      await repository.insertPushed(pointer.org, item);
+    } catch (e) {
+      debugPrint('Push: could not insert into the feed ($e)');
+    }
   }
 
   void dispose() {
@@ -184,3 +232,41 @@ class PushCoordinator {
     _started = false;
   }
 }
+
+/// The Activity row a pushed pointer becomes (research/14 §4.2). Null for the
+/// test push and anything with no artifact to point at, which has no feed row.
+///
+/// The key is the feed's own (`pr:8336`, `wi:15503`, `build:4242`), so the
+/// next poll's copy of the same artifact replaces this one instead of
+/// doubling it.
+ActivityItem? pushedActivityItem(PushPointer pointer, String accountId) {
+  final key = pointer.activityKey;
+  if (key == null) return null;
+  return ActivityItem(
+    kind: switch (pointer.artifactType) {
+      'workItem' => ActivityKind.workItem,
+      'build' || 'approval' => ActivityKind.build,
+      _ => _authorFacing.contains(pointer.verb)
+          ? ActivityKind.prMine
+          : ActivityKind.prReview,
+    },
+    key: key,
+    title: pointer.fallbackTitle ?? pointer.title ?? pointer.heading,
+    subtitle: pointer.body,
+    route: pointer.route(accountId),
+    time: pointer.sentAt?.toLocal() ?? DateTime.now(),
+    project: pointer.project.isEmpty ? null : pointer.project,
+    result: pointer.detail,
+    actor: pointer.actor,
+    actorId: pointer.actorId,
+  );
+}
+
+/// What happens to a pull request of **yours**; everything else on a PR is
+/// review-side and shows as "waiting for you".
+const _authorFacing = <PushVerb>{
+  PushVerb.voted,
+  PushVerb.prCompleted,
+  PushVerb.prAbandoned,
+  PushVerb.mergeFailed,
+};

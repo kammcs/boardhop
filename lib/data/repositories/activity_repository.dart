@@ -40,6 +40,14 @@ class ActivityRepository {
   static String feedKey(String org) => 'activity:$org';
   static String seenKey(String org) => 'activity:seen:$org';
 
+  /// The keys already announced, so one artifact is never announced twice —
+  /// by the poll and by a push (research/14 §4.2). `ActivitySync` writes it
+  /// after a polled notification; [insertPushed] writes it for a pushed one.
+  static String notifiedKey(String org) => 'activity:notified:$org';
+
+  /// How many announced keys are remembered per organization.
+  static const maxNotified = 500;
+
   static String workItemsWiql({int days = workItemDays}) =>
       'SELECT [System.Id] FROM WorkItems '
       'WHERE [System.AssignedTo] = @Me '
@@ -180,6 +188,33 @@ class ActivityRepository {
           ActivityItem.fromJson(m.cast<String, dynamic>()),
       ],
       fetchedAt: cached.fetchedAt,
+    );
+  }
+
+  /// Puts a pushed pointer's item at the top of the cached feed at once, so
+  /// the feed and the notifications agree without waiting for the next poll
+  /// (research/14 §4.2). The next poll dedups on [ActivityItem.key].
+  ///
+  /// The item is **not** marked seen — it is new until the user opens the feed
+  /// — but its key is added to the announced set, so `ActivitySync.toNotify`
+  /// does not raise a second notification for something the push already
+  /// showed.
+  Future<void> insertPushed(String org, ActivityItem item) async {
+    final existing = await cached(org);
+    final merged = merge([item, ...?existing?.items]);
+    await _cache.put(feedKey(org), [for (final i in merged) i.toJson()]);
+
+    final remembered = await _cache.get(notifiedKey(org));
+    final notified = <String>{
+      if (remembered?.json case final List l) ...l.map((e) => e.toString()),
+      item.key,
+    };
+    final list = notified.toList();
+    await _cache.put(
+      notifiedKey(org),
+      list.length > maxNotified
+          ? list.sublist(list.length - maxNotified)
+          : list,
     );
   }
 

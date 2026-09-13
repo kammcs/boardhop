@@ -80,3 +80,6 @@ android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 *.p8
 fcm-service-account*.json
+
+# Kotlin compiler session data written by the Android Gradle build
+android/.kotlin/

@@ -178,6 +178,7 @@ class PushRegistrar {
       'token': token,
       'appVersion': appVersion,
       'locale': locale,
+      'tzOffsetMinutes': tzOffsetMinutes,
     });
     if (response == null) return null;
     if (response.unauthorized) {
@@ -212,7 +213,12 @@ class PushRegistrar {
       'POST',
       _relayUrl(current.org),
       '/v1/devices/${current.deviceId}/heartbeat',
-      {'token': token, 'appVersion': appVersion, 'locale': locale},
+      {
+        'token': token,
+        'appVersion': appVersion,
+        'locale': locale,
+        'tzOffsetMinutes': tzOffsetMinutes,
+      },
     );
     if (response == null) return;
     if (response.unauthorized || response.statusCode == 404) {
@@ -274,6 +280,11 @@ class PushRegistrar {
       return null;
     }
   }
+
+  /// Minutes east of UTC, sent on registration and with every heartbeat: it
+  /// is the only thing that makes the relay's quiet hours this device's local
+  /// time rather than UTC (research/14 §6, relay README "Device registration").
+  static int get tzOffsetMinutes => DateTime.now().timeZoneOffset.inMinutes;
 
   /// `en_GB`; the relay stores it so a future digest can be localised.
   static String get locale {

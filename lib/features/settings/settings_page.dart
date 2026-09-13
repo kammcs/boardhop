@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../theme/theme.dart';
+import 'push_prefs_section.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -102,12 +104,45 @@ class SettingsPage extends StatelessWidget {
                   secondary: const Icon(Icons.notifications_outlined),
                 ),
               ),
+              // One Push section per account registered with the relay; the
+              // preferences live there per (org, userId), so there is nothing
+              // to show for an account that has not registered.
+              ..._pushSections(context),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// The relay's per-organization preferences (research/14 §6), one section per
+/// registered account. Empty when nothing is registered — and when the page is
+/// built without [AppDependencies], as the widget tests do.
+List<Widget> _pushSections(BuildContext context) {
+  AppDependencies? deps;
+  try {
+    deps = context.read<AppDependencies>();
+  } catch (_) {
+    return const [];
+  }
+  final accounts = deps.boundAccounts.toList();
+  if (accounts.isEmpty) return const [];
+  return [
+    ListenableBuilder(
+      listenable: Listenable.merge([
+        for (final account in accounts) account.pushRegistrar.registration,
+      ]),
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final account in accounts)
+            if (account.pushRegistrar.registration.value case final it?)
+              PushPrefsSection(org: it.org, repository: account.pushPrefs),
+        ],
+      ),
+    ),
+  ];
 }
 
 /// The floating glass rail exists on Apple tablets only (see ProjectShell).

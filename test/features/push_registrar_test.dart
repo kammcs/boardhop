@@ -70,6 +70,10 @@ void main() {
       expect(call.body!['token'], deviceToken);
       expect(call.body!['platform'], 'android');
       expect(call.body!['appVersion'], isNotEmpty);
+      // research/14 §6: the relay evaluates quiet hours in the device's local
+      // time, and this is the only thing that tells it what that is.
+      expect(call.body!['tzOffsetMinutes'], PushRegistrar.tzOffsetMinutes);
+      expect(call.body!['tzOffsetMinutes'], inInclusiveRange(-840, 840));
     });
 
     test('survives a reload: the record is in shared preferences', () async {
@@ -167,6 +171,9 @@ void main() {
           call.body!['token'],
           'rotated-token-zyxwvutsrqponmlkjihgfedcba-987',
         );
+        // The offset travels with every heartbeat, so a phone that flew
+        // somewhere keeps its quiet hours right.
+        expect(call.body!['tzOffsetMinutes'], PushRegistrar.tzOffsetMinutes);
         expect(registrar.registration.value, isNotNull);
       },
     );
