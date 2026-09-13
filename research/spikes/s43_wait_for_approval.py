@@ -22,7 +22,7 @@ for i in range(60):
         line = f't+{i * 5}s build {b.get("status")}/{b.get("result")} stages {stages} checkpoints {cps}'
         print(line)
         out.append('- ' + line)
-    if b.get('status') == 'completed' or any(t == 'Checkpoint.Approval' for t, _ in cps):
+    if b.get('status') == 'completed' or (os.environ.get('S43_UNTIL') != 'completed' and any(t == 'Checkpoint.Approval' for t, _ in cps)):
         break
     time.sleep(5)
 s, h, appr = get(f'{ORG_URL}/{P}/_apis/pipelines/approvals?state=pending&$expand=steps&api-version=7.1')

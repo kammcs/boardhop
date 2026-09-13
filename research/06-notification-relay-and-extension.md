@@ -230,7 +230,7 @@ one — therefore needs that file supplied as a secret, exactly like `.env` and
 
 1. Confirm the Extension Data Service documents are readable from the mobile app with the user's Entra token and the `vso.extension.data` scope.
 2. Confirm an extension hub with `vso.hooks_write` can create webhook subscriptions in every project for an org admin, and what happens for projects where the admin lacks rights.
-3. ~~Capture webhook payload shape~~ **done 2026-09-13 (w22/w23)**: see "The audience problem" above and `research/spikes/results/README.md`. The Minimal set of nine hooks stays on the scratch project.
+3. ~~Capture webhook payload shape~~ **done 2026-09-13 (w22/w23)**: see "The audience problem" above and `research/spikes/results/README.md`. No hook subscriptions remain on the scratch project (checked 2026-09-13 after the R2.0 spikes); the relay provisions its own set in R2.8.
 4. Push end to end: FCM (Android) and APNs (iOS, needs a physical iPhone or a TestFlight build) from a gateway on the Hetzner box, measuring latency from hook to phone.
 5. Private publish: create the publisher, publish a hello-world extension privately, share it with `puremedia`, and confirm the install and the data-store read from the app.
 6. SignalR feed: from the relay, subscribe to a running scratch pipeline's timeline feed with a PAT and confirm lines arrive while the task runs; then decide the identity question above.
