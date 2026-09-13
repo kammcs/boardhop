@@ -112,7 +112,10 @@ void main() {
     final sent = DateTime.utc(2026, 9, 13, 10);
 
     test('a pointer with no sentAt is never stale', () {
-      expect(PushPointer.tryFrom(data())!.isStaleAt(DateTime.utc(2030)), isFalse);
+      expect(
+        PushPointer.tryFrom(data())!.isStaleAt(DateTime.utc(2030)),
+        isFalse,
+      );
     });
 
     test('ten minutes is still fresh, eleven is not', () {
@@ -226,9 +229,40 @@ void main() {
 
     test('an approval opens the approvals tab at its id', () {
       expect(
-        routeOf(data(artifactType: 'approval', artifactId: '18', anchor: 'approval:18')),
+        routeOf(
+          data(
+            artifactType: 'approval',
+            artifactId: '18',
+            anchor: 'approval:18',
+          ),
+        ),
         '/a/kelly%40kammcs.com-home/orgs/contoso/projects/'
         'DevOps%20Mobile%20App/pipelines?tab=approvals&approval=18',
+      );
+    });
+
+    test('an approval carries its run, so the page can offer it', () {
+      // research/14 §2.4: the approval's owner is the run, and R2.5's
+      // "Already decided" snackbar opens it.
+      expect(
+        routeOf(
+          data(
+            artifactType: 'approval',
+            artifactId: '18',
+            anchor: 'approval:18',
+            runId: '20163',
+          ),
+        ),
+        '/a/kelly%40kammcs.com-home/orgs/contoso/projects/'
+        'DevOps%20Mobile%20App/pipelines?tab=approvals&approval=18&run=20163',
+      );
+    });
+
+    test('a run on any other anchor changes nothing', () {
+      expect(
+        routeOf(data(anchor: 'thread:4821', runId: '20163')),
+        '/a/kelly%40kammcs.com-home/orgs/contoso/pull-requests/8336'
+        '?thread=4821',
       );
     });
 
@@ -302,7 +336,9 @@ void main() {
       final thread = PushPointer.tryFrom(
         data(collapseKey: 'contoso.pr.8336.t4821'),
       )!;
-      final artifact = PushPointer.tryFrom(data(collapseKey: 'contoso.pr.8336'))!;
+      final artifact = PushPointer.tryFrom(
+        data(collapseKey: 'contoso.pr.8336'),
+      )!;
       expect(thread.tag, 'contoso.pr.8336.t4821');
       expect(thread.notificationId, isNot(artifact.notificationId));
       expect(thread.notificationId, greaterThanOrEqualTo(0));
@@ -343,9 +379,8 @@ void main() {
         'wi:15503',
       );
       expect(
-        PushPointer.tryFrom(
-          data(artifactType: 'build', artifactId: '20163'),
-        )!.activityKey,
+        PushPointer.tryFrom(data(artifactType: 'build', artifactId: '20163'))!
+            .activityKey,
         'build:20163',
       );
     });
@@ -358,9 +393,8 @@ void main() {
         'build:20163',
       );
       expect(
-        PushPointer.tryFrom(
-          data(artifactType: 'approval', artifactId: '18'),
-        )!.activityKey,
+        PushPointer.tryFrom(data(artifactType: 'approval', artifactId: '18'))!
+            .activityKey,
         isNull,
       );
     });

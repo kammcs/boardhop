@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -10,15 +12,37 @@ import '../../data/repositories/pipeline_repository.dart';
 import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
+import '../shared/anchor_highlight.dart';
 import 'widgets/pipeline_visuals.dart';
 
 /// Milestone 3: recent runs (optionally one pipeline), the pipeline list
 /// with a Run action, and pending environment approvals.
 class PipelinesPage extends StatefulWidget {
-  const PipelinesPage({super.key, required this.org, required this.project});
+  const PipelinesPage({
+    super.key,
+    required this.org,
+    required this.project,
+    this.initialTab,
+    this.initialApprovalId,
+    this.initialRunId,
+  });
 
   final String org;
   final String project;
+
+  /// `?tab=runs|pipelines|approvals` from a pushed notification
+  /// (research/14 §4.2); an approval anchor implies Approvals.
+  final String? initialTab;
+
+  /// `?approval={id}`: the approval the push was about. Still pending, the
+  /// tab scrolls to its card and tints it, so the Approve and Reject
+  /// buttons are under the thumb; already decided by someone else, the tab
+  /// opens with an "Already decided" snackbar.
+  final String? initialApprovalId;
+
+  /// `?run={id}`: the run the approval gates, so the "Already decided"
+  /// snackbar can offer to open it (research/14 §2.4).
+  final String? initialRunId;
 
   @override
   State<PipelinesPage> createState() => _PipelinesPageState();
@@ -36,12 +60,93 @@ class _PipelinesPageState extends State<PipelinesPage> {
   bool _acting = false;
   bool _loadedOnce = false;
 
+  /// One key per approval card, and the tint the anchored one wears for
+  /// two seconds (research/14 §4.2). The tab has no approve/reject
+  /// sheet -- the buttons sit on the card itself -- so the anchor brings
+  /// the card to the reader rather than opening anything.
+  final Map<String, GlobalKey> _approvalKeys = {};
+  final _approvalScroll = ScrollController();
+  String? _highlighted;
+  Timer? _highlightTimer;
+
+  /// The anchor is honoured once, not on every refresh the page does.
+  String? _anchoredFor;
+
+  /// Which tab a deep link asks for.
+  int get _initialIndex => switch (widget.initialTab) {
+    'pipelines' => 1,
+    'approvals' => 2,
+    'runs' => 0,
+    _ => widget.initialApprovalId != null ? 2 : 0,
+  };
+
   PipelineRepository get _repo => context.read<PipelineRepository>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void didUpdateWidget(PipelinesPage old) {
+    super.didUpdateWidget(old);
+    if (old.initialApprovalId != widget.initialApprovalId) {
+      _anchoredFor = null;
+      _anchorApproval();
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    _approvalScroll.dispose();
+    super.dispose();
+  }
+
+  /// Lands a pushed approval notification on its card (research/14 §4.2).
+  ///
+  /// Approvals are read after the runs, so this runs when that read comes
+  /// back and only when it succeeded: an approval the tab could not read
+  /// is not an approval that was decided.
+  void _anchorApproval() {
+    final id = widget.initialApprovalId;
+    if (id == null || _anchoredFor == id || !mounted) return;
+    _anchoredFor = id;
+    final pending = _approvals
+        .where((a) => a.id == id && a.status == 'pending')
+        .firstOrNull;
+    if (pending == null) {
+      final run = widget.initialRunId;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('Already decided'),
+            action: run == null
+                ? null
+                : SnackBarAction(
+                    label: 'Open run',
+                    onPressed: () => context.push(_runPathById(run)),
+                  ),
+            // Flutter 3.47 keeps a snackbar with an action open until it
+            // is dismissed, and queues every later one behind it.
+            persist: false,
+          ),
+        );
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final key = _approvalKeys.putIfAbsent(id, GlobalKey.new);
+      final found = await revealAnchor(target: key, scroller: _approvalScroll);
+      if (!found || !mounted) return;
+      setState(() => _highlighted = id);
+      _highlightTimer?.cancel();
+      _highlightTimer = Timer(kAnchorHighlight, () {
+        if (mounted) setState(() => _highlighted = null);
+      });
+    });
   }
 
   Future<void> _load() async {
@@ -103,7 +208,10 @@ class _PipelinesPageState extends State<PipelinesPage> {
     // failure here only empties the tab.
     try {
       final approvals = await repo.approvals(widget.org, widget.project);
-      if (mounted) setState(() => _approvals = approvals);
+      if (mounted) {
+        setState(() => _approvals = approvals);
+        _anchorApproval();
+      }
     } on AdoAuthException {
       rethrow;
     } on AdoException catch (e) {
@@ -179,9 +287,12 @@ class _PipelinesPageState extends State<PipelinesPage> {
     _setFilter(picked);
   }
 
-  String _runPath(BuildRun run) =>
+  String _runPath(BuildRun run) => _runPathById('${run.id}');
+
+  String _runPathById(String id) =>
       '${orgRoute(context, widget.org)}/projects/'
-      '${Uri.encodeComponent(widget.project)}/pipelines/runs/${run.id}';
+      '${Uri.encodeComponent(widget.project)}/pipelines/runs/'
+      '${Uri.encodeComponent(id)}';
 
   Future<void> _queue(PipelineDefinition d) async {
     final controller = TextEditingController(
@@ -272,6 +383,7 @@ class _PipelinesPageState extends State<PipelinesPage> {
     final scheme = theme.colorScheme;
     return DefaultTabController(
       length: 3,
+      initialIndex: _initialIndex,
       child: Scaffold(
         appBar: AppBar(
           title: Column(
@@ -345,6 +457,10 @@ class _PipelinesPageState extends State<PipelinesPage> {
                   ),
                   _ApprovalsTab(
                     approvals: _approvals,
+                    keyFor: (id) =>
+                        _approvalKeys.putIfAbsent(id, GlobalKey.new),
+                    scroller: _approvalScroll,
+                    highlighted: _highlighted,
                     error: _approvalsError,
                     loaded: _loadedOnce && !_loading,
                     busy: _acting,
@@ -607,6 +723,9 @@ class _DefinitionsTab extends StatelessWidget {
 class _ApprovalsTab extends StatelessWidget {
   const _ApprovalsTab({
     required this.approvals,
+    required this.keyFor,
+    required this.scroller,
+    required this.highlighted,
     required this.error,
     required this.loaded,
     required this.busy,
@@ -617,6 +736,18 @@ class _ApprovalsTab extends StatelessWidget {
   });
 
   final List<PipelineApproval> approvals;
+
+  /// One stable key per approval id, so `?approval={id}` has something to
+  /// scroll to (research/14 §4.2).
+  final GlobalKey Function(String id) keyFor;
+
+  /// The list's own controller, so the anchor can page down to a card that
+  /// has not been built yet.
+  final ScrollController scroller;
+
+  /// The approval a deep link landed on; tinted for two seconds.
+  final String? highlighted;
+
   final String? error;
   final bool loaded;
   final bool busy;
@@ -633,6 +764,7 @@ class _ApprovalsTab extends StatelessWidget {
       onRefresh: onRefresh,
       child: ContentColumn(
         child: ListView(
+          controller: scroller,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             Spacing.lg,
@@ -667,68 +799,71 @@ class _ApprovalsTab extends StatelessWidget {
               ),
             for (final a in approvals)
               Padding(
-                key: ValueKey(a.id),
+                key: keyFor(a.id),
                 padding: const EdgeInsets.only(bottom: Spacing.md),
-                child: Material(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: Radii.card,
-                  child: InkWell(
+                child: AnchorHighlight(
+                  active: a.id == highlighted,
+                  child: Material(
+                    color: scheme.surfaceContainerLow,
                     borderRadius: Radii.card,
-                    onTap: a.runId == null ? null : () => onOpenRun(a),
-                    child: Padding(
-                      padding: Spacing.card,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${a.pipelineName ?? 'Pipeline'} · ${a.runName ?? ''}',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                          if ((a.instructions ?? '').isNotEmpty) ...[
-                            const SizedBox(height: Spacing.xs),
-                            Text(a.instructions!),
+                    child: InkWell(
+                      borderRadius: Radii.card,
+                      onTap: a.runId == null ? null : () => onOpenRun(a),
+                      child: Padding(
+                        padding: Spacing.card,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${a.pipelineName ?? 'Pipeline'} · ${a.runName ?? ''}',
+                              style: theme.textTheme.titleSmall,
+                            ),
+                            if ((a.instructions ?? '').isNotEmpty) ...[
+                              const SizedBox(height: Spacing.xs),
+                              Text(a.instructions!),
+                            ],
+                            const SizedBox(height: Spacing.sm),
+                            Wrap(
+                              spacing: Spacing.sm,
+                              runSpacing: Spacing.xs,
+                              children: [
+                                for (final s in a.steps)
+                                  Chip(
+                                    avatar: IdentityAvatar(
+                                      identity: s.assignedApprover,
+                                      radius: 10,
+                                    ),
+                                    label: Text(
+                                      '${s.assignedApprover?.displayName ?? '?'}'
+                                      '${s.status == 'pending' ? '' : ' · ${s.status}'}',
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: Spacing.sm),
+                            Row(
+                              children: [
+                                Text(
+                                  'waiting ${relativeTime(a.createdOn)}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const Spacer(),
+                                TextButton(
+                                  onPressed: busy ? null : () => onReject(a),
+                                  child: const Text('Reject'),
+                                ),
+                                const SizedBox(width: Spacing.xs),
+                                FilledButton(
+                                  onPressed: busy ? null : () => onApprove(a),
+                                  child: const Text('Approve'),
+                                ),
+                              ],
+                            ),
                           ],
-                          const SizedBox(height: Spacing.sm),
-                          Wrap(
-                            spacing: Spacing.sm,
-                            runSpacing: Spacing.xs,
-                            children: [
-                              for (final s in a.steps)
-                                Chip(
-                                  avatar: IdentityAvatar(
-                                    identity: s.assignedApprover,
-                                    radius: 10,
-                                  ),
-                                  label: Text(
-                                    '${s.assignedApprover?.displayName ?? '?'}'
-                                    '${s.status == 'pending' ? '' : ' · ${s.status}'}',
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: Spacing.sm),
-                          Row(
-                            children: [
-                              Text(
-                                'waiting ${relativeTime(a.createdOn)}',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: busy ? null : () => onReject(a),
-                                child: const Text('Reject'),
-                              ),
-                              const SizedBox(width: Spacing.xs),
-                              FilledButton(
-                                onPressed: busy ? null : () => onApprove(a),
-                                child: const Text('Approve'),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

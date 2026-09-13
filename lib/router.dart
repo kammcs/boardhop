@@ -151,10 +151,15 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           ),
                           GoRoute(
                             path: ':id',
+                            // `?comment={id}` from a pushed comment
+                            // notification (research/14 §4.2).
                             builder: (_, state) => WorkItemDetailPage(
                               org: state.pathParameters['org']!,
                               project: state.pathParameters['project']!,
                               id: int.parse(state.pathParameters['id']!),
+                              initialCommentId: int.tryParse(
+                                state.uri.queryParameters['comment'] ?? '',
+                              ),
                             ),
                             routes: [
                               // The full form in edit mode; the detail
@@ -359,9 +364,15 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                     routes: [
                       GoRoute(
                         path: ':project/pipelines',
+                        // `?tab=approvals&approval={id}&run={runId}` from a
+                        // pushed approval notification (research/14 §4.2).
                         builder: (_, state) => PipelinesPage(
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
+                          initialTab: state.uri.queryParameters['tab'],
+                          initialApprovalId:
+                              state.uri.queryParameters['approval'],
+                          initialRunId: state.uri.queryParameters['run'],
                         ),
                         routes: [
                           GoRoute(
@@ -412,9 +423,15 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
             routes: [
               GoRoute(
                 path: ':id',
+                // `?tab=comments|files` and `?thread={id}` from a pushed
+                // pull request notification (research/14 §4.2).
                 builder: (_, state) => PullRequestDetailPage(
                   org: state.pathParameters['org']!,
                   id: int.parse(state.pathParameters['id']!),
+                  initialTab: state.uri.queryParameters['tab'],
+                  initialThreadId: int.tryParse(
+                    state.uri.queryParameters['thread'] ?? '',
+                  ),
                 ),
                 routes: [
                   GoRoute(

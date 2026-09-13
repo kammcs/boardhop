@@ -205,6 +205,11 @@ class PushPointer {
   /// `comment:{id}` → `comment={id}`, `thread:{id}` → `thread={id}`,
   /// `tab:files` → `tab=files`, `approval:{id}` → `tab=approvals&approval={id}`
   /// (research/14 §4.2).
+  ///
+  /// The approval anchor carries the run as well when the pointer knows it
+  /// (research/14 §2.4: the approval's `owner.id` **is** the run id), because
+  /// an approval someone else already decided is no longer in the tab's list
+  /// and the page then offers "Open run" instead (R2.5).
   String? get anchorQuery {
     final value = anchor;
     if (value == null) return null;
@@ -212,11 +217,14 @@ class PushPointer {
     if (colon <= 0 || colon == value.length - 1) return null;
     final kind = value.substring(0, colon);
     final id = Uri.encodeQueryComponent(value.substring(colon + 1));
+    final run = runId;
     return switch (kind) {
       'comment' => 'comment=$id',
       'thread' => 'thread=$id',
       'tab' => 'tab=$id',
-      'approval' => 'tab=approvals&approval=$id',
+      'approval' =>
+        'tab=approvals&approval=$id'
+            '${run == null ? '' : '&run=${Uri.encodeQueryComponent(run)}'}',
       _ => null,
     };
   }
@@ -242,7 +250,8 @@ class PushPointer {
         'workitem.updated' => 'Work item updated',
         'workitem.commented' => 'Work item comment',
         'build.complete' => 'Build finished',
-        'ms.vss-pipelines.stage-state-changed-event' => 'Pipeline stage changed',
+        'ms.vss-pipelines.stage-state-changed-event' =>
+          'Pipeline stage changed',
         'ms.vss-pipelinechecks-events.approval-pending' =>
           'Approval waiting for you',
         _ => switch (artifactType) {
@@ -266,7 +275,8 @@ class PushPointer {
         artifactRef: artifactRef,
       );
     }
-    return title ?? '$_label $artifactId${project.isEmpty ? '' : ' in $project'}';
+    return title ??
+        '$_label $artifactId${project.isEmpty ? '' : ' in $project'}';
   }
 
   /// iOS subtitle / Android sub-text: the project, nothing more.

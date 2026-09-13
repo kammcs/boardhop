@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +15,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import '../shared/anchor_highlight.dart';
 import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
 import 'form/type_chooser.dart';
@@ -33,11 +36,19 @@ class WorkItemDetailPage extends StatefulWidget {
     required this.project,
     required this.id,
     this.embedded = false,
+    this.initialCommentId,
   });
 
   final String org;
   final String project;
   final int id;
+
+  /// A pushed comment notification lands here (`?comment={id}`,
+  /// research/14 §4.2): once the discussion is read the page scrolls that
+  /// comment into view and tints it for two seconds. An id that is not in
+  /// the list -- deleted, or older than the page that was read -- scrolls
+  /// to the Discussion heading and says nothing.
+  final int? initialCommentId;
 
   /// True inside the tablet list+detail pane: no back button, the pane's
   /// own list stays visible.
@@ -88,10 +99,69 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   /// medium up, the same way the Work `+` does.
   final _moreKey = GlobalKey();
 
+  /// The Discussion section and one key per comment, so a pushed
+  /// `?comment={id}` can be scrolled to (research/14 §4.2).
+  final _discussionKey = GlobalKey();
+  final Map<int, GlobalKey> _commentKeys = {};
+
+  /// The comment the anchor tinted, and the timer that clears the tint.
+  int? _highlighted;
+  Timer? _highlightTimer;
+
+  /// The anchor is honoured once per deep link, not on every pull to
+  /// refresh: someone reading further down must not be yanked back.
+  int? _anchoredFor;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
+
+  @override
+  void didUpdateWidget(WorkItemDetailPage old) {
+    super.didUpdateWidget(old);
+    // A second push naming another comment on the same item reuses this
+    // state, so a new anchor is honoured again.
+    if (old.initialCommentId != widget.initialCommentId) {
+      _anchoredFor = null;
+      _anchorComment();
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Scrolls to the pushed comment and tints it for [kAnchorHighlight].
+  ///
+  /// The comments are the last thing on the page, so the section header is
+  /// what the scroller aims at until the card itself has been built.
+  void _anchorComment() {
+    final id = widget.initialCommentId;
+    final comments = _comments;
+    if (id == null || comments == null || _anchoredFor == id) return;
+    _anchoredFor = id;
+    final known = comments.any((c) => c.id == id);
+    final key = known ? _commentKeys.putIfAbsent(id, GlobalKey.new) : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (key == null) {
+        // Not in the list -- deleted, or past the page of comments that
+        // was read: land on the Discussion heading, no error.
+        await revealAnchor(target: _discussionKey, alignment: 0);
+        return;
+      }
+      final found = await revealAnchor(target: key, fallback: _discussionKey);
+      if (!found || !mounted) return;
+      setState(() => _highlighted = id);
+      _highlightTimer?.cancel();
+      _highlightTimer = Timer(kAnchorHighlight, () {
+        if (mounted) setState(() => _highlighted = null);
+      });
+    });
   }
 
   Future<void> _refresh() async {
@@ -121,7 +191,10 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         widget.project,
         widget.id,
       );
-      if (mounted) setState(() => _comments = comments);
+      if (mounted) {
+        setState(() => _comments = comments);
+        _anchorComment();
+      }
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -562,12 +635,16 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                         ),
                       ),
                     DetailSection(
+                      key: _discussionKey,
                       title: _comments == null
                           ? 'Discussion'
                           : 'Discussion (${_comments!.length})',
                       child: _Discussion(
                         comments: _comments,
                         headers: _headers,
+                        keyFor: (id) =>
+                            _commentKeys.putIfAbsent(id, GlobalKey.new),
+                        highlighted: _highlighted,
                       ),
                     ),
                   ],
@@ -701,10 +778,22 @@ class _Facts extends StatelessWidget {
 }
 
 class _Discussion extends StatelessWidget {
-  const _Discussion({required this.comments, required this.headers});
+  const _Discussion({
+    required this.comments,
+    required this.headers,
+    required this.keyFor,
+    this.highlighted,
+  });
 
   final List<WorkItemComment>? comments;
   final Map<String, String> headers;
+
+  /// One stable key per comment id, so a pushed `?comment={id}` has
+  /// something to scroll to (research/14 §4.2).
+  final GlobalKey Function(int id) keyFor;
+
+  /// The comment the deep link landed on; tinted for two seconds.
+  final int? highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -732,39 +821,43 @@ class _Discussion extends StatelessWidget {
       children: [
         for (final c in list)
           Padding(
+            key: keyFor(c.id),
             padding: const EdgeInsets.only(bottom: Spacing.md),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IdentityAvatar(identity: c.createdBy, radius: 16),
-                const SizedBox(width: Spacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              c.createdBy.displayName,
-                              style: theme.textTheme.labelLarge,
-                              overflow: TextOverflow.ellipsis,
+            child: AnchorHighlight(
+              active: c.id == highlighted,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  IdentityAvatar(identity: c.createdBy, radius: 16),
+                  const SizedBox(width: Spacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                c.createdBy.displayName,
+                                style: theme.textTheme.labelLarge,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                          Text(
-                            relativeTime(c.createdDate),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                            Text(
+                              relativeTime(c.createdDate),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: Spacing.xs),
-                      RichTextView(content: c.renderedText, headers: headers),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: Spacing.xs),
+                        RichTextView(content: c.renderedText, headers: headers),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       ],

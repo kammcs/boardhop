@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -17,6 +19,7 @@ import '../../theme/theme.dart';
 import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
+import '../shared/anchor_highlight.dart';
 import 'widgets/pr_visuals.dart';
 import 'widgets/thread_card.dart';
 
@@ -25,10 +28,27 @@ import 'widgets/thread_card.dart';
 /// replies and thread status. Vote, complete and abandon from the app bar;
 /// new conversation comments from the composer.
 class PullRequestDetailPage extends StatefulWidget {
-  const PullRequestDetailPage({super.key, required this.org, required this.id});
+  const PullRequestDetailPage({
+    super.key,
+    required this.org,
+    required this.id,
+    this.initialTab,
+    this.initialThreadId,
+  });
 
   final String org;
   final int id;
+
+  /// Which tab a pushed notification wants (`?tab=comments|files`,
+  /// research/14 §4.2). Anything else, and the page opens on Overview
+  /// as it always has.
+  final String? initialTab;
+
+  /// The thread a pushed comment notification names (`?thread={id}`). It
+  /// selects Comments; a conversation thread is scrolled to and tinted, a
+  /// file thread opens the diff at that file the way tapping its header
+  /// does, so Back returns to this page.
+  final int? initialThreadId;
 
   @override
   State<PullRequestDetailPage> createState() => _PullRequestDetailPageState();
@@ -39,17 +59,38 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   /// Overview, Files, Comments. Owned here rather than through a
   /// `DefaultTabController` so the scaffold rebuilds when the tab changes
   /// and can take its composer away; see [_commentsTab].
-  late final TabController _tabs = TabController(length: 3, vsync: this)
-    ..addListener(() {
-      if (!mounted) return;
-      setState(() {});
-    });
+  late final TabController _tabs =
+      TabController(length: 3, vsync: this, initialIndex: _initialIndex)
+        ..addListener(() {
+          if (!mounted) return;
+          setState(() {});
+        });
+
+  /// The tab a deep link asks for (research/14 §4.2); a thread anchor
+  /// implies Comments, because that is where the thread lives.
+  int get _initialIndex => switch (widget.initialTab) {
+    'files' => _filesTab,
+    'comments' => _commentsTab,
+    _ => widget.initialThreadId != null ? _commentsTab : 0,
+  };
 
   /// The Comments tab's index. The composer posts a conversation comment,
   /// which means nothing under Overview and is the wrong gesture under
   /// Files, where a comment belongs to a line and is written from the
   /// diff's gutter (iPhone walkthrough, finding j).
   static const int _commentsTab = 2;
+  static const int _filesTab = 1;
+
+  /// One key per thread card, and the tint the anchored one wears for two
+  /// seconds (research/14 §4.2).
+  final Map<int, GlobalKey> _threadKeys = {};
+  final _threadScroll = ScrollController();
+  int? _highlighted;
+  Timer? _highlightTimer;
+
+  /// The anchor is honoured once: a pull to refresh, or coming back from
+  /// the file diff, must not scroll the reader away again.
+  int? _anchoredFor;
 
   PullRequest? _pr;
   String? _me;
@@ -72,9 +113,56 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   }
 
   @override
+  void didUpdateWidget(PullRequestDetailPage old) {
+    super.didUpdateWidget(old);
+    if (old.initialThreadId != widget.initialThreadId) {
+      _anchoredFor = null;
+      _anchorThread();
+    }
+  }
+
+  @override
   void dispose() {
+    _highlightTimer?.cancel();
+    _threadScroll.dispose();
     _tabs.dispose();
     super.dispose();
+  }
+
+  /// Lands a pushed comment notification on its thread (research/14 §4.2).
+  ///
+  /// A conversation thread is scrolled to and tinted. A file thread opens
+  /// the file diff exactly as tapping the thread's header does, but only
+  /// after the Comments tab has been shown, so Back comes back here. A
+  /// thread that is no longer in the list leaves the tab as it is, with no
+  /// error.
+  void _anchorThread() {
+    final id = widget.initialThreadId;
+    if (id == null || _anchoredFor == id) return;
+    final thread = _conversation.where((t) => t.id == id).firstOrNull;
+    if (thread == null) return;
+    _anchoredFor = id;
+    // A filter hiding the thread would make the anchor land on nothing.
+    if (PullRequestRepository.filterConversation([
+      thread,
+    ], _threadFilter).isEmpty) {
+      setState(() => _threadFilter = PrConversationFilter.all);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (thread.isFileThread) {
+        await _openThread(thread);
+        return;
+      }
+      final key = _threadKeys.putIfAbsent(id, GlobalKey.new);
+      final found = await revealAnchor(target: key, scroller: _threadScroll);
+      if (!found || !mounted) return;
+      setState(() => _highlighted = id);
+      _highlightTimer?.cancel();
+      _highlightTimer = Timer(kAnchorHighlight, () {
+        if (mounted) setState(() => _highlighted = null);
+      });
+    });
   }
 
   Future<void> _load() async {
@@ -119,6 +207,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
         _workItems = linked;
         _conversation = PullRequestRepository.conversation(raw);
       });
+      _anchorThread();
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -509,6 +598,10 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                           onRefresh: _load,
                           child: _Conversation(
                             threads: _conversation,
+                            keyFor: (id) =>
+                                _threadKeys.putIfAbsent(id, GlobalKey.new),
+                            scroller: _threadScroll,
+                            highlighted: _highlighted,
                             filter: _threadFilter,
                             onFilter: (f) => setState(() => _threadFilter = f),
                             canAct: pr.isActive,
@@ -933,6 +1026,9 @@ class _Files extends StatelessWidget {
 class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.threads,
+    required this.keyFor,
+    required this.scroller,
+    required this.highlighted,
     required this.filter,
     required this.onFilter,
     required this.canAct,
@@ -943,6 +1039,18 @@ class _Conversation extends StatelessWidget {
   });
 
   final List<PrThread> threads;
+
+  /// One stable key per thread id, so `?thread={id}` has something to
+  /// scroll to (research/14 §4.2).
+  final GlobalKey Function(int id) keyFor;
+
+  /// The thread list's own controller, so the anchor can page down to a
+  /// thread that has not been built yet.
+  final ScrollController scroller;
+
+  /// The thread a deep link landed on; tinted for two seconds.
+  final int? highlighted;
+
   final PrConversationFilter filter;
   final ValueChanged<PrConversationFilter> onFilter;
   final bool canAct;
@@ -1013,6 +1121,7 @@ class _Conversation extends StatelessWidget {
                     ),
                   )
                 : ListView(
+                    controller: scroller,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       Spacing.lg,
@@ -1023,24 +1132,28 @@ class _Conversation extends StatelessWidget {
                     children: [
                       for (final t in shown)
                         Padding(
-                          key: ValueKey(t.id),
+                          key: keyFor(t.id),
                           padding: const EdgeInsets.only(bottom: Spacing.md),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (t.isFileThread)
-                                _ThreadFileHeader(
+                          child: AnchorHighlight(
+                            active: t.id == highlighted,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (t.isFileThread)
+                                  _ThreadFileHeader(
+                                    thread: t,
+                                    onTap: () => onOpenThread(t),
+                                  ),
+                                ThreadCard(
                                   thread: t,
-                                  onTap: () => onOpenThread(t),
+                                  canAct: canAct,
+                                  busy: busy,
+                                  onReply: (text) => onReply(t, text),
+                                  onSetStatus: (status) =>
+                                      onSetStatus(t, status),
                                 ),
-                              ThreadCard(
-                                thread: t,
-                                canAct: canAct,
-                                busy: busy,
-                                onReply: (text) => onReply(t, text),
-                                onSetStatus: (status) => onSetStatus(t, status),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                     ],
