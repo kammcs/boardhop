@@ -94,3 +94,10 @@ extension/dist/
 extension/dist-test/
 extension/build/
 *.vsix
+
+# Android release: upload keystore, its passwords and the Play Developer API service account (never committed)
+android/keystore/
+android/keystore.properties
+*.jks
+*.keystore
+**/play-service-account*.json
