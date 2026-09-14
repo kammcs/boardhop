@@ -139,7 +139,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     switch (kind) {
       case MentionKind.workItem:
         if (pr == null) return;
-        context.push(Routes.workItem(account, widget.org, pr.projectName, id));
+        // Standalone, not the in-shell route: this page is itself over
+        // the project shell (see `Routes.workItemStandalone`).
+        context.push(
+          Routes.workItemStandalone(account, widget.org, pr.projectName, id),
+        );
       case MentionKind.pullRequest:
         if (id == '${widget.id}') return;
         context.push(Routes.pullRequest(account, widget.org, id));
@@ -270,6 +274,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         _threads = _forThisFile(threads);
         _composerLine = null;
       });
+      // A comment just posted can name somebody no earlier comment on this
+      // file named, and the names map is built from the threads; without
+      // this the new `@<guid>` draws as "@someone" until the page is
+      // reopened (M-D finding 1).
+      final pr = _pr;
+      if (pr != null) unawaited(_prepareMentions(pr));
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(

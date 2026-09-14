@@ -14,6 +14,7 @@ import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/features/shared/anchor_highlight.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +178,14 @@ void main() {
             ),
           ],
         ),
+        // Stands in for the standalone work item route (the real one is
+        // pinned by test/core/router_test.dart); a `#123` tapped on this
+        // page has to reach *this* shape and not the in-shell one.
+        GoRoute(
+          path: '/a/u1/orgs/o/projects/:project/work-item/:id',
+          builder: (_, s) =>
+              Scaffold(body: Text('standalone ${s.pathParameters['id']}')),
+        ),
       ],
     );
     addTearDown(router.dispose);
@@ -259,6 +268,46 @@ void main() {
     await pump(tester, tab: 'files');
     expect(find.text('app.ts'), findsOneWidget);
     expect(highlighted(), findsNothing);
+  });
+
+  // research/16 M10 + the M-D router fix: the pull request page is itself
+  // pushed over the project tab shell, so a `#123` in one of its comments
+  // must open the standalone work item route. Pushing the in-shell location
+  // from here puts a second copy of the shell's page in the same navigator
+  // ('!keyReservation.contains(key)').
+  testWidgets('#15545 in a thread opens the standalone work item route', (
+    tester,
+  ) async {
+    threads.add(_thread(42499, 'fixes #15545'));
+    await pump(tester);
+    await tester.tap(find.text('Comments (12)'));
+    await tester.pumpAndSettle();
+
+    // The comment body is selectable, so it renders through EditableText
+    // and `tapOnText` has no RenderParagraph to measure; the span's own
+    // recogniser is what a real tap reaches.
+    expect(find.textContaining('#15545', findRichText: true), findsOneWidget);
+    final recognizers = <GestureRecognizer>[];
+    for (final text in tester.widgetList<SelectableText>(
+      find.byType(SelectableText),
+    )) {
+      text.textSpan?.visitChildren((span) {
+        if (span is TextSpan && span.recognizer != null) {
+          recognizers.add(span.recognizer!);
+        }
+        return true;
+      });
+    }
+    expect(recognizers, hasLength(1));
+    (recognizers.single as TapGestureRecognizer).onTap!();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      router.state.uri.toString(),
+      '/a/u1/orgs/o/projects/DevOps%20Mobile%20App/work-item/15545',
+    );
+    expect(find.text('standalone 15545'), findsOneWidget);
   });
 
   testWidgets('without an anchor the page still opens on Overview', (

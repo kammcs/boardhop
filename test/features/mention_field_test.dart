@@ -235,6 +235,74 @@ void main() {
     expect(controller.tokens.single.id, 'id-grace');
   });
 
+  // M-D finding 2, on the iPhone 17 simulator: iOS consumes a hardware
+  // Return inside a text field and hands it back as an inserted newline, so
+  // the `Shortcuts` binding above never fires and the Return used to break
+  // the line instead of picking. The field now recognises that insertion.
+  testWidgets('a Return that arrives as an inserted newline picks too', (
+    tester,
+  ) async {
+    final controller = MentionController();
+    addTearDown(controller.dispose);
+    await pump(tester, controller, mentions: source());
+    await type(tester, 'hi @');
+    expect(find.byKey(const Key('mentionOptions')), findsOneWidget);
+
+    // Exactly what the platform does with Return in a multiline field.
+    controller.value = const TextEditingValue(
+      text: 'hi @\n',
+      selection: TextSelection.collapsed(offset: 5),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.text, 'hi @Ada Lovelace ');
+    expect(controller.text, isNot(contains('\n')));
+    expect(controller.tokens.single.id, 'id-ada');
+    expect(find.byKey(const Key('mentionOptions')), findsNothing);
+  });
+
+  // The same finding, in the shape the iPhone actually produced: the
+  // Shortcuts binding does fire and picks, and *then* the platform's own
+  // editing state — computed from the text before the pick — lands and
+  // overwrites it.
+  testWidgets('a stale editing state after a pick does not clobber the '
+      'token', (tester) async {
+    final controller = MentionController();
+    addTearDown(controller.dispose);
+    await pump(tester, controller, mentions: source());
+    await type(tester, 'hi @ad');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(controller.text, 'hi @Ada Lovelace ');
+
+    controller.value = const TextEditingValue(
+      text: 'hi @ad\n',
+      selection: TextSelection.collapsed(offset: 7),
+    );
+    await tester.pumpAndSettle();
+
+    expect(controller.text, 'hi @Ada Lovelace ');
+    expect(controller.tokens.single.id, 'id-ada');
+    expect(controller.toWire(MentionWire.markdown), 'hi @<id-ada> ');
+  });
+
+  testWidgets('with the list closed an inserted newline is left alone', (
+    tester,
+  ) async {
+    final controller = MentionController();
+    addTearDown(controller.dispose);
+    await pump(tester, controller, mentions: source());
+    await tester.enterText(find.byType(TextField), 'first');
+    await tester.pump();
+    expect(find.byKey(const Key('mentionOptions')), findsNothing);
+    controller.value = const TextEditingValue(
+      text: 'first\n',
+      selection: TextSelection.collapsed(offset: 6),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.text, 'first\n');
+  });
+
   testWidgets('Escape closes the list and leaves the text alone', (
     tester,
   ) async {

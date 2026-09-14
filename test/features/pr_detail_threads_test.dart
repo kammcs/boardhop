@@ -228,6 +228,37 @@ void main() {
     verify(() => repo.rawThreads('o', pr)).called(2);
   });
 
+  // M-D finding 1: the names map is built from the threads the page has
+  // read, so a comment naming somebody none of the earlier ones did drew as
+  // "@someone" until the page was reopened. Reloading the threads has to
+  // re-run the lookup.
+  testWidgets('a mention that arrives with a thread reload is named, not '
+      '"@someone"', (tester) async {
+    threadReads = [
+      [_thread(1, 'first')],
+      [_thread(1, 'first'), _thread(2, 'ping @<$kellyGuid>')],
+    ];
+    when(() => stubs.people.identitiesByIds('o', any()))
+        .thenAnswer((_) async => const {kellyGuid: kelly});
+
+    await pump(tester);
+    await tester.tap(find.textContaining('Comments'));
+    await tester.pumpAndSettle();
+    // Nothing on screen names anybody yet, so the map starts empty.
+    expect(find.textContaining('@someone', findRichText: true), findsNothing);
+
+    await tester.tap(find.text('app.ts:6').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('leave the diff'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('ping @Kelly Kamm', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.textContaining('@someone', findRichText: true), findsNothing);
+  });
+
   testWidgets('the Comments composer posts a picked mention as @<guid>', (
     tester,
   ) async {

@@ -29,6 +29,29 @@ abstract final class Routes {
       '${Routes.project(accountId, org, project)}'
       '/work-items/${Uri.encodeComponent(id)}';
 
+  /// The same work item as a page of its own, outside the project tab
+  /// shell. A push that starts from a page which is itself over the shell —
+  /// the pull request detail page and its file diff — has to use this one:
+  /// pushing [workItem] from there puts a second copy of the shell's page
+  /// into the same navigator, and two pages with one key is an assert
+  /// (`!keyReservation.contains(key)`, go_router keys a shell page by the
+  /// route's identity). Everything that navigates from inside the shell —
+  /// the Work tab, search, another work item — keeps using [workItem], so
+  /// the dock stays under the page it opens and the pushed notifications
+  /// land where they always did.
+  static String workItemStandalone(
+    String accountId,
+    String org,
+    String project,
+    String id, {
+    String? comment,
+  }) {
+    final base =
+        '${Routes.project(accountId, org, project)}'
+        '/work-item/${Uri.encodeComponent(id)}';
+    return comment == null ? base : '$base?comment=$comment';
+  }
+
   /// Search inside one project (research/15 §4). The query carries what the
   /// page is showing so a deep link, a restart or a See-all push reopens the
   /// same answer: `q` the term, `scope` `project` (the default, omitted) or

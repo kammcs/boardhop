@@ -108,6 +108,16 @@ class _MentionFieldState extends State<MentionField> {
   List<IdentityRef> _hits = const [];
   List<ArtifactSuggestion> _found = const [];
 
+  /// The value the field held before the change being handled, so a Return
+  /// that arrives as an inserted newline can be told apart from any other
+  /// edit (see [_returnWhileOpen]).
+  TextEditingValue? _previous;
+
+  /// What a pick just did, kept for exactly one more change: `from` is the
+  /// text it replaced, `to` and `tokens` what it wrote. See [_onChanged].
+  ({TextEditingValue from, TextEditingValue to, List<MentionToken> tokens})?
+  _pickGuard;
+
   bool _loading = false;
   String? _error;
   int _highlight = 0;
@@ -170,6 +180,7 @@ class _MentionFieldState extends State<MentionField> {
     if (!identical(old.controller, widget.controller)) {
       old.controller.removeListener(_onChanged);
       widget.controller.addListener(_onChanged);
+      _previous = null;
     }
     if (old.focusNode != widget.focusNode) {
       old.focusNode?.removeListener(_onFocusChanged);
@@ -199,6 +210,32 @@ class _MentionFieldState extends State<MentionField> {
   }
 
   void _onChanged() {
+    final before = _previous;
+    final value = widget.controller.value;
+    _previous = value;
+    final guard = _pickGuard;
+    _pickGuard = null;
+    // On iOS the Return key reaches the `Shortcuts` binding *and* is turned
+    // into an insertion by the platform's text input, which computed it from
+    // the text as it was before the pick. That stale editing state arrives
+    // after the token has been written and overwrites it (M-D finding 2):
+    // put the pick back.
+    if (guard != null && _returnWhileOpen(guard.from, value)) {
+      widget.controller.restore(guard.to, guard.tokens);
+      return;
+    }
+    // M12's Enter binding is a `Shortcuts` entry, and on iOS a hardware
+    // Return never reaches it: the key is consumed by the text input system
+    // and comes back as an inserted newline (verified on the iPhone 17
+    // simulator, M-D finding 2). Catch it here instead, so Return picks the
+    // highlighted row on every platform and a soft-keyboard Return does the
+    // same thing as a hardware one.
+    if (before != null && _navigable && _returnWhileOpen(before, value)) {
+      _previous = before;
+      widget.controller.value = before;
+      unawaited(_pick(_highlight));
+      return;
+    }
     final source = widget.source;
     if (source == null || widget.enabled == false) {
       if (_open) _close();
@@ -250,6 +287,21 @@ class _MentionFieldState extends State<MentionField> {
       setState(() {});
     }
     if (!_open && _focus.hasFocus) _overlay.show();
+  }
+
+  /// True when the only difference between the two values is one newline
+  /// typed at a collapsed caret — what a Return looks like once the platform
+  /// has turned it into text. Anything else (a paste carrying a newline, an
+  /// IME composition, a replaced selection) is left alone.
+  static bool _returnWhileOpen(TextEditingValue before, TextEditingValue now) {
+    if (!before.selection.isValid || !before.selection.isCollapsed) return false;
+    if (!now.selection.isCollapsed) return false;
+    if (before.composing.isValid || now.composing.isValid) return false;
+    final at = before.selection.baseOffset;
+    if (at < 0 || at > before.text.length) return false;
+    if (now.selection.baseOffset != at + 1) return false;
+    return now.text ==
+        '${before.text.substring(0, at)}\n${before.text.substring(at)}';
   }
 
   /// The three cached bands, loaded once per field. Offline is just "the call
@@ -406,6 +458,7 @@ class _MentionFieldState extends State<MentionField> {
     final trigger = _trigger;
     if (source == null || trigger == null || !_open) return;
     if (_resolvingRow != null) return;
+    final from = widget.controller.value;
     setState(() {
       _errorRow = null;
       _rowError = null;
@@ -455,6 +508,7 @@ class _MentionFieldState extends State<MentionField> {
         '@${person.displayName}',
         replacing: _targetRange(trigger),
       );
+      _rememberPick(from);
       source.onPicked?.call(person);
     } else {
       final list = _artifacts;
@@ -466,8 +520,17 @@ class _MentionFieldState extends State<MentionField> {
         item.label,
         replacing: _targetRange(trigger),
       );
+      _rememberPick(from);
     }
     _close();
+  }
+
+  void _rememberPick(TextEditingValue from) {
+    _pickGuard = (
+      from: from,
+      to: widget.controller.value,
+      tokens: widget.controller.tokens,
+    );
   }
 
   /// The range to replace, re-read after an await in case the user kept

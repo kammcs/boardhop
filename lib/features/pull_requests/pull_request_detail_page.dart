@@ -299,7 +299,11 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       case MentionKind.workItem:
         final pr = _pr;
         if (pr == null) return;
-        context.push(Routes.workItem(account, widget.org, pr.projectName, id));
+        // Standalone, not the in-shell route: this page is itself over
+        // the project shell (see `Routes.workItemStandalone`).
+        context.push(
+          Routes.workItemStandalone(account, widget.org, pr.projectName, id),
+        );
       case MentionKind.pullRequest:
         if (id == '${widget.id}') return;
         context.push(Routes.pullRequest(account, widget.org, id));
@@ -529,6 +533,10 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       final raw = await repo.rawThreads(widget.org, pr);
       if (!mounted) return;
       setState(() => _conversation = PullRequestRepository.conversation(raw));
+      // The names map is built from the threads, so a comment that names
+      // somebody none of the earlier ones did has to re-run it, or its
+      // `@<guid>` draws as "@someone" (M-D finding 1).
+      unawaited(_prepareMentions(pr));
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -549,8 +557,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final pr = _pr;
     if (pr == null) return;
     context.push(
-      '${orgRoute(context, widget.org)}/projects/'
-      '${Uri.encodeComponent(pr.projectName)}/work-items/${item.id}',
+      Routes.workItemStandalone(
+        AccountScope.of(context),
+        widget.org,
+        pr.projectName,
+        '${item.id}',
+      ),
     );
   }
 

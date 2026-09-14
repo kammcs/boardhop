@@ -9,6 +9,7 @@ import 'package:boardhop/features/work_items/work_item_detail_page.dart';
 import 'package:boardhop/router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _AuthService extends Mock implements AuthService {}
@@ -42,6 +43,46 @@ void main() {
       Uri.parse('$project/work-items/15503'),
     );
     expect(item.pathParameters['id'], '15503');
+  });
+
+  // The standalone work item route (`Routes.workItemStandalone`) is the same
+  // page outside the project tab shell, for pushes that start from a page
+  // which is itself over the shell — see test/core/work_item_push_test.dart.
+  // What makes it work is the absence of the shell from its match, so that
+  // is what this pins.
+  test('the standalone work item route is matched outside the tab shell', () {
+    final auth = AuthBloc(_AuthService());
+    addTearDown(auth.close);
+    final router = buildRouter(auth, _Deps());
+    addTearDown(router.dispose);
+
+    bool hasTabShell(Iterable<RouteMatchBase> matches) => matches.any(
+      (m) =>
+          m is ShellRouteMatch &&
+          (m.route is StatefulShellRoute || hasTabShell(m.matches)),
+    );
+
+    final project = Routes.project('u1', 'puremedia', 'DevOps Mobile App');
+    final inShell = router.configuration.findMatch(
+      Uri.parse('$project/work-items/15545'),
+    );
+    expect(inShell.isError, isFalse);
+    expect(hasTabShell(inShell.matches), isTrue);
+
+    final standalone = router.configuration.findMatch(
+      Uri.parse(
+        Routes.workItemStandalone(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+        ),
+      ),
+    );
+    expect(standalone.isError, isFalse);
+    expect(hasTabShell(standalone.matches), isFalse);
+    expect(standalone.pathParameters['id'], '15545');
+    expect(standalone.pathParameters['project'], 'DevOps Mobile App');
   });
 
   // research/14 §4.2: a pushed pointer's anchor rides along as a query
@@ -130,6 +171,20 @@ void main() {
       ) as WorkItemDetailPage).initialCommentId,
       isNull,
     );
+
+    // The standalone route hands over the same three, `?comment=` and all.
+    final standalone = page(
+      Routes.workItemStandalone(
+        'u1',
+        'contoso',
+        'DevOps Mobile App',
+        '15545',
+        comment: '6068143',
+      ),
+    ) as WorkItemDetailPage;
+    expect(standalone.id, 15545);
+    expect(standalone.project, 'DevOps Mobile App');
+    expect(standalone.initialCommentId, 6068143);
 
     final thread =
         page('$org/pull-requests/8334?thread=42511') as PullRequestDetailPage;

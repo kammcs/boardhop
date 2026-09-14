@@ -185,3 +185,18 @@ comment authors, reviewers and picked people). Registered in `AccountDeps` as `p
 PR description editing, HTML-field mentions (needs a Summernote-side picker spike), groups, tapping
 a person, `IdentityPicker` probe (separate NEXT-STEPS line), ADO e-mail verification (Kelly mentions
 themself once from the app and checks mail).
+
+## 7. What landed (2026-09-14)
+
+Four phases, all on `main`: M-A (`lib/core/text/mention.dart`, `PeopleRepository`, `MentionRecents`,
+`WorkItemComment.mentions`, the native `plainText` ports), M-B (`lib/features/shared/mention/`:
+`MentionController`, `MentionSource`/`MentionSuggestions`, `MentionField`, `MentionHint`, a
+diagnostics probe), M-C (`MentionSources` per host, the three composers, `MentionMarkdown` and the
+`RichTextView` anchor restyle, `mentionTextStyle`), M-D (acceptance, `Routes.workItemStandalone`,
+the Return-key fix, stale names after a reload). Report: `research/walkthroughs/2026-09-14-mentions.md`.
+§5 items 1–5 passed on the iPhone 17 and iPad Pro 13" simulators (both themes, xxxL, landscape,
+hardware keys through idb); item 2's push cannot fire for a self-mention (the relay's actor
+exclusion); item 6 is covered by widget tests only; item 7 (Android/Gboard) is blocked on this Mac's
+debug redirect URI. Spike s47 verified the `identities` read the PR-comment name path uses; s48 is
+the read-back probe.
+

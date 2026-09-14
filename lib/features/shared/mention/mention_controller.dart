@@ -149,6 +149,19 @@ class MentionController extends TextEditingController {
     super.dispose();
   }
 
+  /// Put a value back together with the tokens it had, without re-deriving
+  /// them from the text.
+  ///
+  /// The one caller is `MentionField`, undoing a stale editing state that
+  /// iOS computed from the text as it was *before* a pick landed (M-D
+  /// finding 2). The text is going back to something this controller wrote
+  /// itself, so the ordinary diff — which drops a token whose run changed —
+  /// would throw away the mention that was just inserted.
+  void restore(TextEditingValue snapshot, List<MentionToken> tokens) {
+    _tokens = List<MentionToken>.unmodifiable(tokens);
+    super.value = snapshot;
+  }
+
   /// Drop every token, leaving the text alone.
   ///
   /// A host calls this when it reuses the controller for a different draft

@@ -437,6 +437,24 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   ),
                 ],
               ),
+              // Outside the tab shell on purpose: a push that starts from
+              // a page which is already over the shell (the pull request
+              // detail page, its file diff) cannot add a second copy of
+              // the shell's page to the same navigator. `Routes
+              // .workItemStandalone` is the only thing that builds this
+              // location; everything inside the shell keeps using the
+              // branch route below, dock and all.
+              GoRoute(
+                path: ':project/work-item/:id',
+                builder: (_, state) => WorkItemDetailPage(
+                  org: state.pathParameters['org']!,
+                  project: state.pathParameters['project']!,
+                  id: int.parse(state.pathParameters['id']!),
+                  initialCommentId: int.tryParse(
+                    state.uri.queryParameters['comment'] ?? '',
+                  ),
+                ),
+              ),
               GoRoute(
                 path: ':project/pull-requests',
                 builder: (_, state) => PullRequestsPage(
