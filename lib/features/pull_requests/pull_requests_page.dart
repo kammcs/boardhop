@@ -8,9 +8,8 @@ import '../../core/util/format.dart';
 import '../../data/models/pull_request.dart';
 import '../../data/repositories/pull_request_repository.dart';
 import '../../theme/theme.dart';
-import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
-import 'widgets/pr_visuals.dart';
+import 'widgets/pull_request_tile.dart';
 
 /// Pull request inbox: to review, created by me, or all active, across the
 /// organization (spike S4's org-level list) or inside one project.
@@ -226,7 +225,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
                   ),
                 ),
               for (final pr in _items)
-                _PullRequestTile(
+                PullRequestTile(
                   pr: pr,
                   showProject: !inProject,
                   onTap: () => _open(pr),
@@ -235,71 +234,6 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PullRequestTile extends StatelessWidget {
-  const _PullRequestTile({
-    required this.pr,
-    required this.showProject,
-    required this.onTap,
-  });
-
-  final PullRequest pr;
-  final bool showProject;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final vote = pr.overallVote;
-    return ListTile(
-      leading: IdentityAvatar(identity: pr.createdBy, radius: 16),
-      title: Text(pr.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: Spacing.xs),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${showProject ? '${pr.projectName} / ' : ''}${pr.repositoryName} · !${pr.id}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-            Row(
-              children: [
-                if (pr.isDraft) ...[
-                  const DraftChip(),
-                  const SizedBox(width: Spacing.xs),
-                ],
-                Icon(voteIcon(vote), size: 14, color: voteColor(context, vote)),
-                const SizedBox(width: Spacing.xs),
-                Flexible(
-                  child: Text(
-                    '${pr.sourceBranch} → ${pr.targetBranch}',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      trailing: Text(
-        relativeTime(pr.creationDate),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-      isThreeLine: true,
-      onTap: onTap,
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/routes.dart';
 import '../../core/util/ado_tiles.dart';
 import '../../core/util/format.dart';
 import '../../data/models/git_repository.dart';
@@ -20,6 +21,7 @@ import '../../theme/theme.dart';
 import '../pipelines/pipelines_page.dart' show RunTile;
 import '../shared/account_scope.dart';
 import '../shared/reload_on_return.dart';
+import '../search/search_page.dart';
 import '../shared/widgets/ado_tile.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 
@@ -229,6 +231,22 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
           onPressed: () =>
               context.go('${orgRoute(context, widget.org)}/projects'),
         ),
+        actions: [
+          // Decision D3: the one way into search, from the project's
+          // landing tab; the dock keeps its four tabs.
+          IconButton(
+            tooltip: 'Search',
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push(
+              Routes.search(
+                AccountScope.of(context),
+                widget.org,
+                widget.project,
+              ),
+            ),
+          ),
+          const SizedBox(width: Spacing.sm),
+        ],
       ),
       body: StreamBuilder<List<Project>>(
         stream: context.read<ProjectRepository>().watch(widget.org),
@@ -407,7 +425,14 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
                     leading: const Icon(Icons.manage_search),
                     title: const Text('Search code'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('$base/code-search'),
+                    onTap: () => context.push(
+                      Routes.search(
+                        AccountScope.of(context),
+                        widget.org,
+                        widget.project,
+                        kind: SearchKind.code.wire,
+                      ),
+                    ),
                   ),
                 ],
               ),

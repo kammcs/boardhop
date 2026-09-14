@@ -29,6 +29,32 @@ abstract final class Routes {
       '${Routes.project(accountId, org, project)}'
       '/work-items/${Uri.encodeComponent(id)}';
 
+  /// Search inside one project (research/15 §4). The query carries what the
+  /// page is showing so a deep link, a restart or a See-all push reopens the
+  /// same answer: `q` the term, `scope` `project` (the default, omitted) or
+  /// `org`, `kind` one of `wi`, `code`, `pr` for a See-all view and unset for
+  /// the grouped one.
+  static String search(
+    String accountId,
+    String org,
+    String project, {
+    String? q,
+    String? scope,
+    String? kind,
+  }) {
+    final term = q?.trim() ?? '';
+    final params = <String, String>{};
+    if (term.isNotEmpty) params['q'] = term;
+    // The default scope is left out, so the plain route is the plain view.
+    if (scope != null && scope != 'project') params['scope'] = scope;
+    if (kind != null) params['kind'] = kind;
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final base = '${Routes.project(accountId, org, project)}/search';
+    return query.isEmpty ? base : '$base?$query';
+  }
+
   static String pipelines(String accountId, String org, String project) =>
       '${Routes.project(accountId, org, project)}/pipelines';
 

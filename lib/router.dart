@@ -36,6 +36,7 @@ import 'features/repos/file_edit_page.dart';
 import 'features/repos/file_page.dart';
 import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
+import 'features/search/search_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
 import 'features/shared/splash_page.dart';
@@ -122,6 +123,24 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                         builder: (_, state) => ProjectHomePage(
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
+                        ),
+                      ),
+                      // Search lives in the Home branch, which is where it
+                      // is opened from, so it keeps the shell's dock and
+                      // its paddings (research/15 §4). `kind` unset is the
+                      // grouped view; set, the See-all list of that kind.
+                      GoRoute(
+                        path: ':project/search',
+                        builder: (_, state) => SearchPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                          initialQuery: state.uri.queryParameters['q'],
+                          scope: SearchScope.fromWire(
+                            state.uri.queryParameters['scope'],
+                          ),
+                          kind: SearchKind.fromWire(
+                            state.uri.queryParameters['kind'],
+                          ),
                         ),
                       ),
                     ],

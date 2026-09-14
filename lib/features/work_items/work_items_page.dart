@@ -22,6 +22,33 @@ import 'widgets/work_view_switch.dart';
 int? selectionAfterCreate(int? created, Breakpoint breakpoint) =>
     breakpoint.isAtLeastMedium ? created : null;
 
+/// The loaded list narrowed by what was typed in the filter field
+/// (decision D10 of research/15).
+///
+/// Local only: it looks at the id, title, type, state and assignee of the
+/// items already on the device, so it answers while the field is being
+/// typed in and works offline. Every word has to match something, so
+/// "bug ada" finds Ada's bugs; search (the magnifier on Home) is what
+/// reaches the rest of the project.
+List<WorkItem> filterWorkItems(List<WorkItem> items, String query) {
+  final words = query.toLowerCase().split(RegExp(r'\s+'))
+    ..removeWhere((w) => w.isEmpty);
+  if (words.isEmpty) return items;
+  return [
+    for (final item in items)
+      if (words.every(
+        (word) => [
+          '${item.id}',
+          item.title,
+          item.type,
+          item.state,
+          item.assignedTo?.displayName ?? '',
+        ].any((field) => field.toLowerCase().contains(word)),
+      ))
+        item,
+  ];
+}
+
 /// Work item lists in one project: "assigned to me", "recently updated" or
 /// a saved query, rendered from the drift cache and refreshed on open, on
 /// pull and when the list changes.
@@ -45,6 +72,14 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
   List<SavedQuery>? _queries;
   SavedQuery? _query;
   int? _selectedId;
+  final _filterController = TextEditingController();
+  String _filter = '';
+
+  @override
+  void dispose() {
+    _filterController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -100,6 +135,9 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
       _listLabel = label;
       _query = query;
       _loadedOnce = false;
+      // The filter belongs to the list that was on screen.
+      _filterController.clear();
+      _filter = '';
     });
     _refresh();
   }
@@ -241,7 +279,8 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           _listKey,
         ),
         builder: (context, snapshot) {
-          final items = snapshot.data ?? const <WorkItem>[];
+          final all = snapshot.data ?? const <WorkItem>[];
+          final items = filterWorkItems(all, _filter);
           return ContentColumn(
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -292,12 +331,52 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    Spacing.lg,
+                    Spacing.xs,
+                    Spacing.lg,
+                    Spacing.sm,
+                  ),
+                  child: TextField(
+                    controller: _filterController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (text) => setState(() => _filter = text),
+                    decoration: InputDecoration(
+                      hintText: 'Filter these items',
+                      hintMaxLines: 1,
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.filter_alt_outlined),
+                      suffixIcon: _filter.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear filter',
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _filterController.clear();
+                                setState(() => _filter = '');
+                              },
+                            ),
+                    ),
+                  ),
+                ),
                 if (_error != null)
                   ListTile(
                     leading: Icon(Icons.error_outline, color: scheme.error),
                     title: Text(_error!),
                   ),
-                if (items.isEmpty && _loadedOnce && !_refreshing)
+                if (items.isEmpty && all.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(Spacing.xl),
+                    child: Text(
+                      'No item here matches "$_filter".',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                if (all.isEmpty && _loadedOnce && !_refreshing)
                   Padding(
                     padding: const EdgeInsets.all(Spacing.xl),
                     child: Column(

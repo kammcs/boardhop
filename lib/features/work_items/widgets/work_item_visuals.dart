@@ -38,6 +38,12 @@ class WorkItemVisuals {
     return context.boardhopColors.stateCategory(state?.category ?? '');
   }
 
+  /// The icon id a type name suggests when the project's type list is not
+  /// at hand. Public because search results name their type but carry no
+  /// `WorkItemType` (research/15: the Search API answers with field values
+  /// only).
+  static String guessIcon(String type) => _guessIcon(type);
+
   static String _guessIcon(String type) => switch (type.toLowerCase()) {
     'bug' => 'icon_bug',
     'task' => 'icon_task',
@@ -49,6 +55,26 @@ class WorkItemVisuals {
     _ => '',
   };
 }
+
+/// The state category a state name belongs to, guessed from the name.
+///
+/// The project's type definitions carry the real category, but a search hit
+/// has only the state's name (research/15 §2), and every process template
+/// ships these names. An unknown name falls back to `Proposed`, which is
+/// what [BoardhopColors.stateCategory] does with anything it cannot place.
+String guessStateCategory(String state) => switch (state.toLowerCase()) {
+  'new' || 'proposed' || 'to do' || 'open' || 'approved' => 'Proposed',
+  'active' ||
+  'committed' ||
+  'in progress' ||
+  'doing' ||
+  'design' ||
+  'inspect' => 'InProgress',
+  'resolved' || 'in review' || 'ready' => 'Resolved',
+  'closed' || 'done' || 'completed' => 'Completed',
+  'removed' || 'cut' => 'Removed',
+  _ => '',
+};
 
 class StateDot extends StatelessWidget {
   const StateDot({super.key, required this.color, this.size = 10});

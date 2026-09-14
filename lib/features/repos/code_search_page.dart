@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
@@ -8,7 +7,7 @@ import '../../data/models/git_repository.dart';
 import '../../data/repositories/search_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
-import 'widgets/item_actions.dart';
+import 'widgets/code_hit_list.dart';
 
 /// Code search over the project, or one repository of it, through the
 /// Code Search extension. Results carry no snippets, so a hit opens the
@@ -142,81 +141,27 @@ class _CodeSearchPageState extends State<CodeSearchPage> {
     }
   }
 
-  void _open(CodeSearchHit hit) {
-    final base =
-        '${projectRoute(context, widget.org, widget.project)}'
-        '/repos/${Uri.encodeComponent(hit.repositoryName)}';
-    final q = <String, String>{
-      if (hit.branch != null) 'ref': hit.branch!,
-      'path': hit.path,
-      'find': _query,
-    };
-    context.push(
-      '$base/file?${q.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}',
-    );
-  }
+  void _open(CodeSearchHit hit) => openCodeHit(
+    context,
+    org: widget.org,
+    project: widget.project,
+    hit: hit,
+    query: _query,
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final hits = _hits ?? const <CodeSearchHit>[];
-    // Group by repository when searching the whole project.
-    final grouped = <String, List<CodeSearchHit>>{};
-    for (final h in hits) {
-      grouped.putIfAbsent(h.repositoryName, () => []).add(h);
-    }
-    final rows = <Widget>[];
-    for (final entry in grouped.entries) {
-      if (widget.repoName == null) {
-        rows.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Spacing.lg,
-              Spacing.lg,
-              Spacing.lg,
-              Spacing.xs,
-            ),
-            child: Text(
-              '${entry.key} · ${entry.value.length}',
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: scheme.primary,
-              ),
-            ),
-          ),
-        );
-      }
-      for (final h in entry.value) {
-        rows.add(
-          ListTile(
-            leading: Icon(
-              itemIcon(GitItem(path: h.path, isFolder: false)),
-              color: scheme.onSurfaceVariant,
-            ),
-            title: Text(
-              h.fileName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Text(
-              [
-                h.folder,
-                if (h.branch != null) h.branch!,
-                if (h.contentMatches > 0)
-                  '${h.contentMatches} match${h.contentMatches == 1 ? '' : 'es'}',
-                if (h.fileNameMatches > 0) 'name matches',
-              ].join(' · '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            onTap: () => _open(h),
-          ),
-        );
-      }
-    }
+    final rows = codeHitRows(
+      context: context,
+      hits: hits,
+      // A repository-scoped search has one group; its header would only
+      // repeat what the app bar already says.
+      grouped: widget.repoName == null,
+      onTap: _open,
+    );
     return Scaffold(
       appBar: AppBar(
         title: Column(

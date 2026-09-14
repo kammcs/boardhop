@@ -40,6 +40,20 @@ String formatDuration(Duration? d) {
   return '${s ~/ 86400}d ${(s % 86400 ~/ 3600)}h';
 }
 
+/// "7", "1,234", "1,234,567": a count in a header, grouped in threes.
+///
+/// Hand-rolled rather than `intl`: the app carries no locale data and a
+/// search header is the only place a five-figure number is shown.
+String formatCount(int n) {
+  final digits = n.abs().toString();
+  final buffer = StringBuffer(n < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return buffer.toString();
+}
+
 /// "Kelly Kamm" → "KK", "kelly" → "K", "" → "?".
 String initials(String name) {
   final parts = name
