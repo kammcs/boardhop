@@ -1,0 +1,19 @@
+# The Android half of shipping Boardhop, mirroring multipass's lane: the AAB
+# is built by Flutter (tool/ship-android.sh, so the .env defines and the build
+# number are applied the same way as for iOS) and this lane only uploads it.
+default_platform(:android)
+
+platform :android do
+  desc "Upload the AAB Flutter built to the Play internal track"
+  lane :internal do |options|
+    upload_to_play_store(
+      track: options[:track] || "internal",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: true,
+    )
+  end
+end

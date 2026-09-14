@@ -1,0 +1,4 @@
+# Google Play upload (tool/ship-android.sh). The service account JSON is
+# gitignored under android/keystore/; it is never printed or copied elsewhere.
+json_key_file("keystore/play-service-account.json")
+package_name("com.kammcs.boardhop")

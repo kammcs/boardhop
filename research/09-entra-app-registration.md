@@ -150,13 +150,21 @@ $b64 = [Convert]::ToBase64String($bytes)
 "$b64  ->  msauth://com.kammcs.boardhop/" + [Uri]::EscapeDataString($b64)
 ```
 
-Release keystore:
+Release (upload) keystore, generated on the Mac on 2026-09-14 (`android/keystore/boardhop-upload.jks`, alias `upload`, passwords in `android/keystore.properties`, both gitignored):
 
 ```bash
-keytool -exportcert -alias <release-alias> -keystore <release.keystore> | openssl sha1 -binary | openssl base64
+keytool -exportcert -alias upload -keystore android/keystore/boardhop-upload.jks -storepass "$(sed -n 's/^storePassword=//p' android/keystore.properties)" | openssl sha1 -binary | openssl base64
 ```
 
-Google Play app signing: when Play App Signing is enabled, Google re-signs the store build with its own key. Take the **SHA-1** from Play Console → **Test and release → App integrity → App signing key certificate**, convert it to base64 (hex → bytes → base64), and register that hash too. Without it, sign-in works in debug and internal builds and fails for store installs.
+Result: hash `84xsSJcgEyk8T+PmW/DilFwYqFo=` (certificate SHA-1 `F3:8C:6C:48:97:20:13:29:3C:4F:E3:E6:5B:F0:E2:94:5C:18:A8:5A`), stored in `android/secret.properties` as `MSAL_RELEASE_SIGNATURE_HASH`, which URL-encodes to
+
+```
+msauth://com.kammcs.boardhop/84xsSJcgEyk8T%2BPmW%2FDilFwYqFo%3D
+```
+
+This is the redirect for side-loaded release builds (`flutter build apk --release`). A Play-installed build carries Google's app signing certificate instead; see below.
+
+Google Play app signing: when Play App Signing is enabled, Google re-signs the store build with its own key. Take the **SHA-1** from Play Console → **Test and release → App integrity → App signing key certificate**, convert it to base64 (hex → bytes → base64), and register that hash too. Without it, sign-in works in debug and internal builds and fails for store installs. Conversion on the Mac: `echo <SHA-1 with colons> | tr -d ':' | xxd -r -p | openssl base64`. Pending as of 2026-09-14: the first internal-track upload (1.0.0 build 3) is in, Kelly reads the certificate off Play Console next.
 
 Register each resulting value in A3, URL-encoded.
 

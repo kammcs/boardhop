@@ -20,6 +20,19 @@ if (secretPropertiesFile.exists()) {
 val msalDebugSignatureHash = secretProperties.getProperty("MSAL_DEBUG_SIGNATURE_HASH", "MISSING_SEE_secret.properties.example")
 val msalReleaseSignatureHash = secretProperties.getProperty("MSAL_RELEASE_SIGNATURE_HASH", msalDebugSignatureHash)
 
+// Release signing (Play App Signing model, as the multipass runbook does): a
+// 4096-bit RSA upload key in the gitignored android/keystore/ with its
+// passwords in android/keystore.properties. Play re-signs uploads with the app
+// signing key it holds, so the MSAL redirect needs that certificate's hash as
+// well (research/09 A5). Unlike multipass there is no silent fallback to the
+// debug key for a release build: an AAB signed with the debug key is rejected
+// by Play at upload, which is later and more confusing than failing here.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) keystorePropertiesFile.inputStream().use { load(it) }
+}
+val hasUploadKey = keystoreProperties.getProperty("storeFile") != null
+
 android {
     namespace = "com.kammcs.boardhop"
     compileSdk = flutter.compileSdkVersion
@@ -54,6 +67,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasUploadKey) {
+            create("upload") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             manifestPlaceholders["msalSignatureHash"] = msalDebugSignatureHash
@@ -65,9 +89,14 @@ android {
         }
         release {
             manifestPlaceholders["msalSignatureHash"] = msalReleaseSignatureHash
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasUploadKey) {
+                signingConfigs.getByName("upload")
+            } else {
+                // `flutter run --release` on a machine without the upload key
+                // still works for a local check; `flutter build appbundle` on
+                // such a machine is refused below.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
@@ -99,4 +128,13 @@ dependencies {
     //    grouped, private notifications PushNotifier posts.
     implementation("com.microsoft.identity.client:msal:8.3.+")
     implementation("androidx.core:core:1.13.1")
+}
+
+// A release bundle is only ever for Play, and Play only accepts the upload key.
+tasks.matching { it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        check(hasUploadKey) {
+            "android/keystore.properties is missing: bundleRelease needs the upload key (see research/09 A5)"
+        }
+    }
 }
