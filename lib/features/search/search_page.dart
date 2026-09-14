@@ -168,6 +168,15 @@ class _SearchPageState extends State<SearchPage> {
   /// an answer to a query that has been typed over.
   int _seq = 0;
 
+  /// True while what is typed has not been searched yet: the debounce is
+  /// still running, or the page was opened with a term and its first send
+  /// is a post-frame callback away.
+  ///
+  /// Without it the sections draw as "No work items / No code results / No
+  /// pull requests" for those 400 ms — the page answering a question it has
+  /// not asked (found on the iPhone, 2026-09-14).
+  late bool _pending = SearchRepository.isSearchable(widget.initialQuery ?? '');
+
   /// The term the results on screen belong to.
   String _query = '';
   bool _loadingMore = false;
@@ -222,13 +231,13 @@ class _SearchPageState extends State<SearchPage> {
   // ------------------------------------------------------------- typing
 
   void _onChanged(String text) {
-    setState(() {}); // the clear button and the recents/hint switch
     _debounce?.cancel();
     if (!SearchRepository.isSearchable(text)) {
       // Nothing is sent under three characters, and whatever an earlier
       // query left on screen no longer belongs to what is in the field.
       _seq++;
       setState(() {
+        _pending = false;
         _query = '';
         _workItems.reset();
         _code.reset();
@@ -236,6 +245,9 @@ class _SearchPageState extends State<SearchPage> {
       });
       return;
     }
+    // The clear button, the recents/hint switch, and the sections waiting
+    // for the debounce rather than claiming to have found nothing.
+    setState(() => _pending = true);
     _debounce = Timer(SearchPage.debounce, () => _run(text));
   }
 
@@ -317,6 +329,7 @@ class _SearchPageState extends State<SearchPage> {
     if (!SearchRepository.isSearchable(term)) return;
     final seq = ++_seq;
     setState(() {
+      _pending = false;
       _query = term;
       for (final entry in {
         SearchKind.workItems: _workItems,
@@ -707,13 +720,25 @@ class _SearchPageState extends State<SearchPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final typed = _controller.text.trim();
-    final busy = _workItems.loading || _code.loading || _pullRequests.loading;
+    final busy =
+        _pending ||
+        _workItems.loading ||
+        _code.loading ||
+        _pullRequests.loading;
+    // Every row of this list carries a key. The list's children come and go
+    // — the progress bar at the top most of all — and a `ListView` whose
+    // children have no keys reuses its elements by position, so one row
+    // appearing at the top re-slots every section below it. The iPad showed
+    // the grouped view stuck with only its first section, with the other
+    // two neither built nor scrollable to (2026-09-14); keys make the reuse
+    // follow the section rather than the slot.
     return [
-      if (busy) const LinearProgressIndicator(),
+      if (busy) const LinearProgressIndicator(key: ValueKey('search-busy')),
       if (typed.isEmpty)
         ..._recentsBlock(context)
       else if (!SearchRepository.isSearchable(typed))
         Padding(
+          key: const ValueKey('search-too-short'),
           padding: const EdgeInsets.all(Spacing.xl),
           child: Text(
             'Type at least ${SearchRepository.minLength} characters.',
@@ -805,58 +830,72 @@ class _SearchPageState extends State<SearchPage> {
     final workItems = _workItems.value;
     final code = _code.value;
     final pullRequests = _pullRequests.value;
+    // Keyed by kind, not by position: see [_body].
+    Widget keyed(SearchKind kind, Widget child) => KeyedSubtree(
+      key: ValueKey('search-section-${kind.wire}'),
+      child: child,
+    );
     return [
-      _section(
-        context,
-        kind: SearchKind.workItems,
-        slice: _workItems,
-        total: workItems?.total ?? 0,
-        empty: 'No work items',
-        rows: [
-          for (final hit
-              in (workItems?.items ?? const <WorkItemSearchHit>[]).take(
-                SearchPage.groupedRows,
-              ))
-            WorkItemHitTile(
-              hit: hit,
-              showProject: _scope == SearchScope.org,
-              onTap: () => _openWorkItem(hit),
-            ),
-        ],
-      ),
-      _section(
-        context,
-        kind: SearchKind.code,
-        slice: _code,
-        total: code?.count ?? 0,
-        empty: 'No code results',
-        rows: codeHitRows(
-          context: context,
-          hits: (code?.hits ?? const <CodeSearchHit>[])
-              .take(SearchPage.groupedRows)
-              .toList(),
-          grouped: false,
-          showProject: _scope == SearchScope.org,
-          onTap: _openCode,
+      keyed(
+        SearchKind.workItems,
+        _section(
+          context,
+          kind: SearchKind.workItems,
+          slice: _workItems,
+          total: workItems?.total ?? 0,
+          empty: 'No work items',
+          rows: [
+            for (final hit
+                in (workItems?.items ?? const <WorkItemSearchHit>[]).take(
+                  SearchPage.groupedRows,
+                ))
+              WorkItemHitTile(
+                hit: hit,
+                showProject: _scope == SearchScope.org,
+                onTap: () => _openWorkItem(hit),
+              ),
+          ],
         ),
       ),
-      _section(
-        context,
-        kind: SearchKind.pullRequests,
-        slice: _pullRequests,
-        total: pullRequests?.total ?? 0,
-        empty: 'No pull requests',
-        rows: [
-          for (final hit
-              in (pullRequests?.items ?? const <PullRequestSearchHit>[]).take(
-                SearchPage.groupedRows,
-              ))
-            PullRequestTile(
-              pr: hit.pullRequest,
-              showProject: _scope == SearchScope.org,
-              onTap: () => _openPullRequest(hit),
-            ),
-        ],
+      keyed(
+        SearchKind.code,
+        _section(
+          context,
+          kind: SearchKind.code,
+          slice: _code,
+          total: code?.count ?? 0,
+          empty: 'No code results',
+          rows: codeHitRows(
+            context: context,
+            hits: (code?.hits ?? const <CodeSearchHit>[])
+                .take(SearchPage.groupedRows)
+                .toList(),
+            grouped: false,
+            showProject: _scope == SearchScope.org,
+            onTap: _openCode,
+          ),
+        ),
+      ),
+      keyed(
+        SearchKind.pullRequests,
+        _section(
+          context,
+          kind: SearchKind.pullRequests,
+          slice: _pullRequests,
+          total: pullRequests?.total ?? 0,
+          empty: 'No pull requests',
+          rows: [
+            for (final hit
+                in (pullRequests?.items ?? const <PullRequestSearchHit>[]).take(
+                  SearchPage.groupedRows,
+                ))
+              PullRequestTile(
+                pr: hit.pullRequest,
+                showProject: _scope == SearchScope.org,
+                onTap: () => _openPullRequest(hit),
+              ),
+          ],
+        ),
       ),
     ];
   }
@@ -890,24 +929,11 @@ class _SearchPageState extends State<SearchPage> {
         ],
       );
     }
-    if (slice.loading && rows.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Spacing.lg,
-          vertical: Spacing.md,
-        ),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator.adaptive(strokeWidth: 2),
-            ),
-            const SizedBox(width: Spacing.md),
-            Expanded(child: Text('Searching ${kind.label}…', style: quiet)),
-          ],
-        ),
-      );
+    // `_pending` counts as loading: between the third character and the
+    // debounce nothing has been asked yet, so an empty slice must not be
+    // drawn as "No work items".
+    if ((slice.loading || _pending) && rows.isEmpty) {
+      return _searchingLine(context, kind);
     }
     if (rows.isEmpty) {
       // An empty section is one quiet line, not a header and a blank.
@@ -929,6 +955,36 @@ class _SearchPageState extends State<SearchPage> {
         _cacheLine(context, slice),
         ...rows,
       ],
+    );
+  }
+
+  /// "Searching Work items…", shown while a kind is in flight and while the
+  /// debounce is still running.
+  Widget _searchingLine(BuildContext context, SearchKind kind) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: Spacing.lg,
+        vertical: Spacing.md,
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator.adaptive(strokeWidth: 2),
+          ),
+          const SizedBox(width: Spacing.md),
+          Expanded(
+            child: Text(
+              'Searching ${kind.label}…',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1063,14 +1119,26 @@ class _SearchPageState extends State<SearchPage> {
       ],
     };
     return [
+      // Keyed like the grouped view, and for the same reason ([_body]):
+      // the chips row and the loading spinner come and go around rows that
+      // must not be re-slotted under them.
       if (kind == SearchKind.workItems) ..._facetChips(context),
       if (slice.error != null)
         ListTile(
+          key: const ValueKey('search-head'),
           leading: Icon(Icons.error_outline, color: scheme.error),
           title: Text(slice.error!),
         )
+      else if ((slice.loading || _pending) && rows.isEmpty)
+        // Nothing has been asked yet (the debounce) or nothing has come
+        // back: either way the count line would be a false "No results".
+        KeyedSubtree(
+          key: const ValueKey('search-head'),
+          child: _searchingLine(context, kind),
+        )
       else ...[
         Padding(
+          key: const ValueKey('search-head'),
           padding: const EdgeInsets.fromLTRB(
             Spacing.lg,
             Spacing.md,
@@ -1087,11 +1155,15 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ),
         ),
-        _cacheLine(context, slice),
+        KeyedSubtree(
+          key: const ValueKey('search-cache-line'),
+          child: _cacheLine(context, slice),
+        ),
       ],
       ...rows,
       if (_loadingMore)
         const Padding(
+          key: ValueKey('search-loading-more'),
           padding: EdgeInsets.all(Spacing.lg),
           child: Center(
             child: SizedBox(
@@ -1112,6 +1184,7 @@ class _SearchPageState extends State<SearchPage> {
     if (types.isEmpty && states.isEmpty) return const [];
     return [
       SizedBox(
+        key: const ValueKey('search-chips'),
         // The row follows the text scale: a fixed height clipped the chip
         // labels at the largest sizes (the work item list, iPad).
         height: MediaQuery.textScalerOf(context).scale(48).clamp(48.0, 96.0),

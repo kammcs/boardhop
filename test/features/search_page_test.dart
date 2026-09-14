@@ -340,6 +340,36 @@ void main() {
       expect(find.textContaining('at least 3'), findsOneWidget);
     });
 
+    testWidgets('the sections wait out the debounce instead of reporting '
+        'nothing found', (tester) async {
+      await pump(tester);
+      await tester.enterText(field(), 'board');
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(search.workItemCalls, isEmpty, reason: 'still in the debounce');
+      expect(find.text('No work items'), findsNothing);
+      expect(find.text('No code results'), findsNothing);
+      expect(find.text('No pull requests'), findsNothing);
+      expect(find.textContaining('Searching Work items'), findsOneWidget);
+
+      // Once the empty answer is really in, the sections say so.
+      await tester.pumpAndSettle();
+      expect(find.text('No work items'), findsOneWidget);
+    });
+
+    testWidgets('a See-all list says it is searching, not that it found '
+        'nothing', (tester) async {
+      await pump(tester, kind: SearchKind.workItems);
+      await tester.enterText(field(), 'board');
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('No work items for'), findsNothing);
+      expect(find.textContaining('Searching Work items'), findsOneWidget);
+
+      await tester.pumpAndSettle();
+      expect(find.textContaining('No work items for'), findsOneWidget);
+    });
+
     testWidgets('a query goes 400 ms after the last keystroke, once', (
       tester,
     ) async {
