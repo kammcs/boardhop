@@ -6,6 +6,7 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 import '../../../core/text/mention.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../../shared/attachments/inline_attachments.dart';
 import '../../shared/dismiss_keyboard_on_drag.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
@@ -36,6 +37,7 @@ class DiffView extends StatefulWidget {
     this.onApplySuggestion,
     this.mentions,
     this.mentionNames = const {},
+    this.attachments,
     this.onOpenMention,
   });
 
@@ -72,6 +74,9 @@ class DiffView extends StatefulWidget {
 
   /// Lower-cased identity GUID → display name for the comments on screen.
   final Map<String, String> mentionNames;
+
+  /// Images and files the threads under these lines carry (research/17 §4).
+  final InlineAttachments? attachments;
 
   /// Tapping a `#123` or `!456` inside a comment.
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -247,6 +252,7 @@ class _DiffViewState extends State<DiffView> {
           busy: widget.posting,
           mentions: widget.mentions,
           mentionNames: widget.mentionNames,
+          attachments: widget.attachments,
           onOpenMention: widget.onOpenMention,
           onReply: widget.onReply == null
               ? null
@@ -411,6 +417,7 @@ class _ThreadView extends StatelessWidget {
     required this.onApplySuggestion,
     this.mentions,
     this.mentionNames = const {},
+    this.attachments,
     this.onOpenMention,
   });
 
@@ -422,6 +429,9 @@ class _ThreadView extends StatelessWidget {
   final bool busy;
   final MentionSource? mentions;
   final Map<String, String> mentionNames;
+
+  /// Images and files the threads under these lines carry (research/17 §4).
+  final InlineAttachments? attachments;
   final void Function(MentionKind kind, String id)? onOpenMention;
   final Future<bool> Function(String text)? onReply;
   final Future<bool> Function(String status)? onSetStatus;
@@ -457,6 +467,7 @@ class _ThreadView extends StatelessWidget {
               busy: busy,
               mentions: mentions,
               mentionNames: mentionNames,
+              attachments: attachments,
               onOpenMention: onOpenMention,
               onReply: onReply,
               onSetStatus: onSetStatus,

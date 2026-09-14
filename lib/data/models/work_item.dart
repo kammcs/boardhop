@@ -632,6 +632,7 @@ class WorkItemComment extends Equatable {
     this.modifiedDate,
     this.format,
     this.mentions = const [],
+    this.url,
   });
 
   factory WorkItemComment.fromJson(Map<String, dynamic> json) =>
@@ -647,6 +648,7 @@ class WorkItemComment extends Equatable {
         modifiedDate: DateTime.tryParse(json['modifiedDate'] as String? ?? ''),
         format: json['format'] as String?,
         mentions: mentionsOf(json['mentions']),
+        url: json['url'] as String?,
       );
 
   /// The `mentions[]` a comment read carries, as identity GUIDs.
@@ -684,6 +686,25 @@ class WorkItemComment extends Equatable {
   /// Identity GUIDs the service recorded as mentioned by this comment, newest
   /// read wins. Empty for every comment that mentions nobody.
   final List<String> mentions;
+
+  /// The comment's own `_apis` URL. Kept for one reason: it carries the
+  /// organization and the project GUID, which is what `witAttachmentBase`
+  /// rebuilds a sentinel-stripped image URL from — the derivation lives with
+  /// the other attachment rules, not on the model.
+  final String? url;
+
+  /// The HTML to render for this comment.
+  ///
+  /// [renderedText] for a `markdown` comment — the service turns `![x](url)`
+  /// into an `<img>` with the absolute URL, exactly as wanted. But on the
+  /// `html` route it rewrites every image `src` to
+  /// `"\u0006/{guid}?fileName=…"`: a U+0006 sentinel and a base-less path
+  /// that resolves to nothing, which is why 12 of 33 client comment images
+  /// are broken in the app today. [text] on that route is the same HTML with
+  /// the absolute URLs intact, so it is what gets drawn (spike w32 §3,
+  /// research/17 §1 bug (a)).
+  String get displayHtml =>
+      format == 'html' && text.isNotEmpty ? text : renderedText;
 
   @override
   List<Object?> get props => [id, modifiedDate];

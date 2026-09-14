@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 
 import '../../../core/text/mention.dart';
+import '../../shared/attachments/attachment_links.dart';
+import '../../shared/attachments/inline_attachments.dart';
 import '../../shared/mention/mention_markdown.dart';
 import '../../shared/mention/mention_style.dart';
 
@@ -24,6 +26,8 @@ class RichTextView extends StatelessWidget {
     this.headers = const {},
     this.mentionNames = const {},
     this.onOpenMention,
+    this.attachments,
+    this.attachmentBase,
   });
 
   final String content;
@@ -41,6 +45,17 @@ class RichTextView extends StatelessWidget {
   /// Tapping a work item or pull request reference.
   final void Function(MentionKind kind, String id)? onOpenMention;
 
+  /// Images and file links inside a Markdown body: the bearer token and the
+  /// way to open one. Falls back to [headers] alone, so a caller that only
+  /// has the token still gets authed images (research/17 §4).
+  final InlineAttachments? attachments;
+
+  /// `…/_apis/wit/attachments` for the project this content belongs to,
+  /// which is what puts an image back together when the service sent the
+  /// sentinel form (see [normalizeAttachmentHtml]). Null leaves the src
+  /// alone rather than guessing a project.
+  final String? attachmentBase;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -57,12 +72,22 @@ class RichTextView extends StatelessWidget {
         data: content,
         names: mentionNames,
         onOpen: onOpenMention,
+        attachments:
+            attachments ??
+            (headers.isEmpty ? null : InlineAttachments(headers: headers)),
       );
     }
     return HtmlWidget(
-      content,
+      // The comments API rewrites an image src to `\x06/{guid}?fileName=…`
+      // inside the rendered form of an html-format comment (spike w32 §3).
+      // It has to be repaired here rather than in the image hook below,
+      // because the HTML renderer resolves a relative src against its own
+      // base URL first and drops the image when there is none — the hook is
+      // never reached.
+      normalizeAttachmentHtml(content, base: attachmentBase),
       textStyle: theme.textTheme.bodyMedium,
-      factoryBuilder: () => _AuthedWidgetFactory(headers, onOpenMention),
+      factoryBuilder: () =>
+          _AuthedWidgetFactory(headers, onOpenMention, attachmentBase),
       onErrorBuilder: (context, element, error) => Text(
         'Could not render part of this field.',
         style: theme.textTheme.bodySmall?.copyWith(
@@ -124,14 +149,21 @@ class MentionAnchor {
 }
 
 class _AuthedWidgetFactory extends WidgetFactory {
-  _AuthedWidgetFactory(this.headers, this.onOpenMention);
+  _AuthedWidgetFactory(this.headers, this.onOpenMention, this.attachmentBase);
 
   final Map<String, String> headers;
   final void Function(MentionKind kind, String id)? onOpenMention;
 
+  /// See [RichTextView.attachmentBase]. Belt and braces: the body is
+  /// normalised before it is parsed, so a sentinel should never reach here.
+  final String? attachmentBase;
+
   @override
   ImageProvider? imageProviderFromNetwork(String url) =>
-      CachedNetworkImageProvider(url, headers: headers);
+      CachedNetworkImageProvider(
+        normalizeAttachmentUrl(url, base: attachmentBase),
+        headers: headers,
+      );
 
   /// Mention anchors never become live links.
   ///

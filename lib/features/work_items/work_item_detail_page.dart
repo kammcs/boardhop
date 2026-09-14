@@ -21,6 +21,9 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
+import '../shared/attachments/attachment_links.dart';
+import '../shared/attachments/inline_attachment_source.dart';
+import '../shared/attachments/inline_attachments.dart';
 import '../shared/anchor_highlight.dart';
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
@@ -115,6 +118,11 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
   /// once the bearer token is known; no `upload`, because adding a file is
   /// the form's job.
   AttachmentSource? _attachments;
+
+  /// The same source as [_attachments], in the shape a Markdown or HTML
+  /// body needs: images inside a comment are fetched and opened exactly the
+  /// way an attachment row is (research/17 §4).
+  InlineAttachments? _inlineAttachments;
 
   /// The fallback rendering, for an item whose type's layout is not there
   /// yet (the first open of a cached item without a connection): the
@@ -256,6 +264,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         bytes: forms.attachmentBytes,
         headers: _headers,
       );
+      _inlineAttachments = inlineAttachmentsOf(_attachments!);
       _me ??= auth.accountById(accountId)?.username;
       final types = await repo.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
@@ -680,6 +689,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
                 content: item.field<String>(entry.key)!,
                 format: item.formatOf(entry.key),
                 headers: _headers,
+                attachments: _inlineAttachments,
                 mentionNames: _mentionNames,
                 onOpenMention: _openMention,
               ),
@@ -908,6 +918,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
                                 child: _Discussion(
                                   comments: _comments,
                                   headers: _headers,
+                                  attachments: _inlineAttachments,
                                   onOpenMention: _openMention,
                                   keyFor: (id) => _commentKeys.putIfAbsent(
                                     id,
@@ -1053,12 +1064,17 @@ class _Discussion extends StatelessWidget {
     required this.comments,
     required this.headers,
     required this.keyFor,
+    this.attachments,
     this.highlighted,
     this.onOpenMention,
   });
 
   final List<WorkItemComment>? comments;
   final Map<String, String> headers;
+
+  /// Opening an image or a file a comment carries. Null until the bearer
+  /// token is known.
+  final InlineAttachments? attachments;
 
   /// Tapping a `#123` or `!456` the service linked in a comment (M10).
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -1128,8 +1144,13 @@ class _Discussion extends StatelessWidget {
                         ),
                         const SizedBox(height: Spacing.xs),
                         RichTextView(
-                          content: c.renderedText,
+                          // Not `renderedText`: on the html route the
+                          // service strips the base off every image src
+                          // (spike w32 §3, research/17 §1 bug (a)).
+                          content: c.displayHtml,
                           headers: headers,
+                          attachments: attachments,
+                          attachmentBase: witAttachmentBase(c.url),
                           onOpenMention: onOpenMention,
                         ),
                       ],

@@ -4,6 +4,8 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../core/text/mention.dart';
+import '../attachments/attachment_links.dart';
+import '../attachments/inline_attachments.dart';
 import 'mention_style.dart';
 
 /// A Markdown body that draws mentions: `@<guid>` as the person's name,
@@ -22,6 +24,7 @@ class MentionMarkdown extends StatelessWidget {
     this.selectable = true,
     this.names = const {},
     this.onOpen,
+    this.attachments,
   });
 
   final String data;
@@ -32,6 +35,12 @@ class MentionMarkdown extends StatelessWidget {
 
   /// Tapping `#123` or `!456`. Null leaves them styled but inert.
   final void Function(MentionKind kind, String id)? onOpen;
+
+  /// The bearer token for the attachment images in this body and the way to
+  /// open one (research/17 §4). Null renders an image through the plain
+  /// network loader, which cannot reach an Azure DevOps attachment — so a
+  /// host that shows comments should always pass this.
+  final InlineAttachments? attachments;
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +54,27 @@ class MentionMarkdown extends StatelessWidget {
         styleSheet: MarkdownStyleSheet(a: mentionTextStyle(context)),
         inlineSyntaxes: [MentionSyntax()],
         builders: {MentionSyntax.personTag: MentionPersonBuilder()},
+        // Without this an attachment image is an empty `SizedBox`: the
+        // package's default builder is a bare `Image.network` with a silent
+        // error builder, and the fetch needs the bearer token
+        // (research/17 §1, bug (b)).
+        imageBuilder: (uri, title, alt) => InlineMarkdownImage(
+          url: uri.toString(),
+          alt: alt,
+          attachments: attachments,
+        ),
         onTapLink: (text, href, title) {
           final target = MentionHref.parse(href);
-          if (target != null) onOpen?.call(target.$1, target.$2);
+          if (target != null) {
+            onOpen?.call(target.$1, target.$2);
+            return;
+          }
+          // A file in a comment is an ordinary Markdown link, and a browser
+          // could not authenticate it — it opens through the share sheet
+          // instead (decision T9). Every other link stays as it was.
+          if (isAttachmentUrl(href)) {
+            openInlineAttachment(context, href!, attachments);
+          }
         },
       ),
     );

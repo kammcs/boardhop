@@ -154,6 +154,11 @@ void main() {
     );
     final auth = AuthBloc(_AuthService());
     addTearDown(auth.close);
+    // The page reads a bearer token of its own for the attachment images
+    // inside the description and the comments (research/17 §4).
+    final authService = _AuthService();
+    when(() => authService.accessToken(accountId: any(named: 'accountId')))
+        .thenAnswer((_) async => 'tok');
     router = GoRouter(
       initialLocation: '/a/u1/orgs/o/pull-requests/8334',
       routes: [
@@ -196,6 +201,7 @@ void main() {
           RepositoryProvider<WorkItemRepository>.value(value: workItems),
           RepositoryProvider<AdoClient>.value(value: client),
           RepositoryProvider<WorkItemFormRepository>.value(value: forms),
+          RepositoryProvider<AuthService>.value(value: authService),
           ...mentionProviders(stubs),
         ],
         child: BlocProvider<AuthBloc>.value(

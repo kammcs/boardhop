@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
+import '../../auth/auth_service.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/routes.dart';
@@ -30,6 +31,10 @@ import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
 import '../shared/anchor_highlight.dart';
+import '../shared/attachments/inline_attachment_source.dart';
+import '../shared/attachments/inline_attachments.dart';
+import '../work_items/form/controls/attachments_section.dart'
+    show AttachmentSource;
 import 'widgets/pr_visuals.dart';
 import 'widgets/thread_card.dart';
 
@@ -124,6 +129,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   MentionSource? _mentions;
   Map<String, String> _mentionNames = const {};
 
+  /// Images and files inside the description and the comments. A pull
+  /// request page held no bearer token until now; every attachment URL is
+  /// authenticated, so without one a web-authored image renders as nothing
+  /// (research/17 §1 bug (b)).
+  InlineAttachments? _attachments;
+
   @override
   void initState() {
     super.initState();
@@ -191,7 +202,16 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final repo = context.read<PullRequestRepository>();
     final workItems = context.read<WorkItemRepository>();
     final source = PrDiffSource(context.read<AdoClient>());
+    final auth = context.read<AuthService>();
+    final accountId = AccountScope.of(context);
     try {
+      final token = await auth.accessToken(accountId: accountId);
+      _attachments = inlineAttachmentsOf(
+        AttachmentSource(
+          bytes: repo.attachmentBytes,
+          headers: {'Authorization': 'Bearer $token'},
+        ),
+      );
       final pr = await repo.get(widget.org, widget.id);
       _me = await repo.meId(widget.org);
       final ref = repo.ref(widget.org, pr);
@@ -673,6 +693,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                           workItems: _workItems,
                           onWorkItemTap: _openWorkItem,
                           mentionNames: _mentionNames,
+                          attachments: _attachments,
                           onOpenMention: _openMention,
                         ),
                       ),
@@ -700,6 +721,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                           busy: _acting,
                           mentions: _mentions,
                           mentionNames: _mentionNames,
+                          attachments: _attachments,
                           onOpenMention: _openMention,
                           onReply: _reply,
                           onSetStatus: _setThreadStatus,
@@ -722,6 +744,7 @@ class _Overview extends StatelessWidget {
     required this.workItems,
     required this.onWorkItemTap,
     this.mentionNames = const {},
+    this.attachments,
     this.onOpenMention,
   });
 
@@ -730,6 +753,9 @@ class _Overview extends StatelessWidget {
   /// The description is Markdown the service stores verbatim, so a `@<guid>`
   /// in it reaches the screen as a GUID unless it is resolved here (M9).
   final Map<String, String> mentionNames;
+
+  /// Images and files the description links to.
+  final InlineAttachments? attachments;
   final void Function(MentionKind kind, String id)? onOpenMention;
   final List<PrCheck> checks;
   final List<WorkItem> workItems;
@@ -826,6 +852,7 @@ class _Overview extends StatelessWidget {
                         data: pr.description!,
                         names: mentionNames,
                         onOpen: onOpenMention,
+                        attachments: attachments,
                       ),
               ),
             ],
@@ -1146,6 +1173,7 @@ class _Conversation extends StatelessWidget {
     required this.onOpenThread,
     this.mentions,
     this.mentionNames = const {},
+    this.attachments,
     this.onOpenMention,
   });
 
@@ -1174,6 +1202,9 @@ class _Conversation extends StatelessWidget {
   /// comments' `@<guid>` runs read as, and where a tapped reference goes.
   final MentionSource? mentions;
   final Map<String, String> mentionNames;
+
+  /// Images and files the comments carry.
+  final InlineAttachments? attachments;
   final void Function(MentionKind kind, String id)? onOpenMention;
 
   @override
@@ -1271,6 +1302,7 @@ class _Conversation extends StatelessWidget {
                                   busy: busy,
                                   mentions: mentions,
                                   mentionNames: mentionNames,
+                                  attachments: attachments,
                                   onOpenMention: onOpenMention,
                                   onReply: (text) => onReply(t, text),
                                   onSetStatus: (status) =>

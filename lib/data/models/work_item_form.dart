@@ -1355,13 +1355,17 @@ class WorkItemDraft extends Equatable {
 class AttachmentRef extends Equatable {
   const AttachmentRef({required this.id, required this.url, this.fileName});
 
+  /// Tolerant of both stores. The work item store answers a GUID `id` and
+  /// no name; the pull request store answers a small `int` counting from 1
+  /// per pull request plus a `displayName` that is the file name (spike w32
+  /// §4), so neither the id nor the name can be read the same way.
   factory AttachmentRef.fromJson(
     Map<String, dynamic> json, {
     String? fileName,
   }) => AttachmentRef(
-    id: json['id'] as String? ?? '',
+    id: json['id']?.toString() ?? '',
     url: json['url'] as String? ?? '',
-    fileName: fileName,
+    fileName: fileName ?? json['displayName'] as String?,
   );
 
   final String id;

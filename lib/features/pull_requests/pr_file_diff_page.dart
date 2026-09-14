@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
+import '../../auth/auth_service.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/routes.dart';
@@ -20,6 +21,10 @@ import '../../data/repositories/search_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../shared/account_scope.dart';
+import '../shared/attachments/inline_attachment_source.dart';
+import '../shared/attachments/inline_attachments.dart';
+import '../work_items/form/controls/attachments_section.dart'
+    show AttachmentSource;
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
 import 'diff/diff_model.dart';
@@ -72,6 +77,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   MentionSources? _sources;
   MentionSource? _mentions;
   Map<String, String> _mentionNames = const {};
+
+  /// Images and files the threads on this file carry. Every attachment URL
+  /// is authenticated, so this page needs a bearer token of its own
+  /// (research/17 §1 bug (b)).
+  InlineAttachments? _attachments;
 
   @override
   void initState() {
@@ -159,7 +169,16 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     });
     final repo = context.read<PullRequestRepository>();
     final source = PrDiffSource(context.read<AdoClient>());
+    final auth = context.read<AuthService>();
+    final accountId = AccountScope.of(context);
     try {
+      final token = await auth.accessToken(accountId: accountId);
+      _attachments = inlineAttachmentsOf(
+        AttachmentSource(
+          bytes: repo.attachmentBytes,
+          headers: {'Authorization': 'Bearer $token'},
+        ),
+      );
       final pr = _pr ?? await repo.get(widget.org, widget.id);
       final ref = repo.ref(widget.org, pr);
       final iterations = _iterations.isEmpty
@@ -471,6 +490,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                       canAct: _pr?.isActive == true,
                       mentions: _mentions,
                       mentionNames: _mentionNames,
+                      attachments: _attachments,
                       onOpenMention: _openMention,
                       onGutterTap: _pr?.isActive == true
                           ? (line) => setState(

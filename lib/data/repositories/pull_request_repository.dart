@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../db/app_database.dart';
 import '../db/json_cache.dart';
 import '../models/pr_check.dart';
 import '../models/pull_request.dart';
+import '../models/work_item_form.dart';
 import 'pr_diff_source.dart';
 
 enum PrListFilter { toReview, mine, all }
@@ -360,6 +363,60 @@ class PullRequestRepository {
       'commentType': 1,
     },
   );
+
+  /// `POST …/pullRequests/{id}/attachments/{fileName}` with the bytes as
+  /// the body (spike w32 §4, research/17 §1).
+  ///
+  /// Three things this store does not share with the work item one. The file
+  /// name is the key and rides in the **path**, not a query; a name already
+  /// in the pull request is HTTP 400 with no overwrite, so callers uniquify
+  /// first (`uniqueAttachmentName`); and the name goes in unencoded, because
+  /// [AdoClient.buildUri] percent-encodes every path segment itself and an
+  /// already-encoded name would come out doubly escaped.
+  ///
+  /// `Content-Type` must be `application/octet-stream`: declaring the real
+  /// type of the file is HTTP 400 on both stores.
+  Future<AttachmentRef> uploadAttachment(
+    String org,
+    PullRequest pr,
+    String fileName,
+    Uint8List bytes,
+  ) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'attachments/$fileName'),
+      apiVersion: apiVersion,
+      body: bytes,
+      contentType: 'application/octet-stream',
+    );
+    return AttachmentRef.fromJson(json, fileName: fileName);
+  }
+
+  /// Everything already uploaded to this pull request.
+  Future<List<AttachmentRef>> listAttachments(
+    String org,
+    PullRequest pr,
+  ) async {
+    final json = await _client.getJson(
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'attachments'),
+      apiVersion: apiVersion,
+    );
+    return ((json['value'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => AttachmentRef.fromJson(m.cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// An attachment's bytes with the bearer token, the same as the work item
+  /// side. Without the header the service answers HTTP 203 and a sign-in
+  /// page rather than a 401, so no image loader can be left to fetch one
+  /// itself (spike w32 §3).
+  Future<Uint8List> attachmentBytes(String url) =>
+      _client.getBytes(Uri.parse(url));
 
   /// Resolve, reactivate, close… a thread ([PrThreadStatus] values).
   Future<void> setThreadStatus(

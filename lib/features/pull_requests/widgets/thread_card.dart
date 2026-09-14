@@ -4,6 +4,7 @@ import '../../../core/text/mention.dart';
 import '../../../core/util/format.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../../shared/attachments/inline_attachments.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
@@ -26,6 +27,7 @@ class ThreadCard extends StatefulWidget {
     this.color,
     this.mentions,
     this.mentionNames = const {},
+    this.attachments,
     this.onOpenMention,
   });
 
@@ -51,6 +53,12 @@ class ThreadCard extends StatefulWidget {
   /// comments above: a pull request comment has no rendered form and no
   /// `mentions[]`, so the name is resolved by the page (M9).
   final Map<String, String> mentionNames;
+
+  /// The bearer token for the attachment images in these comments and the
+  /// way to open one. A pull request comment is stored verbatim, so an
+  /// `![x](url)` in it is rendered here rather than by the service — and
+  /// without this it renders as nothing (research/17 §1 bug (b)).
+  final InlineAttachments? attachments;
 
   /// Tapping a `#123` or `!456` in a comment.
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -263,6 +271,7 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                   data: c.content,
                   names: widget.mentionNames,
                   onOpen: widget.onOpenMention,
+                  attachments: widget.attachments,
                 ),
               ),
               if (c.suggestion != null &&
