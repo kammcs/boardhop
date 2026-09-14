@@ -304,4 +304,73 @@ void main() {
       expect(opened, isEmpty);
     });
   });
+
+  /// Decision T9 caps an inline image at [inlineImageMaxHeight]. The
+  /// Markdown builder does it for a pull request comment; a **work item**
+  /// comment is rendered HTML, and until T-C nothing capped it there — a
+  /// portrait photo from a phone filled the whole iPhone screen and more
+  /// than the iPad's.
+  group('an attachment image is capped on the HTML path', () {
+    Future<void> pumpHtml(
+      WidgetTester tester,
+      String html, {
+      String? base,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: Scaffold(
+            body: RichTextView(
+              content: html,
+              headers: headers,
+              attachmentBase: base,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    /// The cap the renderer put around the one image, if it put one there.
+    BoxConstraints? capOf(WidgetTester tester) {
+      final boxes = find.ancestor(
+        of: find.byType(Image),
+        matching: find.byType(ConstrainedBox),
+      );
+      for (final box in tester.widgetList<ConstrainedBox>(boxes)) {
+        if (box.constraints.maxHeight == inlineImageMaxHeight) {
+          return box.constraints;
+        }
+      }
+      return null;
+    }
+
+    testWidgets('a comment image gets the 320 pt cap', (tester) async {
+      await pumpHtml(tester, '<p><img src="$absolute" alt="shot"></p>');
+
+      expect(capOf(tester)?.maxHeight, inlineImageMaxHeight);
+    });
+
+    testWidgets('a repaired sentinel image is capped too', (tester) async {
+      await pumpHtml(
+        tester,
+        '<p><img src="$attachmentSentinel/$guid?fileName=shot.png"></p>',
+        base: witAttachmentBase(commentUrl),
+      );
+
+      expect(capOf(tester)?.maxHeight, inlineImageMaxHeight);
+    });
+
+    testWidgets('an image that is not an attachment keeps its own size', (
+      tester,
+    ) async {
+      await pumpHtml(
+        tester,
+        '<p><img src="https://example.test/logo.png" alt="logo"></p>',
+      );
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(capOf(tester), isNull);
+    });
+  });
 }

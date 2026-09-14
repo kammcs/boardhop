@@ -186,6 +186,31 @@ class _AuthedWidgetFactory extends WidgetFactory {
   final InlineAttachments? attachments;
   final BuildContext host;
 
+  /// T9's 320 pt cap, on the HTML path too.
+  ///
+  /// A work item comment is rendered HTML, not Markdown, so the Markdown
+  /// builder's [inlineImageMaxHeight] never reached it: a portrait photo
+  /// posted from a phone filled the whole screen on the iPhone and more
+  /// than a screen on the iPad (T-C). Capping the built widget rather than
+  /// the `Image` keeps the package's own `AspectRatio` and tap detector
+  /// inside the box, and only an **attachment** src is touched — an icon or
+  /// a badge in a description keeps whatever size the author gave it.
+  @override
+  Widget? buildImage(BuildTree tree, ImageMetadata data) {
+    final built = super.buildImage(tree, data);
+    final src = data.sources.isEmpty ? null : data.sources.first;
+    if (built == null || src == null) return built;
+    if (!isAttachmentUrl(
+      normalizeAttachmentUrl(src.url, base: attachmentBase),
+    )) {
+      return built;
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: inlineImageMaxHeight),
+      child: built,
+    );
+  }
+
   @override
   ImageProvider? imageProviderFromNetwork(String url) =>
       CachedNetworkImageProvider(

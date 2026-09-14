@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/http/ado_exceptions.dart';
 import '../../../../core/util/format.dart';
 import '../../../../data/models/work_item.dart';
 import '../../../../data/models/work_item_form.dart';
@@ -158,7 +159,9 @@ Future<String?> openAttachment(
     );
     return null;
   } catch (e) {
-    return 'Could not open the file: $e';
+    // The service's own words, not the exception's `toString` — that reads
+    // `AdoServerException(500 : Internal Server Error)` on screen (T-C).
+    return 'Could not open the file: ${e is AdoException ? e.message : e}';
   }
 }
 

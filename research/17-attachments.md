@@ -83,3 +83,18 @@ string only. `AttachmentRef.fromJson` reads `id` as a String (the PR store answe
 Clipboard image paste, staged offline uploads through the write queue, `AttachedFile` relations
 from comments, PR description editing, deleting a PR attachment from the app, the unmanaged
 `AttachmentImage` disk cache's growth (NEXT-STEPS note).
+
+## 7. What landed (2026-09-14)
+
+T-A: `lib/features/shared/attachments/` (`attachment_links.dart`, `inline_attachments.dart`,
+`inline_attachment_source.dart`), `WorkItemComment.displayHtml` and the sentinel repair in
+`RichTextView`, `MentionMarkdown`'s authenticated image builder and attachment link routing, the PR
+pages' bearer headers, `PullRequestRepository.uploadAttachment/listAttachments/attachmentBytes`.
+T-B: `pending_attachments.dart` (`PendingAttachment`, `PendingAttachmentsBar`, the
+`ComposerAttachments` mixin), the attach button and upload-on-Send in all three composers, camera
+sizing, Gboard pass-through, tappable file links and images in html comments. T-C: §5 items 1–3, 5
+and 6 passed on the iPhone 17 and iPad Pro 13" simulators (dark, xxxL, landscape, embedded pane);
+item 4 (offline) by widget tests only; Android blocked by this Mac's redirect URI. Spikes s51–s53:
+the earlier PR-file 500 was a dead spike blob on the service. Walkthrough:
+`research/walkthroughs/2026-09-14-attachments.md`.
+

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:boardhop/core/http/ado_exceptions.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/models/work_item_form.dart';
 import 'package:boardhop/data/repositories/work_item_form_repository.dart';
@@ -398,6 +399,63 @@ void main() {
       expect(find.text('Choose from library'), findsOneWidget);
       expect(find.text('Choose file'), findsOneWidget);
       state.dispose();
+    });
+  });
+
+  /// T-C: the snackbar the tap produced read
+  /// *"Could not open the file: AdoServerException(500 : Internal Server
+  /// Error)"* — the exception's `toString`, class name and all, on screen.
+  group('openAttachment says what the service said', () {
+    Future<String?> openWith(WidgetTester tester, Object error) async {
+      String? message;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  message = await openAttachment(
+                    context,
+                    info: AttachmentInfo(
+                      relation: WorkItemRelation(
+                        rel: WorkItemRelation.attachedFileRel,
+                        url: '$_attachments/g?fileName=notes.txt',
+                        attributes: const {'name': 'notes.txt'},
+                      ),
+                      name: 'notes.txt',
+                      url: '$_attachments/g?fileName=notes.txt',
+                    ),
+                    source: AttachmentSource(bytes: (_) => throw error),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return message;
+    }
+
+    testWidgets('an AdoException contributes its message alone', (
+      tester,
+    ) async {
+      final message = await openWith(
+        tester,
+        const AdoServerException('Internal Server Error', statusCode: 500),
+      );
+
+      expect(message, 'Could not open the file: Internal Server Error');
+      expect(message, isNot(contains('AdoServerException')));
+    });
+
+    testWidgets('anything else still says what it was', (tester) async {
+      final message = await openWith(tester, const FormatException('bad'));
+
+      expect(message, contains('FormatException'));
     });
   });
 }
