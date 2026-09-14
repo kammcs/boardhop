@@ -76,8 +76,8 @@ class TabCount {
 /// A tab strip whose labels carry [TabCountBadge] pills, scrolling only when
 /// dividing the width evenly would squeeze one of them.
 ///
-/// Shared so the work item and pull request pages read the same; the pull
-/// request page still builds its own strip (R-tabs).
+/// Shared so the work item and pull request pages read the same (Kelly,
+/// 2026-09-14).
 class CountedTabBar extends StatelessWidget implements PreferredSizeWidget {
   const CountedTabBar({
     super.key,

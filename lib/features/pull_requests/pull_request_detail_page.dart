@@ -24,6 +24,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/mention/mention_markdown.dart';
 import '../shared/mention/mention_source.dart';
+import '../shared/widgets/tab_count_badge.dart';
 import '../shared/mention/mention_sources.dart';
 import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
@@ -572,7 +573,6 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final scheme = theme.colorScheme;
     final pr = _pr;
     final myVote = pr?.reviewer(_me)?.vote ?? PrVote.none;
-    final scrollingTabs = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.3;
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -628,22 +628,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
               ],
             ),
         ],
-        bottom: TabBar(
+        bottom: CountedTabBar(
           controller: _tabs,
-          // Three filled thirds clip "Comments (3)" at accessibility
-          // text sizes (iPhone walkthrough, defect 10); let the strip
-          // scroll instead so every label stays whole and reachable.
-          isScrollable: scrollingTabs,
-          tabAlignment: scrollingTabs ? TabAlignment.start : null,
           tabs: [
-            const Tab(text: 'Overview'),
-            Tab(
-              text: 'Files${_changes.isEmpty ? '' : ' (${_changes.length})'}',
-            ),
-            Tab(
-              text:
-                  'Comments${_conversation.isEmpty ? '' : ' (${_conversation.length})'}',
-            ),
+            const TabCount('Overview'),
+            TabCount('Files', _changes.length),
+            TabCount('Comments', _conversation.length),
           ],
         ),
       ),

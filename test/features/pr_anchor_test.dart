@@ -280,7 +280,7 @@ void main() {
   ) async {
     threads.add(_thread(42499, 'fixes #15545'));
     await pump(tester);
-    await tester.tap(find.text('Comments (12)'));
+    await tester.tap(find.text('Comments'));
     await tester.pumpAndSettle();
 
     // The comment body is selectable, so it renders through EditableText
