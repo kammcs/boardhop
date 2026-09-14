@@ -46,7 +46,8 @@ ios/Flutter/Generated.xcconfig
 ios/Flutter/ephemeral/
 ios/Flutter/flutter_export_environment.sh
 ios/Runner/GeneratedPluginRegistrant.*
-ios/**/xcuserdata/
+**/xcuserdata/
+**/.swiftpm/
 ios/**/*.mode1v3
 ios/**/*.mode2v3
 ios/**/*.perspectivev3
