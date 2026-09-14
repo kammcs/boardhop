@@ -130,6 +130,28 @@ void main() {
     expect(statuses, [PrThreadStatus.fixed]);
   });
 
+  testWidgets('a posted reply takes the keyboard with it', (tester) async {
+    await tester.pumpWidget(host(thread()));
+    await tester.tap(find.text('Reply'));
+    await tester.pumpAndSettle();
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.enterText(find.byType(TextField), 'done');
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.context, isNotNull);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.focusNode?.hasFocus ?? true, isTrue);
+
+    await tester.tap(find.text('Reply').last);
+    await tester.pumpAndSettle();
+    expect(replies, ['done']);
+    // Kelly, 2026-09-14: the keyboard goes away when a comment is posted.
+    expect(find.byType(TextField), findsNothing);
+    expect(
+      FocusManager.instance.primaryFocus?.context?.widget,
+      isNot(isA<EditableText>()),
+    );
+  });
+
   testWidgets('a failed reply does not resolve the thread', (tester) async {
     replySucceeds = false;
     await tester.pumpWidget(host(thread()));

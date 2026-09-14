@@ -128,6 +128,8 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
     if (posted) {
       setState(() => _replying = false);
       _controller.clear();
+      // The keyboard goes with the reply (Kelly, 2026-09-14).
+      FocusManager.instance.primaryFocus?.unfocus();
     }
     if (!posted || thenStatus == null) return;
     final changed = await widget.onSetStatus?.call(thenStatus) ?? false;

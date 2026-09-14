@@ -692,6 +692,10 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
             child: ContentColumn(
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                // A swipe down the discussion puts the keyboard away
+                // (Kelly, 2026-09-14).
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: scrollEndPadding(context),
                 children: [
                   if (_refreshing || _writing) const LinearProgressIndicator(),

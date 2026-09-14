@@ -295,7 +295,11 @@ class _CommentComposerState extends State<CommentComposer> {
     final text = _controller.toWire(MentionWire.markdown).trim();
     if (text.isEmpty) return;
     final ok = await widget.onSubmit(text);
-    if (ok && mounted) _controller.clear();
+    if (!ok || !mounted) return;
+    _controller.clear();
+    // The keyboard goes with the comment (Kelly, 2026-09-14): the posted
+    // comment is what you want to see next, not an empty box.
+    FocusManager.instance.primaryFocus?.unfocus();
   }
 
   @override

@@ -6,6 +6,7 @@ import 'package:super_sliver_list/super_sliver_list.dart';
 import '../../../core/text/mention.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../../shared/dismiss_keyboard_on_drag.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
@@ -210,12 +211,14 @@ class _DiffViewState extends State<DiffView> {
           scrollDirection: Axis.horizontal,
           child: SizedBox(
             width: contentWidth,
-            child: SuperListView.builder(
-              controller: _vertical,
-              listController: _listController,
-              itemCount: _rows.length,
-              itemBuilder: (context, i) =>
-                  _buildRow(context, _rows[i], constraints.maxWidth),
+            child: DismissKeyboardOnDrag(
+              child: SuperListView.builder(
+                controller: _vertical,
+                listController: _listController,
+                itemCount: _rows.length,
+                itemBuilder: (context, i) =>
+                    _buildRow(context, _rows[i], constraints.maxWidth),
+              ),
             ),
           ),
         );
@@ -563,7 +566,11 @@ class _ComposerViewState extends State<_ComposerView> {
                                 final text = _controller
                                     .toWire(MentionWire.markdown)
                                     .trim();
-                                if (text.isNotEmpty) widget.onPost!(text);
+                                if (text.isEmpty) return;
+                                // The keyboard goes with the comment
+                                // (Kelly, 2026-09-14).
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                widget.onPost!(text);
                               },
                         child: Text(widget.posting ? 'Posting…' : 'Post'),
                       ),

@@ -757,6 +757,7 @@ class _Overview extends StatelessWidget {
       child: ListView(
         // Short pages must still answer a pull-to-refresh.
         physics: const AlwaysScrollableScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: scrollEndPadding(context),
         children: [
           Padding(
@@ -1093,6 +1094,7 @@ class _Files extends StatelessWidget {
       child: ListView(
         // Short pages must still answer a pull-to-refresh.
         physics: const AlwaysScrollableScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: scrollEndPadding(context),
         children: [
           if (iterations.isNotEmpty)
@@ -1248,6 +1250,10 @@ class _Conversation extends StatelessWidget {
                 : ListView(
                     controller: scroller,
                     physics: const AlwaysScrollableScrollPhysics(),
+                    // A swipe down the thread list puts the keyboard
+                    // away while a reply is being written.
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(
                       Spacing.lg,
                       Spacing.sm,
