@@ -631,6 +631,7 @@ class WorkItemComment extends Equatable {
     this.createdDate,
     this.modifiedDate,
     this.format,
+    this.mentions = const [],
   });
 
   factory WorkItemComment.fromJson(Map<String, dynamic> json) =>
@@ -645,7 +646,29 @@ class WorkItemComment extends Equatable {
         createdDate: DateTime.tryParse(json['createdDate'] as String? ?? ''),
         modifiedDate: DateTime.tryParse(json['modifiedDate'] as String? ?? ''),
         format: json['format'] as String?,
+        mentions: mentionsOf(json['mentions']),
       );
+
+  /// The `mentions[]` a comment read carries, as identity GUIDs.
+  ///
+  /// The service stamps this array itself at save time, on the list read and
+  /// with any `$expand` (spike w30), so it is the authoritative answer to
+  /// "who was really mentioned here" — a hand-typed `@Name` is not in it and
+  /// notifies nobody. Only `artifactType == 'Person'` entries are kept:
+  /// `#123` and `!456` are auto-linked at render time and never appear.
+  /// GUIDs are lower-cased and de-duplicated in order, as the relay does.
+  static List<String> mentionsOf(Object? value) {
+    final ids = <String>[];
+    for (final m in value is List ? value : const []) {
+      if (m is! Map) continue;
+      if (m['artifactType'] != 'Person') continue;
+      final id = (m['targetId'] ?? m['artifactId']) as String?;
+      final guid = id?.trim().toLowerCase();
+      if (guid == null || guid.isEmpty || ids.contains(guid)) continue;
+      ids.add(guid);
+    }
+    return List.unmodifiable(ids);
+  }
 
   final int id;
   final String text;
@@ -657,6 +680,10 @@ class WorkItemComment extends Equatable {
   final DateTime? createdDate;
   final DateTime? modifiedDate;
   final String? format;
+
+  /// Identity GUIDs the service recorded as mentioned by this comment, newest
+  /// read wins. Empty for every comment that mentions nobody.
+  final List<String> mentions;
 
   @override
   List<Object?> get props => [id, modifiedDate];

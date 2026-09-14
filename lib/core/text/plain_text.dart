@@ -18,6 +18,23 @@ abstract final class PlainText {
     caseSensitive: false,
     dotAll: true,
   );
+
+  /// The markdown wire form of a person mention, `@<{identityGuid}>` (spike
+  /// w30). It reaches this class in two places the rendered anchor never
+  /// does: a pull request comment's `content`, which has no rendered form at
+  /// all, and a work item's `System.History`, which stores the comment's raw
+  /// text. Stripped before the tag pass, or `<{guid}>` would look like a tag
+  /// and leave a bare `@` behind.
+  ///
+  /// The pattern is a deliberate copy of `Mentions.personAngle`: this class
+  /// is the Dart twin of two native ports and stays free of every import but
+  /// the language's own.
+  static final _angleMention = RegExp(r'@<([0-9a-fA-F-]{36})>');
+
+  /// A person whose GUID resolves to nobody (research/16 M9). Never the raw
+  /// GUID: the two native ports have no resolver at all and always land here.
+  static const unknownMention = '@someone';
+
   static final _blockEnd = RegExp(
     r'</(p|div|li|ul|ol|tr|h[1-6]|blockquote|pre)\s*>|<br\s*/?>',
     caseSensitive: false,
@@ -31,17 +48,34 @@ abstract final class PlainText {
     caseSensitive: false,
   );
 
-  /// Mentions become `@Name`, block ends become newlines, every other tag
-  /// goes, entities are decoded and runs of spaces collapse.
+  /// Mentions become `@Name` — both the rendered anchor and the markdown
+  /// `@<guid>` form — block ends become newlines, every other tag goes,
+  /// entities are decoded and runs of spaces collapse.
   ///
   /// [trim] is off when the caller is stripping one piece of a larger
   /// fragment: trimming each piece on its own would glue the words on either
   /// side of a `<highlighthit>` marker together.
-  static String strip(String? html, {bool trim = true}) {
+  ///
+  /// [nameFor] answers the display name behind the GUID of an `@<guid>`
+  /// mention; without it — which is the case in the Kotlin and Swift ports —
+  /// such a mention reads [unknownMention]. The name is substituted before
+  /// the tag pass, so a display name containing `<` would lose that run; no
+  /// directory allows one, and the HTML wire form escapes instead
+  /// (`Mentions.person`).
+  static String strip(
+    String? html, {
+    bool trim = true,
+    String? Function(String guid)? nameFor,
+  }) {
     if (html == null || html.isEmpty) return '';
     var text = html.replaceAllMapped(_mention, (m) {
       final name = decodeEntities(m.group(1)!.replaceAll(_tag, '')).trim();
       if (name.isEmpty) return '';
+      return name.startsWith('@') ? name : '@$name';
+    });
+    text = text.replaceAllMapped(_angleMention, (m) {
+      final name = nameFor?.call(m.group(1)!)?.trim() ?? '';
+      if (name.isEmpty) return unknownMention;
       return name.startsWith('@') ? name : '@$name';
     });
     text = text.replaceAll(_blockEnd, '\n');

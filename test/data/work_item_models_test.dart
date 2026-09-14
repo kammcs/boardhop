@@ -466,4 +466,70 @@ void main() {
       expect(upn.organizationName, isNull);
     });
   });
+
+  group('WorkItemComment.mentions', () {
+    // Synthetic GUIDs only.
+    const ada = '2f1b1a70-6d24-4c0a-9f0b-6b6d2f9a1c33';
+    const bay = '8c4d5e6f-1122-4333-8444-55556666aaaa';
+
+    Map<String, dynamic> comment(Object? mentions) => {
+      'id': 6067831,
+      'text': 'ship it @<$ada>',
+      'renderedText': '<p>ship it</p>',
+      'createdBy': {'displayName': 'Kelly Kamm', 'id': bay},
+      'format': 'markdown',
+      'mentions': ?mentions,
+    };
+
+    test('keeps the Person targets the service stamped', () {
+      final c = WorkItemComment.fromJson(
+        comment([
+          {
+            'artifactId': ada,
+            'artifactType': 'Person',
+            'commentId': 6067831,
+            'targetId': ada,
+          },
+        ]),
+      );
+      expect(c.mentions, [ada]);
+    });
+
+    test('drops everything that is not a person, and de-duplicates', () {
+      final c = WorkItemComment.fromJson(
+        comment([
+          {'artifactType': 'Person', 'targetId': ada.toUpperCase()},
+          {'artifactType': 'Person', 'targetId': ada},
+          {'artifactType': 'WorkItem', 'targetId': '15545'},
+          {'artifactType': 'Person'},
+          'nonsense',
+        ]),
+      );
+      expect(c.mentions, [ada]);
+    });
+
+    test('a comment that mentions nobody has an empty list', () {
+      expect(WorkItemComment.fromJson(comment(const [])).mentions, isEmpty);
+      expect(WorkItemComment.fromJson(comment(null)).mentions, isEmpty);
+      expect(WorkItemComment.fromJson(comment('not a list')).mentions, isEmpty);
+      expect(
+        const WorkItemComment(
+          id: 1,
+          text: '',
+          renderedText: '',
+          createdBy: IdentityRef(displayName: 'x'),
+        ).mentions,
+        isEmpty,
+      );
+    });
+
+    test('artifactId answers when targetId is missing', () {
+      final c = WorkItemComment.fromJson(
+        comment([
+          {'artifactType': 'Person', 'artifactId': bay},
+        ]),
+      );
+      expect(c.mentions, [bay]);
+    });
+  });
 }

@@ -24,6 +24,31 @@ final class EnrichmentFormatTests: XCTestCase {
     XCTAssertEqual(EnrichmentFormat.plainText(html), "@Ada Example please look")
   }
 
+  func testPlainTextRendersAnAngleMentionAsSomeone() {
+    // A pull request comment has no rendered form and a work item's
+    // `System.History` keeps the comment's raw text, so this is the shape a
+    // Boardhop-posted mention arrives in. The extension has no identity
+    // cache, so it never prints a name (research/16 M9).
+    XCTAssertEqual(
+      EnrichmentFormat.plainText("@<2f1b1a70-6d24-4c0a-9f0b-6b6d2f9a1c33> ship it?"),
+      "@someone ship it?")
+    XCTAssertEqual(EnrichmentFormat.unknownMention, "@someone")
+  }
+
+  func testPlainTextDoesNotEatTheAtOfAnAngleMention() {
+    // Regression: `<guid>` matches the tag pattern, so replacing it after the
+    // tag pass would leave a bare "@".
+    let out = EnrichmentFormat.plainText(
+      "<p>hi @<2F1B1A70-6D24-4C0A-9F0B-6B6D2F9A1C33></p>")
+    XCTAssertEqual(out, "hi @someone")
+  }
+
+  func testPlainTextLeavesTextThatOnlyLooksLikeAMention() {
+    // Too short to be a GUID, and an e-mail address is never a mention.
+    XCTAssertEqual(EnrichmentFormat.plainText("mail kelly@kammcs.com"), "mail kelly@kammcs.com")
+    XCTAssertEqual(EnrichmentFormat.plainText("@<not-a-guid>"), "@")
+  }
+
   func testPlainTextTurnsBlockEndsIntoLines() {
     // One newline per block end, and `<br/>` counts as one too, so the two
     // between "two" and "three" are `</p>` plus the break.

@@ -15,6 +15,7 @@ import 'features/diagnostics/diagnostics_page.dart';
 import 'features/diagnostics/diff_probe/diff_probe_page.dart';
 import 'features/diagnostics/board_probe/board_probe_page.dart';
 import 'features/diagnostics/editor_probe_page.dart';
+import 'features/diagnostics/mention_probe_page.dart';
 import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipeline_log_page.dart';
 import 'features/pipelines/pipeline_run_page.dart';
@@ -85,6 +86,10 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
         GoRoute(
           path: '/diagnostics/diff',
           builder: (_, _) => const DiffProbePage(),
+        ),
+        GoRoute(
+          path: '/diagnostics/mention',
+          builder: (_, _) => const MentionProbePage(),
         ),
       ],
       GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),

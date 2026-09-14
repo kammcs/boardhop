@@ -82,6 +82,26 @@ object EnrichmentFormat {
         """<a\b[^>]*data-vss-mention[^>]*>(.*?)</a>""",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
     )
+
+    /**
+     * The markdown wire form of a person mention, `@<{identityGuid}>` (spike
+     * w30). A pull request comment has no rendered form at all and a work
+     * item's `System.History` stores the comment's raw text, so this is the
+     * shape a mention arrives in on both of the paths this service enriches.
+     * Replaced before the tag pass, or `<{guid}>` would look like a tag and
+     * leave a bare `@` behind.
+     */
+    private val ANGLE_MENTION = Regex("""@<([0-9a-fA-F-]{36})>""")
+
+    /**
+     * A mention this service cannot name. The Dart twin
+     * (`lib/core/text/plain_text.dart`) can be given a resolver and print the
+     * display name; the notification path has no identity cache and no time
+     * to fetch one, so it always lands here — which is exactly what the Dart
+     * side does when a GUID resolves to nobody (research/16 M9).
+     */
+    const val UNKNOWN_MENTION = "@someone"
+
     private val BLOCK_END = Regex(
         """</(p|div|li|ul|ol|tr|h[1-6]|blockquote|pre)\s*>|<br\s*/?>""",
         RegexOption.IGNORE_CASE,
@@ -94,8 +114,9 @@ object EnrichmentFormat {
      * Server-rendered comment HTML as the plain text a notification can show.
      *
      * `data-vss-mention` anchors become `@Name` (Azure DevOps renders the
-     * display name inside the anchor, sometimes already with the `@`), block
-     * ends become newlines, every other tag goes, entities are decoded.
+     * display name inside the anchor, sometimes already with the `@`), a
+     * markdown `@<{guid}>` mention becomes [UNKNOWN_MENTION], block ends
+     * become newlines, every other tag goes, entities are decoded.
      */
     fun plainText(html: String?): String {
         if (html.isNullOrEmpty()) return ""
@@ -107,6 +128,7 @@ object EnrichmentFormat {
                 else -> "@$name"
             }
         }
+        text = ANGLE_MENTION.replace(text) { UNKNOWN_MENTION }
         text = BLOCK_END.replace(text, "\n")
         text = TAG.replace(text, "")
         text = decodeEntities(text)

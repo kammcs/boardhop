@@ -12,9 +12,11 @@ import 'data/activity_sync.dart';
 import 'data/avatar_store.dart';
 import 'data/db/app_database.dart';
 import 'data/db/json_cache.dart';
+import 'data/mention_recents.dart';
 import 'data/repositories/account_repository.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/org_repository.dart';
+import 'data/repositories/people_repository.dart';
 import 'data/repositories/board_repository.dart';
 import 'data/repositories/pipeline_repository.dart';
 import 'data/repositories/project_repository.dart';
@@ -50,7 +52,15 @@ class AccountDeps {
     boards = BoardRepository(client, workItems);
     search = SearchRepository(client, pullRequests, db, accountId);
     searchRecents = SearchRecents(accountId: accountId);
-    workItemForms = WorkItemFormRepository(client, workItems, db, accountId);
+    people = PeopleRepository(client, db, accountId);
+    mentionRecents = MentionRecents(accountId: accountId);
+    workItemForms = WorkItemFormRepository(
+      client,
+      workItems,
+      db,
+      accountId,
+      people,
+    );
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
       client,
@@ -105,6 +115,8 @@ class AccountDeps {
   late final BoardRepository boards;
   late final SearchRepository search;
   late final SearchRecents searchRecents;
+  late final PeopleRepository people;
+  late final MentionRecents mentionRecents;
   late final WorkItemFormRepository workItemForms;
   late final WriteQueue queue;
   late final ActivityRepository activity;
@@ -127,6 +139,8 @@ class AccountDeps {
     RepositoryProvider<RepoRepository>.value(value: repos),
     RepositoryProvider<SearchRepository>.value(value: search),
     RepositoryProvider<SearchRecents>.value(value: searchRecents),
+    RepositoryProvider<PeopleRepository>.value(value: people),
+    RepositoryProvider<MentionRecents>.value(value: mentionRecents),
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
     RepositoryProvider<PushRegistrar>.value(value: pushRegistrar),
@@ -206,6 +220,7 @@ class AppDependencies {
     // Recents are shared preferences, not drift, so they need their own
     // sweep (decision D5: cleared on sign-out).
     await SearchRecents.clearAccount(accountId);
+    await MentionRecents.clearAccount(accountId);
     if (_accounts.isEmpty) {
       await (deps?.avatars ?? AvatarStore(client)).clear();
     }

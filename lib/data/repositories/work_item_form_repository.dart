@@ -2,11 +2,11 @@ import 'dart:typed_data';
 
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
-import '../../core/http/ado_host.dart';
 import '../db/app_database.dart';
 import '../db/json_cache.dart';
 import '../models/work_item.dart';
 import '../models/work_item_form.dart';
+import 'people_repository.dart';
 import 'work_item_repository.dart';
 
 /// Everything the create and edit form reads and writes (research/11).
@@ -21,17 +21,23 @@ class WorkItemFormRepository {
     this._workItems, [
     AppDatabase? db,
     String? userId,
-  ]) : _cache = JsonCache(db, namespace: userId);
+    PeopleRepository? people,
+  ]) : _cache = JsonCache(db, namespace: userId),
+       _people = people ?? PeopleRepository(_client, db, userId);
 
   final AdoClient _client;
   final WorkItemRepository _workItems;
   final JsonCache _cache;
 
+  /// People moved to their own repository (research/16 §4.2); the form's
+  /// calls stay where the form page and its tests expect them. `AccountDeps`
+  /// passes the account's shared instance so the identity memory is one.
+  final PeopleRepository _people;
+
   static const apiVersion = '7.1';
 
-  /// Tags and the Graph subject query are preview-only.
+  /// Tags are preview-only.
   static const tagsApiVersion = '7.1-preview.1';
-  static const graphApiVersion = '7.1-preview.1';
 
   /// Process metadata changes rarely; research/11 §5 settles on a day.
   static const cacheTtl = Duration(hours: 24);
@@ -52,10 +58,6 @@ class WorkItemFormRepository {
       'form:templates:$org:$project:$team';
   static String backlogKey(String org, String project, String team) =>
       'form:backlog:$org:$project:$team';
-  static String membersKey(String org, String projectId, String teamId) =>
-      'form:members:$org:$projectId:$teamId';
-  static String descriptorKey(String org, String projectId) =>
-      'form:descriptor:$org:$projectId';
   static String draftKey(String org, String project, String type) =>
       'form:draft:$org:$project:$type';
   static String teamIterationsKey(String org, String project, String team) =>
@@ -635,115 +637,40 @@ class WorkItemFormRepository {
 
   // --------------------------------------------------------------- people
 
-  /// The team's members, the people picker's offline list (spike s25: the
-  /// type's identity `allowedValues` are empty, so this replaces them).
+  // Moved to `PeopleRepository` (research/16 §4.2) so the pull request pages
+  // can reach a person without reading a work item *form* repository. These
+  // four stay as one-line delegates: the form page, the identity picker and
+  // their tests call them by these names.
+
+  /// See [PeopleRepository.teamMembers].
   Future<List<IdentityRef>> teamMembers(
     String org,
     String projectId,
     String teamId, {
     bool refresh = false,
-  }) => _cached<List<IdentityRef>>(
-    membersKey(org, projectId, teamId),
-    () async => _list(
-      await _client.getJson(
-        org: org,
-        path: '_apis/projects/$projectId/teams/$teamId/members',
-        apiVersion: apiVersion,
-      ),
-    ),
-    (json) => [
-      for (final m in _asMaps(json))
-        if (m['identity'] is Map)
-          IdentityRef.fromJson((m['identity'] as Map).cast<String, dynamic>()),
-    ],
-    refresh: refresh,
-  );
+  }) => _people.teamMembers(org, projectId, teamId, refresh: refresh);
 
-  /// The project's Graph scope descriptor, for a project-scoped search.
+  /// See [PeopleRepository.projectDescriptor].
   Future<String?> projectDescriptor(String org, String projectId) =>
-      _cached<String?>(
-        descriptorKey(org, projectId),
-        () async => await _client.getJson(
-          host: AdoHost.vssps,
-          org: org,
-          path: '_apis/graph/descriptors/$projectId',
-          apiVersion: graphApiVersion,
-        ),
-        (json) => json is Map ? json['value'] as String? : null,
-      );
+      _people.projectDescriptor(org, projectId);
 
-  /// Types-as-you-go people search, scoped to the project (spike s25).
-  ///
-  /// A `GraphUser` has no identity id, only a descriptor, so the rows come
-  /// back without one and `assignedToValue` sends
-  /// `"Display Name <unique>"`; call [resolveIdentityId] when the picked
-  /// person should be sent by id.
+  /// See [PeopleRepository.searchPeople].
   Future<List<IdentityRef>> searchPeople(
     String org,
     String projectId,
     String query,
-  ) async {
-    final text = query.trim();
-    if (text.isEmpty) return const [];
-    final scope = await _maybeValue(() => projectDescriptor(org, projectId));
-    final json = await _client.send(
-      method: 'POST',
-      host: AdoHost.vssps,
-      org: org,
-      path: '_apis/graph/subjectquery',
-      apiVersion: graphApiVersion,
-      body: {
-        'query': text,
-        'subjectKind': ['User'],
-        'scopeDescriptor': ?scope,
-      },
-    );
-    return [for (final u in _asMaps(json['value'])) identityFromGraphUser(u)];
-  }
+  ) => _people.searchPeople(org, projectId, query);
 
-  /// `GraphUser` → [IdentityRef]: `mailAddress` (else `principalName`) is
-  /// the unique name and the avatar link carries the descriptor.
-  static IdentityRef identityFromGraphUser(Map<String, dynamic> json) {
-    final links = json['_links'];
-    final avatar = links is Map && links['avatar'] is Map
-        ? (links['avatar'] as Map)['href'] as String?
-        : null;
-    return IdentityRef(
-      displayName: json['displayName'] as String? ?? '',
-      uniqueName:
-          json['mailAddress'] as String? ?? json['principalName'] as String?,
-      descriptor:
-          json['descriptor'] as String? ??
-          IdentityRef.descriptorFromAvatar(avatar),
-      imageUrl: avatar,
-    );
-  }
-
-  /// The identity id behind a Graph descriptor (`graph/storagekeys`), read
-  /// only when the user picks someone the search found.
+  /// See [PeopleRepository.resolveIdentityId].
   Future<IdentityRef> resolveIdentityId(
     String org,
     IdentityRef person, {
     String? descriptor,
-  }) async {
-    final d = descriptor ?? person.descriptor;
-    if (person.id != null || d == null || d.isEmpty) return person;
-    final json = await _client.getJson(
-      host: AdoHost.vssps,
-      org: org,
-      path: '_apis/graph/storagekeys/$d',
-      apiVersion: graphApiVersion,
-    );
-    final id = json['value'] as String?;
-    if (id == null || id.isEmpty) return person;
-    return IdentityRef(
-      displayName: person.displayName,
-      uniqueName: person.uniqueName,
-      id: id,
-      imageUrl: person.imageUrl,
-      descriptor: person.descriptor,
-    );
-  }
+  }) => _people.resolveIdentityId(org, person, descriptor: descriptor);
+
+  /// See [PeopleRepository.identityFromGraphUser].
+  static IdentityRef identityFromGraphUser(Map<String, dynamic> json) =>
+      PeopleRepository.identityFromGraphUser(json);
 
   // -------------------------------------------------------------- writes
 
@@ -1229,14 +1156,6 @@ class WorkItemFormRepository {
     } on AdoForbiddenException {
       return null;
     } on AdoNotFoundException {
-      return null;
-    }
-  }
-
-  Future<T?> _maybeValue<T>(Future<T?> Function() read) async {
-    try {
-      return await read();
-    } on AdoException {
       return null;
     }
   }

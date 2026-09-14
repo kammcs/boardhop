@@ -36,6 +36,22 @@ enum EnrichmentFormat {
   private static let mention = try? NSRegularExpression(
     pattern: "<a\\b[^>]*data-vss-mention[^>]*>(.*?)</a>",
     options: [.caseInsensitive, .dotMatchesLineSeparators])
+  /// The markdown wire form of a person mention, `@<{identityGuid}>` (spike
+  /// w30). A pull request comment has no rendered form at all and a work
+  /// item's `System.History` stores the comment's raw text, so this is the
+  /// shape a mention arrives in on both of the paths this extension enriches.
+  /// Replaced before the tag pass, or `<{guid}>` would look like a tag and
+  /// leave a bare `@` behind.
+  private static let angleMention = try? NSRegularExpression(
+    pattern: "@<([0-9a-fA-F-]{36})>")
+
+  /// A mention this extension cannot name. The Dart twin
+  /// (`lib/core/text/plain_text.dart`) can be given a resolver and print the
+  /// display name; the notification path has no identity cache and no time to
+  /// fetch one, so it always lands here — which is exactly what the Dart side
+  /// does when a GUID resolves to nobody (research/16 M9).
+  static let unknownMention = "@someone"
+
   private static let blockEnd = try? NSRegularExpression(
     pattern: "</(p|div|li|ul|ol|tr|h[1-6]|blockquote|pre)\\s*>|<br\\s*/?>",
     options: [.caseInsensitive])
@@ -47,8 +63,9 @@ enum EnrichmentFormat {
   /// Server-rendered comment HTML as the plain text a notification can show.
   ///
   /// `data-vss-mention` anchors become `@Name` (Azure DevOps renders the
-  /// display name inside the anchor, sometimes already with the `@`), block
-  /// ends become newlines, every other tag goes, entities are decoded.
+  /// display name inside the anchor, sometimes already with the `@`), a
+  /// markdown `@<{guid}>` mention becomes `unknownMention`, block ends become
+  /// newlines, every other tag goes, entities are decoded.
   static func plainText(_ html: String?) -> String {
     guard let html, !html.isEmpty else { return "" }
     var text = replaceMatches(mention, in: html) { match, source in
@@ -58,6 +75,7 @@ enum EnrichmentFormat {
       if name.isEmpty { return "" }
       return name.hasPrefix("@") ? name : "@\(name)"
     }
+    text = replaceMatches(angleMention, in: text) { _, _ in unknownMention }
     text = replaceMatches(blockEnd, in: text) { _, _ in "\n" }
     text = strip(tag, from: text)
     text = decodeEntities(text)

@@ -245,6 +245,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/diff'),
           ),
           IconButton(
+            tooltip: 'Mention probe (M-B)',
+            icon: const Icon(Icons.alternate_email),
+            onPressed: () => context.push('/diagnostics/mention'),
+          ),
+          IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),
             onPressed: _checks.isEmpty
