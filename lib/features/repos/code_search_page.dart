@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../data/models/git_repository.dart';
-import '../../data/repositories/repo_repository.dart';
+import '../../data/repositories/search_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
 import 'widgets/item_actions.dart';
@@ -80,10 +80,10 @@ class _CodeSearchPageState extends State<CodeSearchPage> {
       _hits = null;
     });
     try {
-      final page = await context.read<RepoRepository>().searchCode(
+      final page = await context.read<SearchRepository>().searchCode(
         widget.org,
-        widget.project,
-        q,
+        project: widget.project,
+        text: q,
         repositoryName: widget.repoName,
       );
       if (!mounted || generation != _generation) return;
@@ -123,10 +123,10 @@ class _CodeSearchPageState extends State<CodeSearchPage> {
     if (have == null) return;
     setState(() => _loadingMore = true);
     try {
-      final page = await context.read<RepoRepository>().searchCode(
+      final page = await context.read<SearchRepository>().searchCode(
         widget.org,
-        widget.project,
-        _query,
+        project: widget.project,
+        text: _query,
         repositoryName: widget.repoName,
         skip: have.length,
       );

@@ -142,6 +142,16 @@ class IdentityRef extends Equatable {
     return null;
   }
 
+  /// The wire shape again, so an identity survives a trip through a cache
+  /// ([IdentityRef.fromJson] reads it back unchanged).
+  Map<String, dynamic> toJson() => {
+    'displayName': displayName,
+    if (uniqueName != null) 'uniqueName': uniqueName,
+    if (id != null) 'id': id,
+    if (imageUrl != null) 'imageUrl': imageUrl,
+    if (descriptor != null) 'descriptor': descriptor,
+  };
+
   @override
   List<Object?> get props => [displayName, uniqueName, id];
 }

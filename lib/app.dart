@@ -21,8 +21,10 @@ import 'data/repositories/project_repository.dart';
 import 'data/repositories/pull_request_repository.dart';
 import 'data/repositories/push_prefs_repository.dart';
 import 'data/repositories/repo_repository.dart';
+import 'data/repositories/search_repository.dart';
 import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/work_item_repository.dart';
+import 'data/search_recents.dart';
 import 'data/write_queue.dart';
 import 'features/notifications/push_coordinator.dart';
 import 'features/notifications/push_registrar.dart';
@@ -46,6 +48,8 @@ class AccountDeps {
     pipelines = PipelineRepository(client, db, accountId);
     repos = RepoRepository(client, db, accountId);
     boards = BoardRepository(client, workItems);
+    search = SearchRepository(client, pullRequests, db, accountId);
+    searchRecents = SearchRecents(accountId: accountId);
     workItemForms = WorkItemFormRepository(client, workItems, db, accountId);
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
@@ -99,6 +103,8 @@ class AccountDeps {
   late final PipelineRepository pipelines;
   late final RepoRepository repos;
   late final BoardRepository boards;
+  late final SearchRepository search;
+  late final SearchRecents searchRecents;
   late final WorkItemFormRepository workItemForms;
   late final WriteQueue queue;
   late final ActivityRepository activity;
@@ -119,6 +125,8 @@ class AccountDeps {
     RepositoryProvider<PullRequestRepository>.value(value: pullRequests),
     RepositoryProvider<PipelineRepository>.value(value: pipelines),
     RepositoryProvider<RepoRepository>.value(value: repos),
+    RepositoryProvider<SearchRepository>.value(value: search),
+    RepositoryProvider<SearchRecents>.value(value: searchRecents),
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
     RepositoryProvider<PushRegistrar>.value(value: pushRegistrar),
@@ -195,6 +203,9 @@ class AppDependencies {
         )..where((t) => t.orgName.isIn(mine))).go();
       }
     });
+    // Recents are shared preferences, not drift, so they need their own
+    // sweep (decision D5: cleared on sign-out).
+    await SearchRecents.clearAccount(accountId);
     if (_accounts.isEmpty) {
       await (deps?.avatars ?? AvatarStore(client)).clear();
     }

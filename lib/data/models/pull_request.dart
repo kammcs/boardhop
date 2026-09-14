@@ -74,6 +74,18 @@ class PrReviewer extends Equatable {
     descriptor: descriptor,
   );
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'displayName': displayName,
+    'vote': vote.value,
+    'isRequired': isRequired,
+    'isContainer': isContainer,
+    'hasDeclined': hasDeclined,
+    if (uniqueName != null) 'uniqueName': uniqueName,
+    if (imageUrl != null) 'imageUrl': imageUrl,
+    if (descriptor != null) 'descriptor': descriptor,
+  };
+
   @override
   List<Object?> get props => [id, vote, isRequired];
 }
@@ -186,6 +198,36 @@ class PullRequest extends Equatable {
     }
     return null;
   }
+
+  /// The list shape again, so a pull request can be written into a JSON
+  /// cache and read back with [PullRequest.fromJson] unchanged (the search
+  /// results cache; `_links` and other fields the app never reads are not
+  /// re-emitted because nothing reads them back).
+  Map<String, dynamic> toJson() => {
+    'pullRequestId': id,
+    'title': title,
+    if (description != null) 'description': description,
+    'status': status,
+    'isDraft': isDraft,
+    'repository': {
+      'id': repositoryId,
+      'name': repositoryName,
+      'project': {'id': projectId, 'name': projectName},
+    },
+    'sourceRefName': sourceRefName,
+    'targetRefName': targetRefName,
+    'createdBy': createdBy.toJson(),
+    if (creationDate != null) 'creationDate': creationDate!.toIso8601String(),
+    if (closedDate != null) 'closedDate': closedDate!.toIso8601String(),
+    if (mergeStatus != null) 'mergeStatus': mergeStatus,
+    if (lastMergeSourceCommit != null)
+      'lastMergeSourceCommit': {'commitId': lastMergeSourceCommit},
+    if (lastMergeTargetCommit != null)
+      'lastMergeTargetCommit': {'commitId': lastMergeTargetCommit},
+    if (reviewers.isNotEmpty)
+      'reviewers': [for (final r in reviewers) r.toJson()],
+    if (codeReviewId != null) 'codeReviewId': codeReviewId,
+  };
 
   @override
   List<Object?> get props => [

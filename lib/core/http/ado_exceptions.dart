@@ -131,6 +131,22 @@ class AdoNotFoundException extends AdoException {
   });
 }
 
+/// The Code Search extension is not installed in this organization.
+///
+/// `almsearch` answers a code search with 404 when the extension is missing,
+/// which as a plain "not found" reads like the repository or the term is
+/// wrong. It is a subtype of [AdoNotFoundException] so existing `on
+/// AdoNotFoundException` handlers keep working; search catches it first to
+/// say what is actually wrong (research/15 §4).
+class CodeSearchUnavailable extends AdoNotFoundException {
+  const CodeSearchUnavailable({super.statusCode, super.url})
+    : super(
+        'Code search is not available in this organization. '
+        'An administrator can install the Code Search extension from the '
+        'Marketplace.',
+      );
+}
+
 /// Any other non-success status.
 class AdoServerException extends AdoException {
   const AdoServerException(
