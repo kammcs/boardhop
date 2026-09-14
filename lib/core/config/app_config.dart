@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
+
 /// Build-time configuration.
 ///
 /// Values come from `--dart-define` / `--dart-define-from-file=.env` so that
@@ -5,6 +7,18 @@
 abstract final class AppConfig {
   /// Application (client) ID of the Boardhop registration in the kammcs tenant.
   static const clientId = String.fromEnvironment('BOARDHOP_CLIENT_ID');
+
+  /// Whether the Diagnostics page (the bug icon on the Organizations screen,
+  /// the probes, the route and enrichment boxes) exists in this build.
+  ///
+  /// Local testing only (Kelly, 2026-09-14): debug and profile builds have
+  /// it, store builds (TestFlight, Google Play, both `--release`) do not. A
+  /// release build can opt back in with `--dart-define=BOARDHOP_DIAGNOSTICS=true`
+  /// for a one-off investigation; nothing in the ship scripts sets it.
+  static const diagnosticsEnabled = bool.fromEnvironment(
+    'BOARDHOP_DIAGNOSTICS',
+    defaultValue: !kReleaseMode,
+  );
 
   /// Android redirect URI: `msauth://<package>/<url-encoded signature hash>`.
   /// The hash is per signing key, so debug builds on another machine need

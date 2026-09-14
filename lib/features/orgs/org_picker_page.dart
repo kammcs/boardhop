@@ -13,12 +13,20 @@ import '../../data/models/organization.dart';
 import '../../data/repositories/account_repository.dart';
 import '../shared/widgets/ado_tile.dart';
 import 'widgets/account_header.dart';
+import '../../core/config/app_config.dart';
 
 /// Every signed-in account as a header row (photo, email, company, sign
 /// out) followed by that account's Azure DevOps organizations. The app bar
 /// adds another account through the Microsoft account picker.
 class OrgPickerPage extends StatefulWidget {
-  const OrgPickerPage({super.key});
+  const OrgPickerPage({
+    super.key,
+    this.showDiagnostics = AppConfig.diagnosticsEnabled,
+  });
+
+  /// The bug icon. Off in store builds (`AppConfig.diagnosticsEnabled`);
+  /// a parameter so a test can check both faces.
+  final bool showDiagnostics;
 
   @override
   State<OrgPickerPage> createState() => _OrgPickerPageState();
@@ -54,11 +62,12 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
               onPressed: () =>
                   context.read<AuthBloc>().add(const AuthSignInRequested()),
             ),
-            IconButton(
-              tooltip: 'Diagnostics',
-              icon: const Icon(Icons.bug_report_outlined),
-              onPressed: () => context.push('/diagnostics'),
-            ),
+            if (widget.showDiagnostics)
+              IconButton(
+                tooltip: 'Diagnostics',
+                icon: const Icon(Icons.bug_report_outlined),
+                onPressed: () => context.push('/diagnostics'),
+              ),
             IconButton(
               tooltip: 'Settings',
               icon: const Icon(Icons.settings_outlined),

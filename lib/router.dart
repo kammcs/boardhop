@@ -42,6 +42,7 @@ import 'features/shared/splash_page.dart';
 import 'features/work_items/form/work_item_form_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_items_page.dart';
+import 'core/config/app_config.dart';
 
 /// `/orgs` lists every signed-in account with its organizations; everything
 /// below an organization lives under `/a/{account}/orgs/{org}` so the pages
@@ -64,20 +65,27 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
     routes: [
       GoRoute(path: '/', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/sign-in', builder: (_, _) => const SignInPage()),
-      GoRoute(path: '/diagnostics', builder: (_, _) => const DiagnosticsPage()),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
-      GoRoute(
-        path: '/diagnostics/editor',
-        builder: (_, _) => const EditorProbePage(),
-      ),
-      GoRoute(
-        path: '/diagnostics/board',
-        builder: (_, _) => const BoardProbePage(),
-      ),
-      GoRoute(
-        path: '/diagnostics/diff',
-        builder: (_, _) => const DiffProbePage(),
-      ),
+      // Local testing only: no route at all in a store build, so nothing
+      // (a stale deep link, a typed URL) can open the probes there.
+      if (AppConfig.diagnosticsEnabled) ...[
+        GoRoute(
+          path: '/diagnostics',
+          builder: (_, _) => const DiagnosticsPage(),
+        ),
+        GoRoute(
+          path: '/diagnostics/editor',
+          builder: (_, _) => const EditorProbePage(),
+        ),
+        GoRoute(
+          path: '/diagnostics/board',
+          builder: (_, _) => const BoardProbePage(),
+        ),
+        GoRoute(
+          path: '/diagnostics/diff',
+          builder: (_, _) => const DiffProbePage(),
+        ),
+      ],
       GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),
       ShellRoute(
         builder: (context, state, child) {
