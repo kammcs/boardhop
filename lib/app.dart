@@ -259,7 +259,9 @@ class _BoardhopAppState extends State<BoardhopApp> {
           if (!ids.contains(bound.accountId)) bound.activitySync.stop();
         }
         for (final id in ids) {
-          deps.forAccount(id).activitySync.start();
+          deps.forAccount(id).activitySync
+            ..beforeNotify = _push.drainPushed
+            ..start();
         }
         unawaited(_push.syncAccounts(ids));
       } else if (state is AuthSignedOut) {

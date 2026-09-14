@@ -84,6 +84,10 @@ import UserNotifications
         }
         PushSharedDefaults.setAccountId(accountId, org: org)
         result(true)
+      case "drainPushed":
+        // Pointers the Notification Service Extension handled while the app
+        // was not running: the feed rows and the notified marks.
+        result(PushSharedDefaults.drainPending())
       case "clearAccount":
         guard let arguments = call.arguments as? [String: Any],
           let org = arguments["org"] as? String, !org.isEmpty

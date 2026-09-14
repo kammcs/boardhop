@@ -85,6 +85,27 @@ class PushCoordinator {
     }
     final launch = push.takeLaunchPointer();
     if (launch != null) _open(launch);
+    unawaited(drainPushed());
+  }
+
+  /// Takes the pointers the platform posted while Dart was not running and
+  /// puts each into its account's Activity feed, which also marks the
+  /// artifact as notified so the feed's poll does not announce it again.
+  ///
+  /// Called at start, on every resume, and by `ActivitySync` right before it
+  /// decides what to notify, because the poll and the resume race.
+  Future<void> drainPushed() async {
+    // The platform empties its queue as it answers, so never ask before the
+    // signed-in accounts are known: at start that is before `syncAccounts`,
+    // and a pointer taken then has no account to land in and is lost. It
+    // waits on the platform instead and `syncAccounts` drains it.
+    if (_accounts.isEmpty) return;
+    final pending = await push.drainPushed();
+    for (final pointer in pending) {
+      final accountId = accountForOrg(pointer.org);
+      if (accountId == null) continue;
+      await _insertIntoFeed(pointer, accountId);
+    }
   }
 
   /// Called whenever the set of signed-in accounts changes, and at start.
@@ -95,6 +116,7 @@ class PushCoordinator {
     for (final id in accountIds) {
       await registrarFor(id).load();
     }
+    await drainPushed();
     await _registerAll();
   }
 
@@ -174,6 +196,7 @@ class PushCoordinator {
   /// an account that is already registered and the missing registration for
   /// one that is not.
   void _onResume() {
+    unawaited(drainPushed());
     unawaited(_registerAll());
   }
 
@@ -300,6 +323,7 @@ ActivityItem? pushedActivityItem(PushPointer pointer, String accountId) {
     result: pointer.detail,
     actor: pointer.actor,
     actorId: pointer.actorId,
+    pushed: true,
   );
 }
 

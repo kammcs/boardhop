@@ -130,6 +130,9 @@ final class NotificationService: UNNotificationServiceExtension {
       if let subtitle = enrichment.subtitle { content.subtitle = subtitle }
     }
     let outcome = enrichment == nil ? "fallback (\(reason ?? "unknown"))" : "enriched"
+    // Whatever was shown, Dart has not seen this pointer: queue it for the
+    // app's next drain so the feed gets the row and the poll stays quiet.
+    if let pointer, pointer.isPointer { PushSharedDefaults.appendPending(pointer.data) }
     NSLog(
       "%@: verb=%@ artifact=%@/%@ → %@", pushLogTag, pointer?.verb ?? "none",
       pointer?.artifactType ?? "none", pointer?.artifactId ?? "none", outcome)

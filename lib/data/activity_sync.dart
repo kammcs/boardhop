@@ -53,6 +53,12 @@ class ActivitySync with WidgetsBindingObserver {
   /// True while the Activity page is on screen.
   bool suppressed = false;
 
+  /// Runs before the poll decides what to announce: `PushCoordinator.drainPushed`,
+  /// which files the pointers the platform posted while Dart was not running
+  /// and marks them notified. Without it a pushed approval is announced twice,
+  /// the second time with this feed's coarser route (Pixel 10, 2026-09-14).
+  Future<void> Function()? beforeNotify;
+
   void start() {
     if (_started) return;
     _started = true;
@@ -123,6 +129,11 @@ class ActivitySync with WidgetsBindingObserver {
         // Baseline: nothing to announce yet, but remember this moment.
         await _activity.markSeen(org);
         return;
+      }
+      try {
+        await beforeNotify?.call();
+      } catch (e) {
+        debugPrint('Activity sync: drain failed ($e)');
       }
       final remembered = await _cache.get(notifiedKey(org));
       final notified = <String>{

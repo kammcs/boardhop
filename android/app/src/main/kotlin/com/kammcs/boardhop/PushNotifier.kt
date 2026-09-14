@@ -77,6 +77,10 @@ object PushNotifier {
         val manager = NotificationManagerCompat.from(context)
         try {
             manager.notify(pointer.tag, pointer.notificationId, builder.build())
+            // Dart is not listening, or it would have posted this itself: let
+            // it find the pointer on its next drain so the feed gets the row
+            // and the poll does not announce the artifact a second time.
+            PushedQueue.append(context, pointer.data)
         } catch (e: SecurityException) {
             // POST_NOTIFICATIONS not granted: nothing to do, and nothing lost.
             Log.d(PushEnricher.TAG, "post refused: no notification permission")

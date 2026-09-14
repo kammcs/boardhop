@@ -48,6 +48,30 @@ enum PushSharedDefaults {
     defaults?.removeObject(forKey: accountKey(org: org))
   }
 
+  /// Pointers the extension handled while the app was not listening, waiting
+  /// for Dart to take them (`drainPushed` on the push channel). Without this
+  /// the Activity feed's poll finds the same artifact later and announces it
+  /// a second time, with the feed row's coarser route. Metadata only: the
+  /// relay's pointer, never the enriched body. Capped at [pendingMax].
+  static let pendingKey = "push.pending"
+  static let pendingMax = 50
+
+  static func appendPending(_ pointer: [String: String]) {
+    guard let defaults else { return }
+    var pending = (defaults.array(forKey: pendingKey) as? [[String: String]]) ?? []
+    pending.append(pointer)
+    if pending.count > pendingMax { pending.removeFirst(pending.count - pendingMax) }
+    defaults.set(pending, forKey: pendingKey)
+  }
+
+  /// Everything queued, and the queue emptied, in one step.
+  static func drainPending() -> [[String: String]] {
+    guard let defaults else { return [] }
+    let pending = (defaults.array(forKey: pendingKey) as? [[String: String]]) ?? []
+    defaults.removeObject(forKey: pendingKey)
+    return pending
+  }
+
   /// The extension's breadcrumb file, `Library/Caches/push-extension.log` in
   /// the group container: one line per push with the verb, the artifact and
   /// `enriched|fallback (<reason>)`, capped at [breadcrumbLines] lines.

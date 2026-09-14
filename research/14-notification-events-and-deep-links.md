@@ -183,7 +183,7 @@ Budget and behaviour, both platforms:
 
 Cold start: `takeLaunchPointer()` already carries the pointer through sign-in; the deep link opens after the shell is up (verified on Android in R1, on the iPhone in the Mac session).
 
-The Activity feed gets each pushed pointer inserted as an `ActivityItem` at once (kind by artifact, `actor` from the pointer), so the feed and the notifications agree without waiting for the next poll; the poll dedups on `key`.
+The Activity feed gets each pushed pointer inserted as an `ActivityItem` at once (kind by artifact, `actor` from the pointer), so the feed and the notifications agree without waiting for the next poll; the poll dedups on `key`. **Amended 2026-09-14:** when the native side posts (Android's messaging service, the iOS extension) Dart is not running, so the pointer is queued on the platform (`PushedQueue` / `push.pending` in the app group) and drained through `drainPushed` at start, on resume and before every poll's notify step; and pushed rows are flagged `pushed` so `refresh` keeps them for seven days instead of replacing the feed with the poll's narrower sources. Without both, the Pixel showed the approval twice (the second with the Pipelines route) and no build row at all.
 
 ## 5. Relay-side state, dedup and fan-out
 

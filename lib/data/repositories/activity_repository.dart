@@ -35,6 +35,26 @@ class ActivityRepository {
   static const apiVersion = '7.1';
   static const workItemDays = 14;
   static const buildWindow = Duration(days: 2);
+
+  /// How long a pushed row outlives the poll's own sources.
+  static const pushedWindow = Duration(days: 7);
+
+  /// The feed after a poll: what was [fetched], plus the pushed rows among
+  /// [existing] that are younger than [pushedWindow]. A fetched copy of a key
+  /// wins over the pushed one (`merge` keeps the first).
+  static List<ActivityItem> withPushed(
+    List<ActivityItem> fetched,
+    Iterable<ActivityItem> existing, {
+    required DateTime now,
+  }) {
+    final keepFrom = now.subtract(pushedWindow);
+    return merge([
+      ...fetched,
+      for (final i in existing)
+        if (i.pushed && (i.time == null || i.time!.isAfter(keepFrom))) i,
+    ]);
+  }
+
   static const maxPinnedProjects = 5;
 
   static String feedKey(String org) => 'activity:$org';
@@ -171,7 +191,16 @@ class ActivityRepository {
         }),
     ]);
     if (items.isEmpty && errors.isNotEmpty) throw errors.first;
-    final merged = merge(items);
+    // Rows a push put here stay for a while: the relay knows about builds,
+    // approvals and comments the sources above never list (builds only come
+    // from pinned projects), and the first poll after a push used to wipe
+    // the row it had just announced. Fetched first, so a fetched copy wins.
+    final existing = await cached(org);
+    final merged = withPushed(
+      items,
+      existing?.items ?? const [],
+      now: DateTime.now(),
+    );
     await _cache.put(feedKey(org), [for (final i in merged) i.toJson()]);
     return merged;
   }

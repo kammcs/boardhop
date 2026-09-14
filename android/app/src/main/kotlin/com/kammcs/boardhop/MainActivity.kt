@@ -86,6 +86,9 @@ class MainActivity : FlutterActivity() {
                     pendingPointer = null
                     result.success(pointer)
                 }
+                // Pointers the messaging service posted while Dart was not
+                // running (R2.6 gap): the feed rows and the notified marks.
+                "drainPushed" -> result.success(PushedQueue.drain(applicationContext))
                 "debugEnrich" -> debugEnrich(call.arguments, result)
                 else -> result.notImplemented()
             }

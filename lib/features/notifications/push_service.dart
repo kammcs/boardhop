@@ -35,7 +35,7 @@ import 'push_pointer.dart';
 /// Nothing here routes or shows anything; `PushCoordinator` does that, because
 /// only it knows which signed-in account an organization belongs to.
 class PushService {
-  PushService._();
+  PushService._() : _isFake = false;
 
   static const channel = MethodChannel('com.kammcs.boardhop/push');
 
@@ -57,7 +57,13 @@ class PushService {
 
   /// For tests: nothing platform-specific behind it.
   @visibleForTesting
-  PushService.fake();
+  PushService.fake() : _isFake = true;
+
+  final bool _isFake;
+
+  /// Tests: what [drainPushed] answers on a fake service.
+  @visibleForTesting
+  List<PushPointer> fakePending = [];
 
   /// This install's APNs or FCM token, null until the OS gives one. Rotations
   /// arrive here too, and the coordinator re-registers.
@@ -256,6 +262,30 @@ class PushService {
       }
     } catch (e) {
       debugPrint('Push: account mirror failed ($e)');
+    }
+  }
+
+  /// The pointers the platform side posted while Dart was not listening
+  /// (Android's messaging service, the iOS Notification Service Extension),
+  /// emptied on the platform as they are read. Each becomes a feed row and a
+  /// notified mark in `PushCoordinator.drainPushed`, so the Activity poll
+  /// never announces an artifact the push already did (research/14 §4.2).
+  Future<List<PushPointer>> drainPushed() async {
+    if (_isFake) {
+      final out = fakePending;
+      fakePending = [];
+      return out;
+    }
+    if (platform == null) return const [];
+    try {
+      final raw = await channel.invokeMethod<List<Object?>>('drainPushed');
+      return [
+        for (final entry in raw ?? const <Object?>[])
+          ?_pointerOf(entry),
+      ];
+    } catch (e) {
+      debugPrint('Push: drain failed ($e)');
+      return const [];
     }
   }
 

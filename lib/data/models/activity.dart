@@ -21,6 +21,7 @@ class ActivityItem extends Equatable {
     this.result,
     this.actor,
     this.actorId,
+    this.pushed = false,
   });
 
   /// [orgPath] is the account-scoped org route (`Routes.org`), so a tap on
@@ -99,6 +100,7 @@ class ActivityItem extends Equatable {
     result: json['result'] as String?,
     actor: json['actor'] as String?,
     actorId: json['actorId'] as String?,
+    pushed: json['pushed'] as bool? ?? false,
   );
 
   final ActivityKind kind;
@@ -121,6 +123,13 @@ class ActivityItem extends Equatable {
   /// Identity id behind [actor], to skip the user's own changes.
   final String? actorId;
 
+  /// True for a row a push notification put here (research/14 §4.2) rather
+  /// than the poll. The poll's sources are narrower than the relay's (builds
+  /// only from pinned projects, for instance), so `refresh` keeps these rows
+  /// for [ActivityRepository.pushedWindow] instead of replacing the whole
+  /// feed with what it fetched; a fetched copy of the same key wins.
+  final bool pushed;
+
   bool isNewSince(DateTime? seen) =>
       seen != null && time != null && time!.isAfter(seen);
 
@@ -136,8 +145,9 @@ class ActivityItem extends Equatable {
     'result': ?result,
     'actor': ?actor,
     'actorId': ?actorId,
+    if (pushed) 'pushed': true,
   };
 
   @override
-  List<Object?> get props => [key, kind, time, status, result];
+  List<Object?> get props => [key, kind, time, status, result, pushed];
 }
