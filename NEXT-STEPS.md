@@ -65,6 +65,8 @@
     - B5 Decisions: relay stack (Dart shelf so it shares the app's models, or whatever the Hetzner box already runs), the beta event set (PR reviewer added / updated, work item assigned / commented, build completed, approval pending), and whether live logs are in the beta or follow → unblocks the relay skeleton.
     Intune plugin only if a customer requires it (research/08 §4).
 
+20. **Search across Azure DevOps content (planned with Kelly 2026-09-14, `research/15-search.md`).** Decisions D1–D10: current project by default with an All projects switch; work items, code and pull requests in v1 (wiki waits for a reader, pipelines and repos out); a search icon on the project Home app bar opening a full-screen view; Type and State chips from the facets; last 10 recents per account on the device; title plus one highlighted line; PRs matched locally over the active org list; search as you type from 3 characters with a 400 ms debounce; grouped sections with See all; an inline filter field on the Work tab. Spike s44 (read-only) pinned the Search API shapes (lower-case field names, `<highlighthit>` markup in `hits`, facets, `$orderBy`, org-wide code search). Build in dispatcher mode: **S1 data layer** (in progress), S2 UI, S3 simulator acceptance with screenshots.
+
 ## Conventions
 
 - `FilledButton` minimum size is 48×48 in the theme; never `Size.fromHeight`, which is an infinite width and breaks buttons inside a `Row`. Full-width CTAs stretch through a `Column(crossAxisAlignment: stretch)` or a `ListView`.
