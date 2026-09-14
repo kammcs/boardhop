@@ -67,6 +67,7 @@ enum PushTokens {
     guard let application = client(config) else { return nil }
     guard let account = try? application.account(forIdentifier: accountId) else {
       NSLog("%@: token, the registered account is no longer in the MSAL cache", pushLogTag)
+      PushSharedDefaults.breadcrumb("token: account not in the MSAL cache")
       return nil
     }
     let parameters = MSALSilentTokenParameters(scopes: [adoScope], account: account)
@@ -74,6 +75,7 @@ enum PushTokens {
       application.acquireTokenSilent(with: parameters) { result, error in
         if let token = result?.accessToken {
           NSLog("%@: token acquired silently", pushLogTag)
+          PushSharedDefaults.breadcrumb("token: acquired silently")
           continuation.resume(returning: token)
         } else {
           // MSALErrorInteractionRequired and everything else alike: the
@@ -81,6 +83,8 @@ enum PushTokens {
           NSLog(
             "%@: token, silent acquisition failed (code %ld)", pushLogTag,
             (error as NSError?)?.code ?? 0)
+          PushSharedDefaults.breadcrumb(
+            "token: silent acquisition failed (code \((error as NSError?)?.code ?? 0))")
           continuation.resume(returning: nil)
         }
       }
@@ -124,6 +128,7 @@ enum PushTokens {
       return application
     } catch {
       NSLog("%@: token, MSAL client creation failed (code %ld)", pushLogTag, (error as NSError).code)
+      PushSharedDefaults.breadcrumb("token: MSAL client creation failed (code \((error as NSError).code))")
       return nil
     }
   }

@@ -48,6 +48,11 @@ final class NotificationService: UNNotificationServiceExtension {
       fallbackBody: mutable.body,
       fallbackSubtitle: mutable.subtitle)
     self.pointer = pointer
+    NSLog(
+      "%@: received verb=%@ artifact=%@/%@", pushLogTag, pointer.verb ?? "none",
+      pointer.artifactType, pointer.artifactId)
+    PushSharedDefaults.breadcrumb(
+      "received verb=\(pointer.verb ?? "none") artifact=\(pointer.artifactType)/\(pointer.artifactId)")
 
     guard pointer.isPointer else {
       finish(nil, reason: "not a pointer")
@@ -124,10 +129,12 @@ final class NotificationService: UNNotificationServiceExtension {
       // project line the relay sent.
       if let subtitle = enrichment.subtitle { content.subtitle = subtitle }
     }
+    let outcome = enrichment == nil ? "fallback (\(reason ?? "unknown"))" : "enriched"
     NSLog(
       "%@: verb=%@ artifact=%@/%@ → %@", pushLogTag, pointer?.verb ?? "none",
-      pointer?.artifactType ?? "none", pointer?.artifactId ?? "none",
-      enrichment == nil ? "fallback (\(reason ?? "unknown"))" : "enriched")
+      pointer?.artifactType ?? "none", pointer?.artifactId ?? "none", outcome)
+    PushSharedDefaults.breadcrumb(
+      "verb=\(pointer?.verb ?? "none") artifact=\(pointer?.artifactType ?? "none")/\(pointer?.artifactId ?? "none") → \(outcome)")
     handler?(content ?? UNNotificationContent())
   }
 }

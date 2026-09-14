@@ -47,4 +47,33 @@ enum PushSharedDefaults {
   static func clearAccountId(org: String) {
     defaults?.removeObject(forKey: accountKey(org: org))
   }
+
+  /// The extension's breadcrumb file, `Library/Caches/push-extension.log` in
+  /// the group container: one line per push with the verb, the artifact and
+  /// `enriched|fallback (<reason>)`, capped at [breadcrumbLines] lines.
+  ///
+  /// An extension's `NSLog` is easy to lose (the device's syslog relay stalls,
+  /// and the process is gone by the time anyone looks), while a file in the
+  /// group container can be pulled with `devicectl device copy from
+  /// --domain-type appGroupDataContainer`. The same logging rule as the
+  /// console applies: never a token, a title, a body or a response.
+  static let breadcrumbLines = 200
+
+  static var breadcrumbURL: URL? {
+    FileManager.default
+      .containerURL(forSecurityApplicationGroupIdentifier: suiteName)?
+      .appendingPathComponent("Library/Caches/push-extension.log")
+  }
+
+  static func breadcrumb(_ line: String) {
+    guard let url = breadcrumbURL else { return }
+    let stamp = ISO8601DateFormatter().string(from: Date())
+    var lines = (try? String(contentsOf: url, encoding: .utf8))?
+      .split(separator: "\n", omittingEmptySubsequences: true).map(String.init) ?? []
+    lines.append("\(stamp) \(line)")
+    if lines.count > breadcrumbLines { lines.removeFirst(lines.count - breadcrumbLines) }
+    try? FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+  }
 }
