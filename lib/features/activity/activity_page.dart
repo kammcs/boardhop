@@ -17,13 +17,22 @@ import '../../theme/theme.dart';
 import '../pipelines/widgets/pipeline_visuals.dart';
 import '../pull_requests/widgets/pr_visuals.dart';
 import '../shared/account_scope.dart';
+import '../../core/config/app_config.dart';
 
 /// Foreground activity feed for one organization: refreshes on open, on
 /// pull, and every minute while visible (≈0.013 TSTU per cycle, spike s09).
 /// Items newer than the last visit carry a dot. Push arrives later with the
 /// Marketplace extension and tenant relay (research/06).
 class ActivityPage extends StatefulWidget {
-  const ActivityPage({super.key, required this.org});
+  const ActivityPage({
+    super.key,
+    required this.org,
+    this.showPushStatus = AppConfig.diagnosticsEnabled,
+  });
+
+  /// The push registration row with Send test. Off in store builds
+  /// (`AppConfig.diagnosticsEnabled`).
+  final bool showPushStatus;
 
   final String org;
 
@@ -227,13 +236,17 @@ class _ActivityPageState extends State<ActivityPage>
               ),
               // Push (research/06 R1): only meaningful once the local
               // notifications are on, since the relay is woken from the same
-              // opt-in and shows through the same channel.
-              ListenableBuilder(
-                listenable: notifications.enabledNotifier,
-                builder: (context, _) => notifications.enabled
-                    ? PushStatusTile(org: widget.org)
-                    : const SizedBox.shrink(),
-              ),
+              // opt-in and shows through the same channel. Local builds only
+              // (Kelly, 2026-09-14): the registration line and Send test are
+              // test gear, gated like the Diagnostics page; store builds
+              // register silently and Settings → Notifications has the prefs.
+              if (widget.showPushStatus)
+                ListenableBuilder(
+                  listenable: notifications.enabledNotifier,
+                  builder: (context, _) => notifications.enabled
+                      ? PushStatusTile(org: widget.org)
+                      : const SizedBox.shrink(),
+                ),
               if (visible.isEmpty && _loadedOnce && !_loading)
                 Padding(
                   padding: const EdgeInsets.all(Spacing.xl),
