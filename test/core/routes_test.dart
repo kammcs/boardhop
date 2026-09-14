@@ -11,6 +11,75 @@ void main() {
     );
   });
 
+  group('the work item routes carry the tab (Kelly, 2026-09-14)', () {
+    test('no tab is the plain route, which opens Details', () {
+      expect(
+        Routes.workItem('u1', 'puremedia', 'DevOps Mobile App', '15545'),
+        '/a/u1/orgs/puremedia/projects/DevOps%20Mobile%20App'
+        '/work-items/15545',
+      );
+      expect(
+        Routes.workItemStandalone(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+        ),
+        '/a/u1/orgs/puremedia/projects/DevOps%20Mobile%20App'
+        '/work-item/15545',
+      );
+    });
+
+    test('a tab rides in the query on both routes', () {
+      expect(
+        Routes.workItem(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+          tab: 'related',
+        ),
+        endsWith('/work-items/15545?tab=related'),
+      );
+      expect(
+        Routes.workItemStandalone(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+          tab: 'comments',
+        ),
+        endsWith('/work-item/15545?tab=comments'),
+      );
+    });
+
+    test('a comment anchor and a tab travel together', () {
+      expect(
+        Routes.workItemStandalone(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+          comment: '6068143',
+          tab: 'comments',
+        ),
+        endsWith('/work-item/15545?comment=6068143&tab=comments'),
+      );
+      // The anchor alone is spelled exactly as it was before the tab
+      // parameter existed, so pushed notifications are unchanged.
+      expect(
+        Routes.workItemStandalone(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '15545',
+          comment: '6068143',
+        ),
+        endsWith('/work-item/15545?comment=6068143'),
+      );
+    });
+  });
+
   group('the search route (research/15 §4)', () {
     test('plain, it is the grouped view of the project', () {
       expect(

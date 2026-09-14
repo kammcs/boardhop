@@ -24,6 +24,8 @@ import '../shared/account_scope.dart';
 import '../shared/anchor_highlight.dart';
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
+import '../shared/widgets/tab_count_badge.dart';
+import 'form/controls/attachments_section.dart';
 import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
 import 'form/type_chooser.dart';
@@ -34,9 +36,12 @@ import 'widgets/work_item_actions.dart';
 import 'widgets/work_item_field_groups.dart';
 import 'widgets/work_item_visuals.dart';
 
-/// One work item: header, key fields, long-text fields rendered as HTML or
-/// Markdown, and the discussion from the preview Comments API. Lightweight
-/// writes: post a comment, change state, assign to me / unassign.
+/// One work item in three tabs — Details, Related, Comments — so a long item
+/// is read a part at a time rather than as one endless scroll (Kelly,
+/// 2026-09-14). Details is the header, the facts and the type's own fields;
+/// Related is the links and the attachments; Comments is the discussion from
+/// the preview Comments API with the composer under it. Lightweight writes:
+/// post a comment, change state, assign to me / unassign.
 class WorkItemDetailPage extends StatefulWidget {
   const WorkItemDetailPage({
     super.key,
@@ -45,11 +50,17 @@ class WorkItemDetailPage extends StatefulWidget {
     required this.id,
     this.embedded = false,
     this.initialCommentId,
+    this.initialTab,
   });
 
   final String org;
   final String project;
   final int id;
+
+  /// Which tab to open on: `details`, `related` or `comments` from
+  /// `?tab=` on either work item route. Anything else opens Details, which
+  /// is also where a link with no `tab` lands.
+  final String? initialTab;
 
   /// A pushed comment notification lands here (`?comment={id}`,
   /// research/14 §4.2): once the discussion is read the page scrolls that
@@ -66,7 +77,45 @@ class WorkItemDetailPage extends StatefulWidget {
   State<WorkItemDetailPage> createState() => _WorkItemDetailPageState();
 }
 
-class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
+class _WorkItemDetailPageState extends State<WorkItemDetailPage>
+    with SingleTickerProviderStateMixin {
+  /// Details, Related, Comments. Owned here rather than through a
+  /// `DefaultTabController` so the scaffold rebuilds when the tab changes
+  /// and can take its composer away, the way the pull request page does.
+  late final TabController _tabs =
+      TabController(length: 3, vsync: this, initialIndex: _initialIndex)
+        ..addListener(() {
+          if (mounted) setState(() {});
+        });
+
+  static const int _detailsTab = 0;
+  static const int _relatedTab = 1;
+
+  /// The composer posts a discussion comment, which means nothing under
+  /// Details or Related.
+  static const int _commentsTab = 2;
+
+  /// `?tab=` from a link or a push; a `?comment=` anchor implies Comments,
+  /// because that is where the comment lives.
+  int get _initialIndex => switch (widget.initialTab) {
+    'related' => _relatedTab,
+    'comments' => _commentsTab,
+    'details' => _detailsTab,
+    _ => widget.initialCommentId != null ? _commentsTab : _detailsTab,
+  };
+
+  /// The item's drift stream, held rather than rebuilt: a tab change
+  /// rebuilds this page many times a second while the strip animates, and
+  /// a fresh stream each time would resubscribe on every frame.
+  late final Stream<WorkItem?> _items = context
+      .read<WorkItemRepository>()
+      .watchItem(widget.org, widget.id);
+
+  /// Reading and opening the item's attachments on the Related tab. Built
+  /// once the bearer token is known; no `upload`, because adding a file is
+  /// the form's job.
+  AttachmentSource? _attachments;
+
   /// The fallback rendering, for an item whose type's layout is not there
   /// yet (the first open of a cached item without a connection): the
   /// long-text fields of the stock types. Once the spec arrives, the
@@ -146,24 +195,31 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     if (old.initialCommentId != widget.initialCommentId) {
       _anchoredFor = null;
       _anchorComment();
+    } else if (old.initialTab != widget.initialTab &&
+        widget.initialTab != null) {
+      _tabs.animateTo(_initialIndex);
     }
   }
 
   @override
   void dispose() {
     _highlightTimer?.cancel();
+    _tabs.dispose();
     super.dispose();
   }
 
   /// Scrolls to the pushed comment and tints it for [kAnchorHighlight].
   ///
-  /// The comments are the last thing on the page, so the section header is
-  /// what the scroller aims at until the card itself has been built.
+  /// The comments now live on a tab of their own, so the tab is selected
+  /// first and the scroll waits for the frame after that: the list does not
+  /// exist until the strip has moved. The discussion block is what the
+  /// scroller aims at until the card itself has been built.
   void _anchorComment() {
     final id = widget.initialCommentId;
     final comments = _comments;
     if (id == null || comments == null || _anchoredFor == id) return;
     _anchoredFor = id;
+    if (_tabs.index != _commentsTab) _tabs.animateTo(_commentsTab);
     final known = comments.any((c) => c.id == id);
     final key = known ? _commentKeys.putIfAbsent(id, GlobalKey.new) : null;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -190,11 +246,16 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       _error = null;
     });
     final repo = context.read<WorkItemRepository>();
+    final forms = context.read<WorkItemFormRepository>();
     final auth = context.read<AuthService>();
     final accountId = AccountScope.of(context);
     try {
       final token = await auth.accessToken(accountId: accountId);
       _headers = {'Authorization': 'Bearer $token'};
+      _attachments = AttachmentSource(
+        bytes: forms.attachmentBytes,
+        headers: _headers,
+      );
       _me ??= auth.accountById(accountId)?.username;
       final types = await repo.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
@@ -635,124 +696,235 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
     ];
   }
 
+  /// The Related tab: what this item links to, and the files hanging off
+  /// it. Read-only — adding is the More menu's Add child / Add related and
+  /// the form's own Attachments page.
+  List<Widget> _related(WorkItem item) {
+    final theme = Theme.of(context);
+    final attachments = [
+      for (final relation in item.attachmentRelations)
+        AttachmentInfo.of(relation),
+    ];
+    if (item.linkRelations.isEmpty && attachments.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Spacing.lg,
+            Spacing.xl,
+            Spacing.lg,
+            0,
+          ),
+          child: Text(
+            'Nothing linked yet',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ];
+    }
+    final source = _attachments;
+    return [
+      if (item.linkRelations.isNotEmpty)
+        DetailSection(
+          title: 'Links',
+          child: _Links(
+            relations: item.linkRelations,
+            linked: _linked,
+            visuals: _visuals,
+            onOpen: _openLinked,
+          ),
+        ),
+      if (attachments.isNotEmpty)
+        DetailSection(
+          title: 'Attachments',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final info in attachments)
+                AttachmentRow(
+                  key: ValueKey(info.relation.key),
+                  info: info,
+                  source: source,
+                  onOpen: source == null ? null : () => _openAttachment(info),
+                ),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  /// Opens one attachment through the same path the form's Attachments page
+  /// uses, so the bytes are fetched and cached in one place.
+  Future<void> _openAttachment(AttachmentInfo info) async {
+    final source = _attachments;
+    if (source == null) return;
+    final message = await openAttachment(context, info: info, source: source);
+    if (message != null && mounted) setState(() => _error = message);
+  }
+
+  /// One tab's scroller: every tab answers a pull to refresh with the same
+  /// [_refresh], and none of them refetch when the tab is merely switched.
+  Widget _tabBody({Key? key, required List<Widget> children}) =>
+      RefreshIndicator(
+        onRefresh: _refresh,
+        child: ContentColumn(
+          child: ListView(
+            key: key,
+            physics: const AlwaysScrollableScrollPhysics(),
+            // A swipe down the discussion puts the keyboard away
+            // (Kelly, 2026-09-14).
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: scrollEndPadding(context),
+            children: children,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Scaffold(
-      bottomNavigationBar: CommentComposer(
-        onSubmit: _postComment,
-        busy: _writing,
-        mentions: _mentions,
-      ),
-      appBar: AppBar(
-        title: Text(
-          widget.embedded
-              ? '#${widget.id}'
-              : '${widget.project} · #${widget.id}',
-        ),
-        automaticallyImplyLeading: !widget.embedded,
-        leading: widget.embedded
+    return StreamBuilder<WorkItem?>(
+      stream: _items,
+      builder: (context, snapshot) {
+        final item = snapshot.data;
+        // Links plus files: what the Related tab has to show. Unknown
+        // until the item is read, and the badge then shows nothing.
+        final related = item == null
             ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.pop(),
+            : item.linkRelations.length + item.attachmentRelations.length;
+        return Scaffold(
+          // The composer writes a discussion comment, so it belongs to the
+          // Comments tab alone (the pull request page does the same).
+          bottomNavigationBar: _tabs.index != _commentsTab
+              ? null
+              : CommentComposer(
+                  onSubmit: _postComment,
+                  busy: _writing,
+                  mentions: _mentions,
+                ),
+          appBar: AppBar(
+            title: Text(
+              widget.embedded
+                  ? '#${widget.id}'
+                  : '${widget.project} · #${widget.id}',
+            ),
+            automaticallyImplyLeading: !widget.embedded,
+            leading: widget.embedded
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => context.pop(),
+                  ),
+            actions: [
+              IconButton(
+                tooltip: 'Edit',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: _refreshing || _writing ? null : _edit,
               ),
-        actions: [
-          IconButton(
-            tooltip: 'Edit',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _refreshing || _writing ? null : _edit,
-          ),
-          PopupMenuButton<String>(
-            key: _moreKey,
-            tooltip: 'More',
-            offset: kTrailingMenuOffset,
-            enabled: !_refreshing && !_writing,
-            onSelected: (value) => _addLinked(related: value == 'related'),
-            itemBuilder: (context) => [
-              // A Task has no backlog level below it, so it is never a
-              // parent.
-              if (_childTypes.isNotEmpty)
-                const PopupMenuItem(value: 'child', child: Text('Add child')),
-              const PopupMenuItem(value: 'related', child: Text('Add related')),
-            ],
-          ),
-        ],
-      ),
-      body: StreamBuilder<WorkItem?>(
-        stream: context.read<WorkItemRepository>().watchItem(
-          widget.org,
-          widget.id,
-        ),
-        builder: (context, snapshot) {
-          final item = snapshot.data;
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ContentColumn(
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                // A swipe down the discussion puts the keyboard away
-                // (Kelly, 2026-09-14).
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: scrollEndPadding(context),
-                children: [
-                  if (_refreshing || _writing) const LinearProgressIndicator(),
-                  if (_error != null)
-                    ListTile(
-                      leading: Icon(Icons.error_outline, color: scheme.error),
-                      title: Text(_error!),
+              PopupMenuButton<String>(
+                key: _moreKey,
+                tooltip: 'More',
+                offset: kTrailingMenuOffset,
+                enabled: !_refreshing && !_writing,
+                onSelected: (value) => _addLinked(related: value == 'related'),
+                itemBuilder: (context) => [
+                  // A Task has no backlog level below it, so it is never a
+                  // parent.
+                  if (_childTypes.isNotEmpty)
+                    const PopupMenuItem(
+                      value: 'child',
+                      child: Text('Add child'),
                     ),
-                  if (item == null && !_refreshing && _error == null)
-                    const Padding(
-                      padding: EdgeInsets.all(Spacing.xl),
-                      child: Center(
-                        child: CircularProgressIndicator.adaptive(),
-                      ),
-                    ),
-                  if (item != null) ...[
-                    _Header(
-                      item: item,
-                      visuals: _visuals,
-                      onStateTap: _writing ? null : () => _changeState(item),
-                      onAssignTap: _writing
-                          ? null
-                          : () => _changeAssignment(item),
-                    ),
-                    _Facts(item: item),
-                    ..._fields(item),
-                    if (item.linkRelations.isNotEmpty)
-                      DetailSection(
-                        title: 'Links',
-                        child: _Links(
-                          relations: item.linkRelations,
-                          linked: _linked,
-                          visuals: _visuals,
-                          onOpen: _openLinked,
-                        ),
-                      ),
-                    DetailSection(
-                      key: _discussionKey,
-                      title: _comments == null
-                          ? 'Discussion'
-                          : 'Discussion (${_comments!.length})',
-                      child: _Discussion(
-                        comments: _comments,
-                        headers: _headers,
-                        onOpenMention: _openMention,
-                        keyFor: (id) =>
-                            _commentKeys.putIfAbsent(id, GlobalKey.new),
-                        highlighted: _highlighted,
-                      ),
-                    ),
-                  ],
+                  const PopupMenuItem(
+                    value: 'related',
+                    child: Text('Add related'),
+                  ),
                 ],
               ),
+            ],
+            // The strip divides the width evenly while the three labels
+            // and their pills fit, and scrolls when they no longer do.
+            bottom: CountedTabBar(
+              controller: _tabs,
+              tabs: [
+                const TabCount('Details'),
+                TabCount('Related', related),
+                TabCount('Comments', _comments?.length),
+              ],
             ),
-          );
-        },
-      ),
+          ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_refreshing || _writing) const LinearProgressIndicator(),
+              if (_error != null)
+                ListTile(
+                  leading: Icon(Icons.error_outline, color: scheme.error),
+                  title: Text(_error!),
+                ),
+              Expanded(
+                child: item == null
+                    ? (_error == null
+                          ? const Center(
+                              child: CircularProgressIndicator.adaptive(),
+                            )
+                          : const SizedBox.shrink())
+                    : TabBarView(
+                        controller: _tabs,
+                        children: [
+                          _tabBody(
+                            children: [
+                              _Header(
+                                item: item,
+                                visuals: _visuals,
+                                onStateTap: _writing
+                                    ? null
+                                    : () => _changeState(item),
+                                onAssignTap: _writing
+                                    ? null
+                                    : () => _changeAssignment(item),
+                              ),
+                              _Facts(item: item),
+                              ..._fields(item),
+                            ],
+                          ),
+                          _tabBody(children: _related(item)),
+                          _tabBody(
+                            children: [
+                              // The tab's own label and badge say
+                              // "Comments (12)", so no heading repeats it;
+                              // the key is what a `?comment=` anchor aims
+                              // at until the card itself is built.
+                              Padding(
+                                key: _discussionKey,
+                                padding: const EdgeInsets.fromLTRB(
+                                  Spacing.lg,
+                                  Spacing.lg,
+                                  Spacing.lg,
+                                  0,
+                                ),
+                                child: _Discussion(
+                                  comments: _comments,
+                                  headers: _headers,
+                                  onOpenMention: _openMention,
+                                  keyFor: (id) => _commentKeys.putIfAbsent(
+                                    id,
+                                    GlobalKey.new,
+                                  ),
+                                  highlighted: _highlighted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

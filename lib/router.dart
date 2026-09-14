@@ -184,11 +184,14 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           GoRoute(
                             path: ':id',
                             // `?comment={id}` from a pushed comment
-                            // notification (research/14 §4.2).
+                            // notification (research/14 §4.2), and
+                            // `?tab=details|related|comments` to open one
+                            // of the three tabs straight away.
                             builder: (_, state) => WorkItemDetailPage(
                               org: state.pathParameters['org']!,
                               project: state.pathParameters['project']!,
                               id: int.parse(state.pathParameters['id']!),
+                              initialTab: state.uri.queryParameters['tab'],
                               initialCommentId: int.tryParse(
                                 state.uri.queryParameters['comment'] ?? '',
                               ),
@@ -450,6 +453,7 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   org: state.pathParameters['org']!,
                   project: state.pathParameters['project']!,
                   id: int.parse(state.pathParameters['id']!),
+                  initialTab: state.uri.queryParameters['tab'],
                   initialCommentId: int.tryParse(
                     state.uri.queryParameters['comment'] ?? '',
                   ),

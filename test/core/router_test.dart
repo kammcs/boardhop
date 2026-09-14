@@ -99,6 +99,7 @@ void main() {
     final project = Routes.project('u1', 'contoso', 'DevOps Mobile App');
     final anchored = {
       '$project/work-items/15545?comment=1998234': '$project/work-items/15545',
+      '$project/work-items/15545?tab=related': '$project/work-items/15545',
       '$org/pull-requests/8336?thread=4821': '$org/pull-requests/8336',
       '$org/pull-requests/8336?tab=files': '$org/pull-requests/8336',
       '$project/pipelines?tab=approvals&approval=18': '$project/pipelines',
@@ -172,7 +173,20 @@ void main() {
       isNull,
     );
 
-    // The standalone route hands over the same three, `?comment=` and all.
+    expect(comment.initialTab, isNull);
+
+    // `?tab=` picks one of the three tabs on both work item routes
+    // (Kelly, 2026-09-14). An id with no tab still opens Details.
+    final related =
+        page('$project/work-items/15545?tab=related') as WorkItemDetailPage;
+    expect(related.initialTab, 'related');
+    expect(related.initialCommentId, isNull);
+    expect(
+      (page('$project/work-items/15545') as WorkItemDetailPage).initialTab,
+      isNull,
+    );
+
+    // The standalone route hands over the same four, `?comment=` and all.
     final standalone = page(
       Routes.workItemStandalone(
         'u1',
@@ -185,6 +199,18 @@ void main() {
     expect(standalone.id, 15545);
     expect(standalone.project, 'DevOps Mobile App');
     expect(standalone.initialCommentId, 6068143);
+
+    final standaloneTab = page(
+      Routes.workItemStandalone(
+        'u1',
+        'contoso',
+        'DevOps Mobile App',
+        '15545',
+        tab: 'comments',
+      ),
+    ) as WorkItemDetailPage;
+    expect(standaloneTab.initialTab, 'comments');
+    expect(standaloneTab.initialCommentId, isNull);
 
     final thread =
         page('$org/pull-requests/8334?thread=42511') as PullRequestDetailPage;

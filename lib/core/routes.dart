@@ -20,14 +20,29 @@ abstract final class Routes {
   static String pullRequest(String accountId, String org, String id) =>
       '${Routes.org(accountId, org)}/pull-requests/${Uri.encodeComponent(id)}';
 
+  /// [tab] is `details`, `related` or `comments`; the page opens on
+  /// Details when it is left out.
   static String workItem(
     String accountId,
     String org,
     String project,
-    String id,
-  ) =>
-      '${Routes.project(accountId, org, project)}'
-      '/work-items/${Uri.encodeComponent(id)}';
+    String id, {
+    String? tab,
+  }) => _withQuery(
+    '${Routes.project(accountId, org, project)}'
+    '/work-items/${Uri.encodeComponent(id)}',
+    {'tab': tab},
+  );
+
+  /// A route with the anchors that are actually set appended as a query
+  /// string; a null value is simply left out.
+  static String _withQuery(String base, Map<String, String?> params) {
+    final query = params.entries
+        .where((e) => e.value != null && e.value!.isNotEmpty)
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value!)}')
+        .join('&');
+    return query.isEmpty ? base : '$base?$query';
+  }
 
   /// The same work item as a page of its own, outside the project tab
   /// shell. A push that starts from a page which is itself over the shell —
@@ -45,12 +60,12 @@ abstract final class Routes {
     String project,
     String id, {
     String? comment,
-  }) {
-    final base =
-        '${Routes.project(accountId, org, project)}'
-        '/work-item/${Uri.encodeComponent(id)}';
-    return comment == null ? base : '$base?comment=$comment';
-  }
+    String? tab,
+  }) => _withQuery(
+    '${Routes.project(accountId, org, project)}'
+    '/work-item/${Uri.encodeComponent(id)}',
+    {'comment': comment, 'tab': tab},
+  );
 
   /// Search inside one project (research/15 §4). The query carries what the
   /// page is showing so a deep link, a restart or a See-all push reopens the

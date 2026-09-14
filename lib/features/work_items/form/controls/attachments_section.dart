@@ -83,7 +83,7 @@ class AttachmentInfo {
 class AttachmentSource {
   const AttachmentSource({
     required this.bytes,
-    required this.upload,
+    this.upload,
     this.commit,
     this.headers = const {},
   });
@@ -91,7 +91,10 @@ class AttachmentSource {
   /// An attachment's bytes with the bearer token (spike w17).
   final Future<Uint8List> Function(String url) bytes;
 
-  final Future<AttachmentRef> Function(String fileName, Uint8List bytes) upload;
+  /// Null on a read-only host — the detail page's Related tab lists the
+  /// files and opens them, and the form is where they are added.
+  final Future<AttachmentRef> Function(String fileName, Uint8List bytes)?
+  upload;
 
   /// Edit mode: writes the pending relation change straight away, because
   /// an attachment on an existing item is not worth holding until Save
@@ -101,6 +104,48 @@ class AttachmentSource {
 
   /// `Authorization` for the HTML renderer's embedded images.
   final Map<String, String> headers;
+}
+
+/// Opens one attachment, wherever it is listed: an image in the full-screen
+/// viewer, anything else fetched once and handed to the share sheet.
+///
+/// The form's Attachments page and the detail page's Related tab both call
+/// this, so the bytes are fetched in one place and a file opens the same way
+/// from either (R-tabs).
+///
+/// Answers the message to show when it could not be opened, and null when it
+/// went.
+Future<String?> openAttachment(
+  BuildContext context, {
+  required AttachmentInfo info,
+  required AttachmentSource source,
+}) async {
+  if (info.isImage) {
+    // The root navigator, so the viewer sits above the project shell:
+    // inside it the tab bar stayed on the phone and the glass rail
+    // floated over the image on the tablet (iOS walkthrough).
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => AttachmentViewer(info: info, source: source),
+      ),
+    );
+    return null;
+  }
+  try {
+    final bytes = await source.bytes(info.url);
+    final dir = await getTemporaryDirectory();
+    final file = File(p.join(dir.path, info.name));
+    await file.writeAsBytes(bytes);
+    // No `open_filex`: the share sheet is one dependency fewer and lets
+    // the user hand the file to whatever app they have.
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], title: info.name),
+    );
+    return null;
+  } catch (e) {
+    return 'Could not open the file: $e';
+  }
 }
 
 /// The Attachments panel: the item's files as image thumbnails and named
@@ -128,7 +173,8 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
 
   Future<void> _add() async {
     final source = widget.source;
-    if (source == null) return;
+    final upload = source?.upload;
+    if (source == null || upload == null) return;
     final from = await showAttachmentSourceSheet(context);
     if (from == null || !mounted) return;
     PickedAttachment? picked;
@@ -150,7 +196,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
       _message = null;
     });
     try {
-      final uploaded = await source.upload(picked.name, picked.bytes!);
+      final uploaded = await upload(picked.name, picked.bytes!);
       if (!mounted) return;
       widget.state.addRelation(
         WorkItemRelation(
@@ -199,36 +245,19 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
     final source = widget.source;
     if (source == null) return;
     if (info.isImage) {
-      // The root navigator, so the viewer sits above the project shell:
-      // inside it the tab bar stayed on the phone and the glass rail
-      // floated over the image on the tablet (iOS walkthrough).
-      await Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (_) => AttachmentViewer(info: info, source: source),
-        ),
-      );
+      await openAttachment(context, info: info, source: source);
       return;
     }
     setState(() {
       _busy = true;
       _message = null;
     });
-    try {
-      final bytes = await source.bytes(info.url);
-      final dir = await getTemporaryDirectory();
-      final file = File(p.join(dir.path, info.name));
-      await file.writeAsBytes(bytes);
-      if (!mounted) return;
-      // No `open_filex`: the share sheet is one dependency fewer and lets
-      // the user hand the file to whatever app they have.
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], title: info.name),
-      );
-    } catch (e) {
-      if (mounted) setState(() => _message = 'Could not open the file: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    final message = await openAttachment(context, info: info, source: source);
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _message = message;
+      });
     }
   }
 
@@ -292,7 +321,7 @@ class _AttachmentsSectionState extends State<AttachmentsSection> {
               child: Padding(
                 padding: const EdgeInsets.only(top: Spacing.sm),
                 child: OutlinedButton.icon(
-                  onPressed: widget.enabled && source != null && !_busy
+                  onPressed: widget.enabled && source?.upload != null && !_busy
                       ? _add
                       : null,
                   icon: const Icon(Icons.attach_file),

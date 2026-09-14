@@ -127,7 +127,7 @@ class RichTextControl extends StatelessWidget {
       format: state.formatOf(reference),
       allowFormatChoice: state.canChooseFormat(reference),
       headers: headers,
-      onInsertImage: attachments == null ? null : _insertImage,
+      onInsertImage: attachments?.upload == null ? null : _insertImage,
     );
     if (result == null) return;
     state.setRichValue(reference, result.content, format: result.format);
@@ -140,7 +140,8 @@ class RichTextControl extends StatelessWidget {
   /// orphaned upload.
   Future<String?> _insertImage(BuildContext context) async {
     final source = attachments;
-    if (source == null) return null;
+    final upload = source?.upload;
+    if (source == null || upload == null) return null;
     final from = await showAttachmentSourceSheet(context);
     if (from == null) return null;
     final picked = await pickAttachment(from);
@@ -159,7 +160,7 @@ class RichTextControl extends StatelessWidget {
       }
       return null;
     }
-    final uploaded = await source.upload(picked.name, picked.bytes!);
+    final uploaded = await upload(picked.name, picked.bytes!);
     state.addRelation(
       WorkItemRelation(
         rel: WorkItemRelation.attachedFileRel,

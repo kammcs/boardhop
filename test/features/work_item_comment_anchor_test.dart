@@ -26,9 +26,9 @@ class _Queue extends Mock implements WriteQueue {}
 class _AuthService extends Mock implements AuthService {}
 
 /// research/14 §4.2: a pushed work item comment lands on that comment —
-/// the Discussion scrolls it into view and tints it for two seconds — and a
-/// comment id that is not in the list degrades to the Discussion heading
-/// with no error.
+/// the page selects the Comments tab, scrolls the comment into view and
+/// tints it for two seconds — and a comment id that is not in the list
+/// degrades to the top of the discussion with no error.
 /// The scratch person every mention test picks, with the identity GUID a
 /// mention needs (research/16 §1).
 const kellyGuid = '11111111-2222-3333-4444-555555555555';
@@ -107,7 +107,7 @@ void main() {
         .thenThrow(const AdoForbiddenException('no backlog here'));
   });
 
-  Future<void> pump(WidgetTester tester, {int? commentId}) async {
+  Future<void> pump(WidgetTester tester, {int? commentId, String? tab}) async {
     tester.view.physicalSize = const Size(1200, 2000);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -137,6 +137,7 @@ void main() {
                 org: 'o',
                 project: 'p',
                 id: 15545,
+                initialTab: tab,
                 initialCommentId: commentId,
               ),
             ),
@@ -147,10 +148,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// The tab body's own scroller, not the `TabBarView`'s page view.
   double scrollOffset(WidgetTester tester) => tester
-      .state<ScrollableState>(find.byType(Scrollable).first)
+      .state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      )
       .position
       .pixels;
+
+  /// Which tab the strip has selected.
+  String selectedTab(WidgetTester tester) =>
+      tester.widget<TabBar>(find.byType(TabBar)).controller!.index.toString();
 
   /// The one comment card wearing the tint, by its place in the list.
   int? highlightedIndex(WidgetTester tester) {
@@ -165,11 +178,14 @@ void main() {
     return null;
   }
 
-  testWidgets('?comment={id} scrolls the discussion to that comment and '
-      'tints it for two seconds', (tester) async {
+  testWidgets('?comment={id} opens the Comments tab, scrolls to that comment '
+      'and tints it for two seconds', (tester) async {
     await pump(tester, commentId: 2010);
 
-    // The page scrolled down to reach the discussion.
+    // The comments have a tab of their own now, so the anchor has to get
+    // there before it can scroll.
+    expect(selectedTab(tester), '2');
+    // And then it scrolled down the discussion to reach the comment.
     expect(scrollOffset(tester), greaterThan(0));
 
     // The comment the push named is on screen, and it is the tinted one.
@@ -201,17 +217,29 @@ void main() {
     await pump(tester, commentId: 999999);
     expect(highlightedIndex(tester), isNull);
     expect(find.byIcon(Icons.error_outline), findsNothing);
-    // The Discussion heading is what the page landed on instead.
-    expect(find.text('Discussion ($comments)'), findsOneWidget);
+    // The tab is still the one the push asked for, at the top of the list,
+    // and its badge counts what is there.
+    expect(selectedTab(tester), '2');
+    expect(scrollOffset(tester), 0);
+    expect(
+      find.descendant(
+        of: find.byType(TabBar),
+        matching: find.text('$comments'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('without an anchor the page opens at the top as before', (
     tester,
   ) async {
     await pump(tester);
+    expect(selectedTab(tester), '0');
     expect(highlightedIndex(tester), isNull);
     expect(scrollOffset(tester), 0);
     expect(find.text('Anchor the pushed comment'), findsOneWidget);
+    // Details has no composer; the comments are a tab away.
+    expect(find.byTooltip('Post comment'), findsNothing);
   });
 
   /// The row inside the mention list, so a name that is also on a comment
@@ -223,7 +251,9 @@ void main() {
 
   testWidgets('a picked mention is posted as @<guid>, and queued that way '
       'when the post cannot go', (tester) async {
-    await pump(tester);
+    // The composer lives on the Comments tab, which is where a comment is
+    // written.
+    await pump(tester, tab: 'comments');
     when(() => repo.addComment('o', 'p', 15545, any())).thenAnswer(
       (_) async => WorkItemComment(
         id: 3000,
