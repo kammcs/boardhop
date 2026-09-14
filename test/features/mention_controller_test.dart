@@ -1,7 +1,7 @@
 import 'package:boardhop/features/shared/mention/mention_controller.dart';
 import 'package:boardhop/core/text/mention.dart';
-import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:boardhop/theme/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The controller behind the mention picker: where a trigger is legal, what
@@ -313,13 +313,11 @@ void main() {
         replacing: controller.activeTrigger!.range,
       );
       late TextSpan span;
-      late ColorScheme scheme;
       await tester.pumpWidget(
         MaterialApp(
           theme: BoardhopTheme.light(),
           home: Builder(
             builder: (context) {
-              scheme = Theme.of(context).colorScheme;
               span = controller.buildTextSpan(
                 context: context,
                 style: const TextStyle(fontSize: 16),
@@ -333,8 +331,8 @@ void main() {
       expect(span.toPlainText(), controller.text);
       final children = span.children!.cast<TextSpan>();
       final token = children.firstWhere((s) => s.text == '@Kelly Kamm');
-      expect(token.style?.color, scheme.primary);
-      expect(token.style?.fontWeight, FontWeight.w500);
+      expect(token.style?.color, BoardhopColors.light.mention);
+      expect(token.style?.fontWeight, FontWeight.w600);
       // Three framework bugs say never do any of these in buildTextSpan.
       expect(token.style?.fontSize, isNull);
       expect(token.recognizer, isNull);

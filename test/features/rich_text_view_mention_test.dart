@@ -1,7 +1,7 @@
 import 'package:boardhop/core/text/mention.dart';
 import 'package:boardhop/features/work_items/widgets/rich_text_view.dart';
-import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:boardhop/theme/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// research/16 §4.4 and M9/M10: what Azure DevOps renders for a work item
@@ -64,10 +64,9 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    final scheme = BoardhopTheme.light().colorScheme;
     final person = runs(tester).firstWhere((r) => r.text == '@Kelly Kamm');
-    expect(person.style?.color, scheme.primary);
-    expect(person.style?.fontWeight, FontWeight.w500);
+    expect(person.style?.color, BoardhopColors.light.mention);
+    expect(person.style?.fontWeight, FontWeight.w600);
     // No underline, and nothing to tap: there is no person page (M9).
     expect(person.style?.decoration, isNot(TextDecoration.underline));
     expect(person.tappable, isFalse);
@@ -78,7 +77,7 @@ void main() {
   testWidgets('a work item reference opens that work item', (tester) async {
     await pump(tester);
     final reference = runs(tester).firstWhere((r) => r.text == '#15545');
-    expect(reference.style?.color, BoardhopTheme.light().colorScheme.primary);
+    expect(reference.style?.color, BoardhopColors.light.mention);
     expect(reference.tappable, isTrue);
 
     await tester.tapOnText(find.textRange.ofSubstring('#15545'));
@@ -100,7 +99,7 @@ void main() {
     final link = runs(tester).firstWhere((r) => r.text == 'the docs');
     expect(link.style?.decoration, TextDecoration.underline);
     expect(link.tappable, isTrue);
-    expect(link.style?.fontWeight, isNot(FontWeight.w500));
+    expect(link.style?.fontWeight, isNot(FontWeight.w600));
   });
 
   testWidgets('a Markdown field draws the same runs', (tester) async {

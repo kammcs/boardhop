@@ -42,6 +42,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     required this.diffAddedBackground,
     required this.diffRemovedBackground,
     required this.codeBackground,
+    required this.mention,
   });
 
   // Work item types
@@ -86,6 +87,11 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
   final Color diffRemovedBackground;
   final Color codeBackground;
 
+  /// A mention run (`@Name`, `#123`, `!456`) in a composer or a comment.
+  /// Kelly wants these very obvious in both themes (2026-09-14): the Azure
+  /// DevOps link blue, well clear of the slate text around it.
+  final Color mention;
+
   static const light = BoardhopColors(
     bug: Color(0xFFCC293D),
     task: Color(0xFFB8860B),
@@ -117,6 +123,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     diffAddedBackground: Color(0xFFE6F4EA),
     diffRemovedBackground: Color(0xFFFCE8E6),
     codeBackground: Color(0xFFF3F4F6),
+    mention: Color(0xFF0B6BCB),
   );
 
   static const dark = BoardhopColors(
@@ -150,6 +157,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     diffAddedBackground: Color(0xFF12331C),
     diffRemovedBackground: Color(0xFF3B1714),
     codeBackground: Color(0xFF1B1F27),
+    mention: Color(0xFF7CC0FF),
   );
 
   /// Color for a work item type by its Azure DevOps name.
@@ -207,6 +215,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     Color? diffAddedBackground,
     Color? diffRemovedBackground,
     Color? codeBackground,
+    Color? mention,
   }) {
     return BoardhopColors(
       bug: bug ?? this.bug,
@@ -241,6 +250,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
       diffRemovedBackground:
           diffRemovedBackground ?? this.diffRemovedBackground,
       codeBackground: codeBackground ?? this.codeBackground,
+      mention: mention ?? this.mention,
     );
   }
 
@@ -285,6 +295,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
         other.diffRemovedBackground,
       ),
       codeBackground: l(codeBackground, other.codeBackground),
+      mention: l(mention, other.mention),
     );
   }
 }
