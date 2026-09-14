@@ -7,6 +7,7 @@ import 'core/notifications/notification_service.dart';
 import 'data/db/app_database.dart';
 import 'features/notifications/push_background.dart';
 import 'features/notifications/push_service.dart';
+import 'startup_failure.dart';
 import 'theme/theme.dart';
 
 Future<void> main() async {
@@ -14,7 +15,15 @@ Future<void> main() async {
 
   // Theme first: it must be ready before the first frame.
   final theme = await ThemeController.load();
-  final auth = await AuthService.create();
+  final AuthService auth;
+  try {
+    auth = await AuthService.create();
+  } catch (e) {
+    // A build whose MSAL redirect does not match its signing certificate
+    // fails here; say so instead of sitting on the launch screen.
+    runApp(StartupFailureApp(error: e));
+    return;
+  }
   final notifications = await NotificationService.create();
   final push = await PushService.create();
   // Android's relay messages are data-only, so nothing is shown unless the app

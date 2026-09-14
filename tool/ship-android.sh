@@ -34,9 +34,19 @@ aab=build/app/outputs/bundle/release/app-release.aab
 [ -f android/keystore.properties ] || { echo "android/keystore.properties is missing (upload key)" >&2; exit 1; }
 [ -f android/keystore/play-service-account.json ] || { echo "android/keystore/play-service-account.json is missing" >&2; exit 1; }
 
+# The MSAL redirect must name the certificate the *installed* app carries,
+# which for a Play install is Google's app signing key, not the upload key
+# (research/09 A5). android/secret.properties holds that hash for the
+# manifest; Dart needs the same value, so it goes in as a define here rather
+# than defaulting to the debug hash and failing at client creation.
+hash=$(sed -n 's/^MSAL_RELEASE_SIGNATURE_HASH=//p' android/secret.properties)
+[ -n "$hash" ] || { echo "MSAL_RELEASE_SIGNATURE_HASH is missing from android/secret.properties" >&2; exit 1; }
+redirect="msauth://com.kammcs.boardhop/$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$hash")"
+
 if [ "$skip" = false ]; then
   flutter build appbundle --release \
     --dart-define-from-file=.env \
+    --dart-define="BOARDHOP_ANDROID_REDIRECT_URI=$redirect" \
     --build-name="$version" --build-number="$build"
 fi
 [ -f "$aab" ] || { echo "no AAB at $aab" >&2; exit 1; }

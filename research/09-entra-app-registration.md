@@ -164,7 +164,13 @@ msauth://com.kammcs.boardhop/84xsSJcgEyk8T%2BPmW%2FDilFwYqFo%3D
 
 This is the redirect for side-loaded release builds (`flutter build apk --release`). A Play-installed build carries Google's app signing certificate instead; see below.
 
-Google Play app signing: when Play App Signing is enabled, Google re-signs the store build with its own key. Take the **SHA-1** from Play Console → **Test and release → App integrity → App signing key certificate**, convert it to base64 (hex → bytes → base64), and register that hash too. Without it, sign-in works in debug and internal builds and fails for store installs. Conversion on the Mac: `echo <SHA-1 with colons> | tr -d ':' | xxd -r -p | openssl base64`. Pending as of 2026-09-14: the first internal-track upload (1.0.0 build 3) is in, Kelly reads the certificate off Play Console next.
+Google Play app signing: when Play App Signing is enabled, Google re-signs the store build with its own key. Take the **SHA-1** from Play Console → **Test and release → App integrity → App signing key certificate**, convert it to base64 (hex → bytes → base64), and register that hash too. Without it, sign-in works in debug and internal builds and fails for store installs. Conversion on the Mac: `echo <SHA-1 with colons> | tr -d ':' | xxd -r -p | openssl base64`. Done 2026-09-14: read off the Play-installed `base.apk` with `apksigner verify --print-certs` (SHA-1 `63:9f:b2:b2:94:6d:74:8e:e6:a3:05:c2:ae:63:8c:ab:5d:4c:a0:b2`, DN `CN=Android, O=Google Inc.`), hash **`Y5+yspRtdI7mowXCrmOMq11MoLI=`**:
+
+```
+msauth://com.kammcs.boardhop/Y5%2ByspRtdI7mowXCrmOMq11MoLI%3D
+```
+
+**This is the hash a release build must carry, on both halves.** The manifest placeholder comes from `MSAL_RELEASE_SIGNATURE_HASH` in `android/secret.properties` (now this value, not the upload key's), and `tool/ship-android.sh` passes the same URI to Dart as `BOARDHOP_ANDROID_REDIRECT_URI`, because `AppConfig.androidRedirectUri` otherwise defaults to the **debug** hash. Build 3 had the upload hash in the manifest and the debug hash in Dart, and MSAL refused to create its client (`redirect_uri_validation_error`) so the app never left the launch screen; the app now shows that error instead (`StartupFailureApp`). Consequence: a side-loaded `flutter build apk --release` (signed with the upload key) cannot sign in; local checks use debug or profile builds, which carry the debug hash.
 
 Register each resulting value in A3, URL-encoded.
 
