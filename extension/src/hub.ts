@@ -37,7 +37,7 @@ import {
   worstStatus,
 } from "./plan";
 import { RelayClient, RelayError, RelayRegistry, relayCountFor } from "./relay";
-import { loadSettings, saveSettings } from "./store";
+import { dataServiceMessage, loadSettings, saveSettings } from "./store";
 
 const planned = plannedSubscriptions.length;
 
@@ -101,7 +101,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function messageOf(error: unknown): string {
   if (error instanceof AdoError || error instanceof RelayError) return error.message;
-  return error instanceof Error ? error.message : String(error);
+  // The host's services reject with plain objects, not Errors.
+  return dataServiceMessage(error);
 }
 
 function setStatus(node: HTMLElement, text: string, tone: "ok" | "warn" | "error" | "muted" = "muted"): void {
@@ -325,7 +326,8 @@ function currentRelayUrl(): string {
   return typed === "" ? state.relayUrl : typed;
 }
 
-async function persistRelayUrl(): Promise<void> {
+/** Saves the relay url when it changed; a failed save never hides a good connection check. */
+async function persistRelayUrl(options: { quiet: boolean } = { quiet: false }): Promise<void> {
   state.relayUrl = currentRelayUrl();
   relayUrlInput.value = state.relayUrl;
   try {
@@ -334,8 +336,10 @@ async function persistRelayUrl(): Promise<void> {
     state.updatedBy = saved.updatedBy;
     renderSettingsNote();
     refreshRowCounts();
+    if (!options.quiet) setStatus(relayStatus, "Relay URL saved.", "ok");
   } catch (error) {
-    setStatus(relayStatus, `Could not save the relay URL: ${messageOf(error)}`, "error");
+    if (options.quiet) settingsNote.textContent = `The relay URL was not saved: ${messageOf(error)}`;
+    else setStatus(relayStatus, `Could not save the relay URL: ${messageOf(error)}`, "error");
   }
 }
 
@@ -361,7 +365,7 @@ async function checkConnection(): Promise<void> {
     state.registry = registry;
     const count = registry.subscriptions.length;
     setStatus(relayStatus, `Connected · ${count} subscription${count === 1 ? "" : "s"} registered with the relay`, "ok");
-    await persistRelayUrl();
+    await persistRelayUrl({ quiet: true });
     refreshRowCounts();
   } catch (error) {
     state.registry = undefined;

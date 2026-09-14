@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "boardhop",
   "publisher": "KammCS",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "name": "Boardhop",
   "description": "Push notifications for Boardhop, the mobile client for Azure DevOps.",
   "public": false,
