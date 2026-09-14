@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/text/mention.dart';
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
@@ -77,8 +78,7 @@ class DetailFactRow extends StatelessWidget {
     final labelStyle = theme.textTheme.labelMedium?.copyWith(
       color: scheme.onSurfaceVariant,
     );
-    final valueWidget =
-        child ?? Text(value, style: theme.textTheme.bodyMedium);
+    final valueWidget = child ?? Text(value, style: theme.textTheme.bodyMedium);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
       child: LayoutBuilder(
@@ -130,6 +130,8 @@ List<Widget> workItemFieldSections({
   required WorkItem item,
   required List<FormGroupView> groups,
   Map<String, String> headers = const {},
+  Map<String, String> mentionNames = const {},
+  void Function(MentionKind kind, String id)? onOpenMention,
 }) {
   final out = <Widget>[];
   String? page;
@@ -173,6 +175,8 @@ List<Widget> workItemFieldSections({
             content: '${item.fields[field.referenceName]}',
             format: item.formatOf(field.referenceName),
             headers: headers,
+            mentionNames: mentionNames,
+            onOpenMention: onOpenMention,
           ),
         ),
       );
@@ -271,6 +275,8 @@ class WorkItemFieldGroups extends StatelessWidget {
     required this.item,
     required this.groups,
     this.headers = const {},
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final FormSpec spec;
@@ -280,6 +286,11 @@ class WorkItemFieldGroups extends StatelessWidget {
   /// `Authorization` for the images of an HTML field.
   final Map<String, String> headers;
 
+  /// Lower-cased identity GUID → display name, and where a tapped `#123` or
+  /// `!456` goes (research/16 §4.4).
+  final Map<String, String> mentionNames;
+  final void Function(MentionKind kind, String id)? onOpenMention;
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -288,6 +299,8 @@ class WorkItemFieldGroups extends StatelessWidget {
       item: item,
       groups: groups,
       headers: headers,
+      mentionNames: mentionNames,
+      onOpenMention: onOpenMention,
     ),
   );
 }

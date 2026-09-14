@@ -113,10 +113,40 @@ class GlassShellLayout extends StatelessWidget {
   static double barGutterFor(BuildContext context) =>
       barBottomMargin + GlassNavigationRail.thicknessFor(context) + Spacing.sm;
 
+  /// The page's box, shortened by the keyboard.
+  ///
+  /// The bar is drawn outside this, from the full-height stack, so it stays
+  /// under the keyboard the way Apple's tab bar does.
+  static Widget _keyboardSafe(
+    BuildContext context,
+    double keyboard,
+    Widget child,
+  ) => keyboard <= 0
+      ? child
+      : Padding(
+          padding: EdgeInsets.only(bottom: keyboard),
+          // The inset is spent here; a page's own Scaffold must not shrink
+          // for it a second time.
+          child: MediaQuery.removeViewInsets(
+            context: context,
+            removeBottom: true,
+            child: child,
+          ),
+        );
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final inset = mq.padding;
+    // How much of the screen the keyboard covers. The bar sits under it (see
+    // below), but the page above must not: a `Scaffold` never lifts its own
+    // `bottomNavigationBar` — it is the box the page is given that shrinks —
+    // so with the shell's own Scaffold no longer resizing, every composer
+    // anchored that way (the work item Discussion box) was left behind the
+    // keyboard. [_keyboardSafe] takes the inset off the page's box and off
+    // the media query below it, which is exactly what a resizing Scaffold
+    // does for its body.
+    final keyboard = mq.viewInsets.bottom;
     if (mq.orientation == Orientation.portrait) {
       return Scaffold(
         // The keyboard covers the bar, as it covers Apple's own tab bar. With
@@ -131,19 +161,28 @@ class GlassShellLayout extends StatelessWidget {
               child: SafeArea(
                 top: false,
                 bottom: false,
-                child: MediaQuery(
-                  // The sides are consumed by the SafeArea above; the bar
-                  // joins the bottom inset the page still handles itself.
-                  data: mq.copyWith(
-                    padding: inset.copyWith(
-                      left: 0,
-                      right: 0,
-                      // Measured from the screen's edge, so it already
-                      // covers the home indicator the bar sits over.
-                      bottom: math.max(inset.bottom, barGutterFor(context)),
+                child: _keyboardSafe(
+                  context,
+                  keyboard,
+                  MediaQuery(
+                    // The sides are consumed by the SafeArea above; the bar
+                    // joins the bottom inset the page still handles itself.
+                    data: mq.copyWith(
+                      viewInsets: mq.viewInsets.copyWith(bottom: 0),
+                      padding: inset.copyWith(
+                        left: 0,
+                        right: 0,
+                        // Measured from the screen's edge, so it already
+                        // covers the home indicator the bar sits over. With
+                        // the keyboard up the bar is behind it and there is
+                        // nothing left to clear.
+                        bottom: keyboard > 0
+                            ? inset.bottom
+                            : math.max(inset.bottom, barGutterFor(context)),
+                      ),
                     ),
+                    child: body,
                   ),
-                  child: body,
                 ),
               ),
             ),
@@ -173,28 +212,33 @@ class GlassShellLayout extends StatelessWidget {
     final railEdge = margin + (railSideClear ? 0 : railSideInset);
     final railWidth = GlassNavigationRail.widthFor(context);
     final gutter = railGutterFor(context) + (railSideClear ? 0 : railSideInset);
-    final page = bleedsUnderRail
-        ? MediaQuery(
-            data: mq.copyWith(
-              padding: inset.copyWith(
-                left: railOnRight ? inset.left : gutter,
-                right: railOnRight ? gutter : inset.right,
-              ),
-            ),
-            child: body,
-          )
-        : SafeArea(
-            top: false,
-            bottom: false,
-            child: Padding(
-              // The SafeArea already took the inset off this side.
-              padding: EdgeInsets.only(
-                left: railOnRight ? 0 : math.max(0, gutter - inset.left),
-                right: railOnRight ? math.max(0, gutter - inset.right) : 0,
+    final page = _keyboardSafe(
+      context,
+      keyboard,
+      bleedsUnderRail
+          ? MediaQuery(
+              data: mq.copyWith(
+                viewInsets: mq.viewInsets.copyWith(bottom: 0),
+                padding: inset.copyWith(
+                  left: railOnRight ? inset.left : gutter,
+                  right: railOnRight ? gutter : inset.right,
+                ),
               ),
               child: body,
+            )
+          : SafeArea(
+              top: false,
+              bottom: false,
+              child: Padding(
+                // The SafeArea already took the inset off this side.
+                padding: EdgeInsets.only(
+                  left: railOnRight ? 0 : math.max(0, gutter - inset.left),
+                  right: railOnRight ? math.max(0, gutter - inset.right) : 0,
+                ),
+                child: body,
+              ),
             ),
-          );
+    );
     return Scaffold(
       // As above: the rail sits under the keyboard, not above it.
       resizeToAvoidBottomInset: false,

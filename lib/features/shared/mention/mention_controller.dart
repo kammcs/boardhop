@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../../../core/text/mention.dart';
+import 'mention_style.dart';
 
 /// One picked mention inside a composer's text.
 ///
@@ -316,10 +317,9 @@ class MentionController extends TextEditingController {
     }
     final bounds = cuts.toList()..sort();
 
-    final tokenStyle = TextStyle(
-      color: Theme.of(context).colorScheme.primary,
-      fontWeight: FontWeight.w500,
-    );
+    // The same run a posted comment draws: one helper, so the composer and
+    // the read side can never drift apart (research/16 M6).
+    final tokenStyle = mentionTextStyle(context);
     const composingStyle = TextStyle(decoration: TextDecoration.underline);
 
     final children = <InlineSpan>[];

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../../core/text/mention.dart';
 import '../../../core/util/format.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../../shared/mention/mention_controller.dart';
+import '../../shared/mention/mention_field.dart';
+import '../../shared/mention/mention_hint.dart';
+import '../../shared/mention/mention_markdown.dart';
+import '../../shared/mention/mention_source.dart';
 import '../../work_items/widgets/work_item_visuals.dart';
 
 /// One PR thread: status, comments, an inline reply box and a status menu
@@ -19,6 +24,9 @@ class ThreadCard extends StatefulWidget {
     this.onSetStatus,
     this.onApplySuggestion,
     this.color,
+    this.mentions,
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final PrThread thread;
@@ -35,12 +43,24 @@ class ThreadCard extends StatefulWidget {
   onApplySuggestion;
   final Color? color;
 
+  /// People, work items and pull requests the reply box offers. Null leaves
+  /// a plain field (research/16 M1).
+  final MentionSource? mentions;
+
+  /// Lower-cased identity GUID → display name, for the `@<guid>` runs in the
+  /// comments above: a pull request comment has no rendered form and no
+  /// `mentions[]`, so the name is resolved by the page (M9).
+  final Map<String, String> mentionNames;
+
+  /// Tapping a `#123` or `!456` in a comment.
+  final void Function(MentionKind kind, String id)? onOpenMention;
+
   @override
   State<ThreadCard> createState() => _ThreadCardState();
 }
 
 class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
-  final _controller = TextEditingController();
+  final _controller = MentionController();
 
   /// The reply field and its buttons, so both can be scrolled clear of
   /// the keyboard.
@@ -97,8 +117,11 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
   /// matters: if the status call fails the reply is kept and the failure
   /// is said out loud, rather than rolling anything back.
   Future<void> _send({String? thenStatus}) async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || widget.onReply == null) return;
+    if (_controller.text.trim().isEmpty || widget.onReply == null) return;
+    // Every picked person becomes `@<guid>` here, at the submit boundary
+    // (research/16 §4.3): the repository below takes a plain string.
+    final text = _controller.toWire(MentionWire.markdown).trim();
+    if (text.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
     final posted = await widget.onReply!(text);
     if (!mounted) return;
@@ -234,7 +257,11 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                   top: 2,
                   bottom: Spacing.xs,
                 ),
-                child: MarkdownBody(data: c.content, selectable: true),
+                child: MentionMarkdown(
+                  data: c.content,
+                  names: widget.mentionNames,
+                  onOpen: widget.onOpenMention,
+                ),
               ),
               if (c.suggestion != null &&
                   widget.canAct &&
@@ -263,8 +290,9 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
+                      MentionField(
                         controller: _controller,
+                        source: widget.mentions,
                         autofocus: true,
                         minLines: 1,
                         maxLines: 5,
@@ -286,6 +314,7 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                           isDense: true,
                         ),
                       ),
+                      MentionHint(controller: _controller),
                       const SizedBox(height: Spacing.xs),
                       // Empty box: the only sensible action is the status
                       // change, so nothing typed can be lost. With text,

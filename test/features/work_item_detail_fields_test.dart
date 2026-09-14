@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:boardhop/core/text/mention.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/models/work_item_form.dart';
 import 'package:boardhop/data/repositories/work_item_form_repository.dart';
@@ -150,10 +151,9 @@ void main() {
         'Custom.QAStoryPoints',
         'Custom.QAAssignee',
       ]);
-      expect(
-        groups.where((g) => g.isPanel).map((g) => g.panel).toSet(),
-        {FormPanelKind.external},
-      );
+      expect(groups.where((g) => g.isPanel).map((g) => g.panel).toSet(), {
+        FormPanelKind.external,
+      });
       expect(groups.any((g) => g.pageLabel != null), isFalse);
     });
 
@@ -201,10 +201,10 @@ void main() {
         // Only the service's own panels, which is what the page reads as
         // "nothing of the layout to show" before it falls back.
         expect(groups.every((g) => g.isPanel), isTrue);
-        expect(
-          groups.map((g) => g.label).toList(),
-          ['Deployment', 'Development'],
-        );
+        expect(groups.map((g) => g.label).toList(), [
+          'Deployment',
+          'Development',
+        ]);
       },
     );
 
@@ -277,11 +277,13 @@ void main() {
     Future<void> pump(
       WidgetTester tester, {
       Size size = const Size(400, 2400),
+      Map<String, dynamic> extra = const {},
+      void Function(MentionKind kind, String id)? onOpenMention,
     }) {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final item = _item();
+      final item = _item(extra: extra);
       return tester.pumpWidget(
         MaterialApp(
           theme: BoardhopTheme.light(),
@@ -291,12 +293,39 @@ void main() {
                 spec: spec,
                 item: item,
                 groups: detailGroupsFor(spec, item),
+                onOpenMention: onOpenMention,
               ),
             ),
           ),
         ),
       );
     }
+
+    testWidgets('an HTML field draws its mentions and opens what they name', (
+      tester,
+    ) async {
+      final opened = <String>[];
+      await pump(
+        tester,
+        extra: const {
+          'Custom.TestingPlan':
+              '<p>ask <a href="#" data-vss-mention="version:2.0,'
+              '11111111-2222-3333-4444-555555555555" class="mention-link">'
+              '@Kelly Kamm</a> about '
+              '<a href="/o/proj/_workitems/edit/15545" '
+              'data-vss-mention="version:1.0,15545" '
+              'class="mention-link mention-widget-workitem">#15545</a></p>',
+        },
+        onOpenMention: (kind, id) => opened.add('${kind.name}:$id'),
+      );
+      expect(
+        find.textContaining('@Kelly Kamm', findRichText: true),
+        findsOneWidget,
+      );
+      await tester.tapOnText(find.textRange.ofSubstring('#15545'));
+      await tester.pumpAndSettle();
+      expect(opened, ['workItem:15545']);
+    });
 
     testWidgets('show the custom fields under their own group labels', (
       tester,

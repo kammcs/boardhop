@@ -1,21 +1,30 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/routes.dart';
+import '../../core/text/mention.dart';
 import '../../core/util/format.dart';
+import '../../data/mention_recents.dart';
 import '../../data/models/pr_check.dart';
 import '../../data/models/pull_request.dart';
 import '../../data/models/work_item.dart';
+import '../../data/repositories/people_repository.dart';
 import '../../data/repositories/pr_diff_source.dart';
 import '../../data/repositories/pull_request_repository.dart';
+import '../../data/repositories/search_repository.dart';
+import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
+import '../shared/mention/mention_markdown.dart';
+import '../shared/mention/mention_source.dart';
+import '../shared/mention/mention_sources.dart';
 import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
@@ -105,6 +114,14 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   bool _loading = false;
   bool _changesLoading = false;
   bool _acting = false;
+
+  /// The mention picker for the composer and every reply box, built once the
+  /// pull request is read (research/16 §4.5), and the names its comments'
+  /// `@<guid>` runs resolve to. Both are niceties: the page is complete
+  /// without them and neither failure is worth an error.
+  MentionSources? _sources;
+  MentionSource? _mentions;
+  Map<String, String> _mentionNames = const {};
 
   @override
   void initState() {
@@ -208,6 +225,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
         _conversation = PullRequestRepository.conversation(raw);
       });
       _anchorThread();
+      unawaited(_prepareMentions(pr));
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -221,6 +239,72 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// The picker and the comment names, off the page's critical path.
+  ///
+  /// Everybody on a pull request — the author, the reviewers and every
+  /// commenter — is seeded into the identity memory first, which is what
+  /// lets most `@<guid>` runs be named without a call (M9).
+  Future<void> _prepareMentions(PullRequest pr) async {
+    final people = context.read<PeopleRepository>();
+    final participants = MentionSources.pullRequestParticipants(
+      pr: pr,
+      threads: _conversation,
+    );
+    unawaited(people.rememberIdentities(widget.org, participants));
+    final names = await MentionSources.namesFor(people, widget.org, [
+      ?pr.description,
+      for (final thread in _conversation)
+        for (final comment in thread.comments) comment.content,
+    ]);
+    if (!mounted) return;
+    if (!mapEquals(names, _mentionNames)) {
+      setState(() => _mentionNames = names);
+    }
+    // The source is built once: a new instance would make every open picker
+    // reload its bands.
+    if (_mentions != null) return;
+    final sources = _sources ??= MentionSources(
+      org: widget.org,
+      project: pr.projectName,
+      projectId: pr.projectId,
+      people: people,
+      forms: context.read<WorkItemFormRepository>(),
+      recents: context.read<MentionRecents>(),
+      workItems: context.read<WorkItemRepository>(),
+      pullRequests: context.read<PullRequestRepository>(),
+      search: context.read<SearchRepository>(),
+      extraWorkItems: () => _workItems,
+    );
+    final me = await sources.me(id: _me);
+    if (!mounted || _mentions != null) return;
+    setState(() {
+      _mentions = sources.source(
+        participants: () async => MentionSources.pullRequestParticipants(
+          pr: _pr ?? pr,
+          threads: _conversation,
+        ),
+        participantReason: MentionSources.onThisPullRequest,
+        me: me,
+      );
+    });
+  }
+
+  /// A `#123` or `!456` tapped inside a comment (M10).
+  void _openMention(MentionKind kind, String id) {
+    final account = AccountScope.of(context);
+    switch (kind) {
+      case MentionKind.workItem:
+        final pr = _pr;
+        if (pr == null) return;
+        context.push(Routes.workItem(account, widget.org, pr.projectName, id));
+      case MentionKind.pullRequest:
+        if (id == '${widget.id}') return;
+        context.push(Routes.pullRequest(account, widget.org, id));
+      case MentionKind.person:
+        break;
     }
   }
 
@@ -478,144 +562,153 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final myVote = pr?.reviewer(_me)?.vote ?? PrVote.none;
     final scrollingTabs = MediaQuery.textScalerOf(context).scale(14) > 14 * 1.3;
     return Scaffold(
-        appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('!${widget.id}'),
-              if (pr != null)
-                Text(
-                  '${pr.projectName} / ${pr.repositoryName}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('!${widget.id}'),
+            if (pr != null)
+              Text(
+                '${pr.projectName} / ${pr.repositoryName}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
                 ),
-            ],
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
-          ),
-          actions: [
-            if (pr != null && pr.isActive)
-              PopupMenuButton<PrVote>(
-                tooltip: 'Vote',
-                offset: kTrailingMenuOffset,
-                enabled: !_acting,
-                icon: Icon(voteIcon(myVote), color: voteColor(context, myVote)),
-                onSelected: _vote,
-                itemBuilder: (context) => [
-                  for (final v in PrVote.values)
-                    PopupMenuItem(
-                      value: v,
-                      child: Row(
-                        children: [
-                          Icon(voteIcon(v), color: voteColor(context, v)),
-                          const SizedBox(width: Spacing.md),
-                          Expanded(child: Text(v.label)),
-                          if (v == myVote) const Icon(Icons.check, size: 18),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            if (pr != null && pr.isActive)
-              PopupMenuButton<String>(
-                tooltip: 'More',
-                offset: kTrailingMenuOffset,
-                enabled: !_acting,
-                onSelected: (v) => v == 'complete' ? _complete() : _abandon(),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'complete', child: Text('Complete…')),
-                  PopupMenuItem(value: 'abandon', child: Text('Abandon…')),
-                ],
+                overflow: TextOverflow.ellipsis,
               ),
           ],
-          bottom: TabBar(
-            controller: _tabs,
-            // Three filled thirds clip "Comments (3)" at accessibility
-            // text sizes (iPhone walkthrough, defect 10); let the strip
-            // scroll instead so every label stays whole and reachable.
-            isScrollable: scrollingTabs,
-            tabAlignment: scrollingTabs ? TabAlignment.start : null,
-            tabs: [
-              const Tab(text: 'Overview'),
-              Tab(
-                text: 'Files${_changes.isEmpty ? '' : ' (${_changes.length})'}',
-              ),
-              Tab(
-                text:
-                    'Comments${_conversation.isEmpty ? '' : ' (${_conversation.length})'}',
-              ),
-            ],
-          ),
         ),
-        bottomNavigationBar:
-            pr == null || !pr.isActive || _tabs.index != _commentsTab
-            ? null
-            : CommentComposer(onSubmit: _comment, busy: _acting),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_loading || _acting || _changesLoading)
-              const LinearProgressIndicator(),
-            if (_error != null)
-              ListTile(
-                leading: Icon(Icons.error_outline, color: scheme.error),
-                title: Text(_error!),
-              ),
-            Expanded(
-              child: pr == null
-                  ? (_loading
-                        ? const Center(
-                            child: CircularProgressIndicator.adaptive(),
-                          )
-                        : const SizedBox.shrink())
-                  : TabBarView(
-                      controller: _tabs,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          if (pr != null && pr.isActive)
+            PopupMenuButton<PrVote>(
+              tooltip: 'Vote',
+              offset: kTrailingMenuOffset,
+              enabled: !_acting,
+              icon: Icon(voteIcon(myVote), color: voteColor(context, myVote)),
+              onSelected: _vote,
+              itemBuilder: (context) => [
+                for (final v in PrVote.values)
+                  PopupMenuItem(
+                    value: v,
+                    child: Row(
                       children: [
-                        RefreshIndicator(
-                          onRefresh: _load,
-                          child: _Overview(
-                            pr: pr,
-                            checks: _checks,
-                            workItems: _workItems,
-                            onWorkItemTap: _openWorkItem,
-                          ),
-                        ),
-                        RefreshIndicator(
-                          onRefresh: _load,
-                          child: _Files(
-                            changes: _changes,
-                            iterations: _iterations,
-                            iteration: _iteration,
-                            onSelectIteration: _selectIteration,
-                            onTap: _openFile,
-                          ),
-                        ),
-                        RefreshIndicator(
-                          onRefresh: _load,
-                          child: _Conversation(
-                            threads: _conversation,
-                            keyFor: (id) =>
-                                _threadKeys.putIfAbsent(id, GlobalKey.new),
-                            scroller: _threadScroll,
-                            highlighted: _highlighted,
-                            filter: _threadFilter,
-                            onFilter: (f) => setState(() => _threadFilter = f),
-                            canAct: pr.isActive,
-                            busy: _acting,
-                            onReply: _reply,
-                            onSetStatus: _setThreadStatus,
-                            onOpenThread: _openThread,
-                          ),
-                        ),
+                        Icon(voteIcon(v), color: voteColor(context, v)),
+                        const SizedBox(width: Spacing.md),
+                        Expanded(child: Text(v.label)),
+                        if (v == myVote) const Icon(Icons.check, size: 18),
                       ],
                     ),
+                  ),
+              ],
+            ),
+          if (pr != null && pr.isActive)
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              offset: kTrailingMenuOffset,
+              enabled: !_acting,
+              onSelected: (v) => v == 'complete' ? _complete() : _abandon(),
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'complete', child: Text('Complete…')),
+                PopupMenuItem(value: 'abandon', child: Text('Abandon…')),
+              ],
+            ),
+        ],
+        bottom: TabBar(
+          controller: _tabs,
+          // Three filled thirds clip "Comments (3)" at accessibility
+          // text sizes (iPhone walkthrough, defect 10); let the strip
+          // scroll instead so every label stays whole and reachable.
+          isScrollable: scrollingTabs,
+          tabAlignment: scrollingTabs ? TabAlignment.start : null,
+          tabs: [
+            const Tab(text: 'Overview'),
+            Tab(
+              text: 'Files${_changes.isEmpty ? '' : ' (${_changes.length})'}',
+            ),
+            Tab(
+              text:
+                  'Comments${_conversation.isEmpty ? '' : ' (${_conversation.length})'}',
             ),
           ],
         ),
+      ),
+      bottomNavigationBar:
+          pr == null || !pr.isActive || _tabs.index != _commentsTab
+          ? null
+          : CommentComposer(
+              onSubmit: _comment,
+              busy: _acting,
+              mentions: _mentions,
+            ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_loading || _acting || _changesLoading)
+            const LinearProgressIndicator(),
+          if (_error != null)
+            ListTile(
+              leading: Icon(Icons.error_outline, color: scheme.error),
+              title: Text(_error!),
+            ),
+          Expanded(
+            child: pr == null
+                ? (_loading
+                      ? const Center(
+                          child: CircularProgressIndicator.adaptive(),
+                        )
+                      : const SizedBox.shrink())
+                : TabBarView(
+                    controller: _tabs,
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _load,
+                        child: _Overview(
+                          pr: pr,
+                          checks: _checks,
+                          workItems: _workItems,
+                          onWorkItemTap: _openWorkItem,
+                          mentionNames: _mentionNames,
+                          onOpenMention: _openMention,
+                        ),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _load,
+                        child: _Files(
+                          changes: _changes,
+                          iterations: _iterations,
+                          iteration: _iteration,
+                          onSelectIteration: _selectIteration,
+                          onTap: _openFile,
+                        ),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _load,
+                        child: _Conversation(
+                          threads: _conversation,
+                          keyFor: (id) =>
+                              _threadKeys.putIfAbsent(id, GlobalKey.new),
+                          scroller: _threadScroll,
+                          highlighted: _highlighted,
+                          filter: _threadFilter,
+                          onFilter: (f) => setState(() => _threadFilter = f),
+                          canAct: pr.isActive,
+                          busy: _acting,
+                          mentions: _mentions,
+                          mentionNames: _mentionNames,
+                          onOpenMention: _openMention,
+                          onReply: _reply,
+                          onSetStatus: _setThreadStatus,
+                          onOpenThread: _openThread,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -626,9 +719,16 @@ class _Overview extends StatelessWidget {
     required this.checks,
     required this.workItems,
     required this.onWorkItemTap,
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final PullRequest pr;
+
+  /// The description is Markdown the service stores verbatim, so a `@<guid>`
+  /// in it reaches the screen as a GUID unless it is resolved here (M9).
+  final Map<String, String> mentionNames;
+  final void Function(MentionKind kind, String id)? onOpenMention;
   final List<PrCheck> checks;
   final List<WorkItem> workItems;
   final ValueChanged<WorkItem> onWorkItemTap;
@@ -719,7 +819,11 @@ class _Overview extends StatelessWidget {
                           color: scheme.onSurfaceVariant,
                         ),
                       )
-                    : MarkdownBody(data: pr.description!, selectable: true),
+                    : MentionMarkdown(
+                        data: pr.description!,
+                        names: mentionNames,
+                        onOpen: onOpenMention,
+                      ),
               ),
             ],
             end: [
@@ -1036,6 +1140,9 @@ class _Conversation extends StatelessWidget {
     required this.onReply,
     required this.onSetStatus,
     required this.onOpenThread,
+    this.mentions,
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final List<PrThread> threads;
@@ -1058,6 +1165,12 @@ class _Conversation extends StatelessWidget {
   final Future<bool> Function(PrThread thread, String text) onReply;
   final Future<bool> Function(PrThread thread, String status) onSetStatus;
   final ValueChanged<PrThread> onOpenThread;
+
+  /// What the reply boxes offer behind `@`, `#` and `!`, the names the
+  /// comments' `@<guid>` runs read as, and where a tapped reference goes.
+  final MentionSource? mentions;
+  final Map<String, String> mentionNames;
+  final void Function(MentionKind kind, String id)? onOpenMention;
 
   @override
   Widget build(BuildContext context) {
@@ -1148,6 +1261,9 @@ class _Conversation extends StatelessWidget {
                                   thread: t,
                                   canAct: canAct,
                                   busy: busy,
+                                  mentions: mentions,
+                                  mentionNames: mentionNames,
+                                  onOpenMention: onOpenMention,
                                   onReply: (text) => onReply(t, text),
                                   onSetStatus: (status) =>
                                       onSetStatus(t, status),

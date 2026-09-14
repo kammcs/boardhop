@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -5,10 +8,20 @@ import 'package:go_router/go_router.dart';
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/routes.dart';
+import '../../core/text/mention.dart';
+import '../../data/mention_recents.dart';
 import '../../data/models/pull_request.dart';
+import '../../data/models/work_item.dart';
+import '../../data/repositories/people_repository.dart';
 import '../../data/repositories/pr_diff_source.dart';
 import '../../data/repositories/pull_request_repository.dart';
+import '../../data/repositories/search_repository.dart';
+import '../../data/repositories/work_item_form_repository.dart';
+import '../../data/repositories/work_item_repository.dart';
 import '../shared/account_scope.dart';
+import '../shared/mention/mention_source.dart';
+import '../shared/mention/mention_sources.dart';
 import 'diff/diff_model.dart';
 import 'diff/diff_view.dart';
 import 'diff/highlighter.dart';
@@ -54,11 +67,85 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   bool _loading = false;
   bool _posting = false;
 
+  /// The picker the inline reply boxes and the new-thread composer share,
+  /// and the names this file's comments resolve their `@<guid>` runs to.
+  MentionSources? _sources;
+  MentionSource? _mentions;
+  Map<String, String> _mentionNames = const {};
+
   @override
   void initState() {
     super.initState();
     _iteration = widget.iteration;
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  /// The same picker the pull request page builds, for the composers that
+  /// live under a diff line. Off the critical path: the diff is readable
+  /// whether or not the people can be read.
+  Future<void> _prepareMentions(PullRequest pr) async {
+    final people = context.read<PeopleRepository>();
+    unawaited(
+      people.rememberIdentities(
+        widget.org,
+        MentionSources.pullRequestParticipants(pr: pr, threads: _threads),
+      ),
+    );
+    final names = await MentionSources.namesFor(people, widget.org, [
+      for (final thread in _threads)
+        for (final comment in thread.comments) comment.content,
+    ]);
+    if (!mounted) return;
+    if (!mapEquals(names, _mentionNames)) {
+      setState(() => _mentionNames = names);
+    }
+    if (_mentions != null) return;
+    final sources = _sources ??= MentionSources(
+      org: widget.org,
+      project: pr.projectName,
+      projectId: pr.projectId,
+      people: people,
+      forms: context.read<WorkItemFormRepository>(),
+      recents: context.read<MentionRecents>(),
+      workItems: context.read<WorkItemRepository>(),
+      pullRequests: context.read<PullRequestRepository>(),
+      search: context.read<SearchRepository>(),
+    );
+    final prs = context.read<PullRequestRepository>();
+    IdentityRef? me;
+    try {
+      me = await sources.me(id: await prs.meId(widget.org));
+    } on AdoException {
+      // Mentioning yourself is a convenience, not the feature.
+      me = null;
+    }
+    if (!mounted || _mentions != null) return;
+    setState(() {
+      _mentions = sources.source(
+        participants: () async => MentionSources.pullRequestParticipants(
+          pr: _pr ?? pr,
+          threads: _threads,
+        ),
+        participantReason: MentionSources.onThisPullRequest,
+        me: me,
+      );
+    });
+  }
+
+  /// A `#123` or `!456` tapped inside a comment on this diff (M10).
+  void _openMention(MentionKind kind, String id) {
+    final account = AccountScope.of(context);
+    final pr = _pr;
+    switch (kind) {
+      case MentionKind.workItem:
+        if (pr == null) return;
+        context.push(Routes.workItem(account, widget.org, pr.projectName, id));
+      case MentionKind.pullRequest:
+        if (id == '${widget.id}') return;
+        context.push(Routes.pullRequest(account, widget.org, id));
+      case MentionKind.person:
+        break;
+    }
   }
 
   Future<void> _load() async {
@@ -130,6 +217,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         );
         _threads = _forThisFile(threads);
       });
+      unawaited(_prepareMentions(pr));
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -371,6 +459,9 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                       composerLine: _composerLine,
                       posting: _posting,
                       canAct: _pr?.isActive == true,
+                      mentions: _mentions,
+                      mentionNames: _mentionNames,
+                      onOpenMention: _openMention,
                       onGutterTap: _pr?.isActive == true
                           ? (line) => setState(
                               () => _composerLine = _composerLine == line

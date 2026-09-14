@@ -3,8 +3,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
 
+import '../../../core/text/mention.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
+import '../../shared/mention/mention_controller.dart';
+import '../../shared/mention/mention_field.dart';
+import '../../shared/mention/mention_hint.dart';
+import '../../shared/mention/mention_source.dart';
 import '../widgets/thread_card.dart';
 import 'diff_model.dart';
 import 'highlighter.dart';
@@ -28,6 +33,9 @@ class DiffView extends StatefulWidget {
     this.onReply,
     this.onSetThreadStatus,
     this.onApplySuggestion,
+    this.mentions,
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final LineDiffResult diff;
@@ -56,6 +64,16 @@ class DiffView extends StatefulWidget {
     String suggestion,
   )?
   onApplySuggestion;
+
+  /// What the reply boxes and the new-thread composer offer behind `@`, `#`
+  /// and `!`. Null leaves plain fields (research/16 M1).
+  final MentionSource? mentions;
+
+  /// Lower-cased identity GUID → display name for the comments on screen.
+  final Map<String, String> mentionNames;
+
+  /// Tapping a `#123` or `!456` inside a comment.
+  final void Function(MentionKind kind, String id)? onOpenMention;
 
   @override
   State<DiffView> createState() => _DiffViewState();
@@ -224,6 +242,9 @@ class _DiffViewState extends State<DiffView> {
           viewportWidth: viewportWidth,
           canAct: widget.canAct,
           busy: widget.posting,
+          mentions: widget.mentions,
+          mentionNames: widget.mentionNames,
+          onOpenMention: widget.onOpenMention,
           onReply: widget.onReply == null
               ? null
               : (text) => widget.onReply!(row.thread, text),
@@ -241,6 +262,7 @@ class _DiffViewState extends State<DiffView> {
           horizontal: _horizontal,
           viewportWidth: viewportWidth,
           posting: widget.posting,
+          mentions: widget.mentions,
           onCancel: widget.onCancelComposer,
           onPost: widget.onPost == null
               ? null
@@ -384,6 +406,9 @@ class _ThreadView extends StatelessWidget {
     required this.onReply,
     required this.onSetStatus,
     required this.onApplySuggestion,
+    this.mentions,
+    this.mentionNames = const {},
+    this.onOpenMention,
   });
 
   final PrThread thread;
@@ -392,6 +417,9 @@ class _ThreadView extends StatelessWidget {
   final double viewportWidth;
   final bool canAct;
   final bool busy;
+  final MentionSource? mentions;
+  final Map<String, String> mentionNames;
+  final void Function(MentionKind kind, String id)? onOpenMention;
   final Future<bool> Function(String text)? onReply;
   final Future<bool> Function(String status)? onSetStatus;
   final Future<void> Function(PrComment comment, String suggestion)?
@@ -424,6 +452,9 @@ class _ThreadView extends StatelessWidget {
               thread: thread,
               canAct: canAct,
               busy: busy,
+              mentions: mentions,
+              mentionNames: mentionNames,
+              onOpenMention: onOpenMention,
               onReply: onReply,
               onSetStatus: onSetStatus,
               onApplySuggestion: onApplySuggestion,
@@ -445,6 +476,7 @@ class _ComposerView extends StatefulWidget {
     required this.posting,
     required this.onCancel,
     required this.onPost,
+    this.mentions,
   });
 
   final int line;
@@ -452,6 +484,7 @@ class _ComposerView extends StatefulWidget {
   final ScrollController horizontal;
   final double viewportWidth;
   final bool posting;
+  final MentionSource? mentions;
   final VoidCallback? onCancel;
   final Future<void> Function(String text)? onPost;
 
@@ -460,7 +493,7 @@ class _ComposerView extends StatefulWidget {
 }
 
 class _ComposerViewState extends State<_ComposerView> {
-  final _controller = TextEditingController();
+  final _controller = MentionController();
 
   @override
   void dispose() {
@@ -500,8 +533,9 @@ class _ComposerViewState extends State<_ComposerView> {
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: Spacing.xs),
-                  TextField(
+                  MentionField(
                     controller: _controller,
+                    source: widget.mentions,
                     autofocus: true,
                     maxLines: 5,
                     minLines: 2,
@@ -510,6 +544,7 @@ class _ComposerViewState extends State<_ComposerView> {
                       hintText: 'Markdown, or a ```suggestion block',
                     ),
                   ),
+                  MentionHint(controller: _controller),
                   const SizedBox(height: Spacing.sm),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -523,7 +558,11 @@ class _ComposerViewState extends State<_ComposerView> {
                         onPressed: widget.posting || widget.onPost == null
                             ? null
                             : () {
-                                final text = _controller.text.trim();
+                                if (_controller.text.trim().isEmpty) return;
+                                // `@Kelly Kamm` posts as `@<guid>`.
+                                final text = _controller
+                                    .toWire(MentionWire.markdown)
+                                    .trim();
                                 if (text.isNotEmpty) widget.onPost!(text);
                               },
                         child: Text(widget.posting ? 'Posting…' : 'Post'),

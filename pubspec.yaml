@@ -44,6 +44,10 @@ dependencies:
   path_provider: ^2.1.6
   path: ^1.9.1
   flutter_markdown_plus: ^1.0.12
+  # Already resolved through flutter_markdown_plus; declared because the
+  # mention read side subclasses its `InlineSyntax` and `Element`
+  # (research/16 §4.4). No new package is downloaded by this line.
+  markdown: ^7.3.1
   intl: ^0.20.3
   flutter_widget_from_html_core: ^0.17.4
   cached_network_image: ^4.0.0

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/text/mention.dart';
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
+import '../../shared/mention/mention_controller.dart';
+import '../../shared/mention/mention_field.dart';
+import '../../shared/mention/mention_hint.dart';
+import '../../shared/mention/mention_source.dart';
 import 'work_item_visuals.dart';
 
 /// What the state sheet answers with: the target state and, when the type's
@@ -238,18 +243,35 @@ Future<AssignAction?> pickAssignment(
 }
 
 /// One-line comment composer anchored at the bottom of the detail page.
+///
+/// Serves the work item Discussion and the pull request Comments tab. With a
+/// [mentions] source it offers people, work items and pull requests behind
+/// `@`, `#` and `!`, and what it submits is the **wire** text — `@<guid>` for
+/// each picked person — because that is what Azure DevOps turns into a real
+/// mention (research/16 §1). The serialisation happens here rather than in a
+/// repository so an offline comment is already in wire form when the write
+/// queue stores it as a plain string (M13).
 class CommentComposer extends StatefulWidget {
-  const CommentComposer({super.key, required this.onSubmit, this.busy = false});
+  const CommentComposer({
+    super.key,
+    required this.onSubmit,
+    this.busy = false,
+    this.mentions,
+  });
 
   final Future<bool> Function(String text) onSubmit;
   final bool busy;
+
+  /// Null leaves a plain field with no picker, which is what a host that has
+  /// not loaded its people yet passes.
+  final MentionSource? mentions;
 
   @override
   State<CommentComposer> createState() => _CommentComposerState();
 }
 
 class _CommentComposerState extends State<CommentComposer> {
-  final _controller = TextEditingController();
+  final _controller = MentionController();
   bool _hasText = false;
 
   @override
@@ -268,8 +290,10 @@ class _CommentComposerState extends State<CommentComposer> {
   }
 
   Future<void> _send() async {
-    final text = _controller.text.trim();
-    if (text.isEmpty || widget.busy) return;
+    if (_controller.text.trim().isEmpty || widget.busy) return;
+    // Wire form, not what is on screen: `@Kelly Kamm` posts as `@<guid>`.
+    final text = _controller.toWire(MentionWire.markdown).trim();
+    if (text.isEmpty) return;
     final ok = await widget.onSubmit(text);
     if (ok && mounted) _controller.clear();
   }
@@ -288,32 +312,42 @@ class _CommentComposerState extends State<CommentComposer> {
             Spacing.sm,
             Spacing.sm,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  minLines: 1,
-                  maxLines: 5,
-                  textInputAction: TextInputAction.newline,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a comment (Markdown)',
-                    isDense: true,
+              // Above the Send button, so "@kelly is not a mention" is read
+              // before the comment goes (M7).
+              MentionHint(controller: _controller),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: MentionField(
+                      controller: _controller,
+                      source: widget.mentions,
+                      minLines: 1,
+                      maxLines: 5,
+                      textInputAction: TextInputAction.newline,
+                      decoration: const InputDecoration(
+                        hintText: 'Add a comment (Markdown)',
+                        isDense: true,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: Spacing.xs),
-              IconButton.filled(
-                tooltip: 'Post comment',
-                icon: widget.busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-                onPressed: _hasText && !widget.busy ? _send : null,
+                  const SizedBox(width: Spacing.xs),
+                  IconButton.filled(
+                    tooltip: 'Post comment',
+                    icon: widget.busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                    onPressed: _hasText && !widget.busy ? _send : null,
+                  ),
+                ],
               ),
             ],
           ),

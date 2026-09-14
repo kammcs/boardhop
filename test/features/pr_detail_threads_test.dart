@@ -5,10 +5,12 @@ import 'package:boardhop/auth/auth_bloc.dart';
 import 'package:boardhop/auth/auth_service.dart';
 import 'package:boardhop/core/http/ado_client.dart';
 import 'package:boardhop/data/models/pull_request.dart';
+import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/repositories/pr_diff_source.dart';
 import 'package:boardhop/data/repositories/pull_request_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
 import 'package:boardhop/features/pull_requests/pull_request_detail_page.dart';
+import 'package:boardhop/data/repositories/work_item_form_repository.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:dio/dio.dart';
@@ -17,6 +19,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+
+import 'mention_stubs.dart';
 
 class _Repo extends Mock implements PullRequestRepository {}
 
@@ -70,15 +74,26 @@ Map<String, dynamic> _thread(int id, String content) => {
       'commentType': 'text',
       'content': content,
       'publishedDate': '2026-09-12T10:00:00Z',
-      'author': {'displayName': 'Kelly Kamm', 'id': 'me'},
+      'author': {'displayName': 'Ada Example', 'id': 'me'},
     },
   ],
 };
+
+/// The person the mention test picks, with the identity GUID a mention
+/// needs (research/16 §1).
+const kellyGuid = '11111111-2222-3333-4444-555555555555';
+const kelly = IdentityRef(
+  displayName: 'Kelly Kamm',
+  uniqueName: 'kelly@kammcs.com',
+  id: kellyGuid,
+);
 
 void main() {
   late _Repo repo;
   late _WorkItems workItems;
   late List<List<Map<String, dynamic>>> threadReads;
+  late MentionStubs stubs;
+  late MentionForms forms;
 
   final pr = PullRequest.fromJson({
     'pullRequestId': 8334,
@@ -86,7 +101,9 @@ void main() {
     'status': 'active',
     'sourceRefName': 'refs/heads/feature/x',
     'targetRefName': 'refs/heads/main',
-    'createdBy': {'displayName': 'Kelly Kamm', 'id': 'me'},
+    // Not [kelly]: the mention list would then hold two rows reading the
+    // same name, one from the pull request and one from the team.
+    'createdBy': {'displayName': 'Ada Example', 'id': 'me'},
     'repository': {
       'id': 'repo',
       'name': 'scratch',
@@ -97,6 +114,14 @@ void main() {
   setUp(() {
     repo = _Repo();
     workItems = _WorkItems();
+    // The page builds its mention picker in the background; these answer
+    // its reads with nothing (research/16 §4.5).
+    stubs = mentionStubs();
+    forms = MentionForms();
+    stubMentionProject(forms, project: 'DevOps Mobile App');
+    stubMentionPullRequests(repo);
+    when(() => stubs.people.teamMembers('o', 'proj', 'team'))
+        .thenAnswer((_) async => const [kelly]);
     // The first read has one thread; every later read has two, standing
     // for the reply posted on the file diff.
     threadReads = [
@@ -119,9 +144,8 @@ void main() {
     when(() => repo.workItemIds('o', pr)).thenAnswer((_) async => const []);
     when(() => repo.checks('o', pr)).thenAnswer((_) async => const []);
     when(() => repo.rawThreads('o', pr)).thenAnswer(
-      (_) async => threadReads.length == 1
-          ? threadReads.first
-          : threadReads.removeAt(0),
+      (_) async =>
+          threadReads.length == 1 ? threadReads.first : threadReads.removeAt(0),
     );
   });
 
@@ -141,8 +165,7 @@ void main() {
       routes: [
         GoRoute(
           path: '/a/u1/orgs/o/pull-requests/8334',
-          builder: (_, _) =>
-              const PullRequestDetailPage(org: 'o', id: 8334),
+          builder: (_, _) => const PullRequestDetailPage(org: 'o', id: 8334),
           routes: [
             // Stands in for the file diff, which is a route pushed over
             // the detail page and can write threads of its own.
@@ -168,6 +191,8 @@ void main() {
           RepositoryProvider<PullRequestRepository>.value(value: repo),
           RepositoryProvider<WorkItemRepository>.value(value: workItems),
           RepositoryProvider<AdoClient>.value(value: client),
+          RepositoryProvider<WorkItemFormRepository>.value(value: forms),
+          ...mentionProviders(stubs),
         ],
         child: BlocProvider<AuthBloc>.value(
           value: auth,
@@ -201,5 +226,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('posted on the diff'), findsOneWidget);
     verify(() => repo.rawThreads('o', pr)).called(2);
+  });
+
+  testWidgets('the Comments composer posts a picked mention as @<guid>', (
+    tester,
+  ) async {
+    when(() => repo.addThread('o', pr, content: any(named: 'content')))
+        .thenAnswer((_) async => 99);
+    await pump(tester);
+    await tester.tap(find.textContaining('Comments'));
+    await tester.pumpAndSettle();
+
+    final composer = find.byType(TextField).last;
+    await tester.tap(composer);
+    await tester.pumpAndSettle();
+    await tester.enterText(composer, 'over to you @kel');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('mentionOptions')),
+        matching: find.text('Kelly Kamm'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Post comment'));
+    await tester.pumpAndSettle();
+    verify(() => repo.addThread('o', pr, content: 'over to you @<$kellyGuid>'))
+        .called(1);
   });
 }

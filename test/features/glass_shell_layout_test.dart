@@ -237,7 +237,7 @@ void main() {
     );
   });
 
-  testWidgets('the keyboard covers the bar instead of lifting it', (
+  testWidgets('the keyboard covers the bar, and shortens the page above it', (
     tester,
   ) async {
     // A focused field on the iPad reported a 400 pt keyboard inset and the
@@ -246,9 +246,21 @@ void main() {
     await pump(tester, size: tablet, insets: tabletInsets, keyboard: 400);
     final r = rail(tester);
     expect(r.bottom, tablet.height - GlassShellLayout.barBottomMargin);
-    // The page still sees the keyboard through its own MediaQuery.
+
+    // The page's own box is what shrinks. A `Scaffold` never lifts its
+    // `bottomNavigationBar` on its own — the box it is given does — so
+    // without this every composer anchored that way (the work item
+    // Discussion box, research/16 M1) sat behind the keyboard.
+    final b = body(tester);
+    expect(b.bottom, tablet.height - 400);
+    // And having taken the inset off the box, the shell takes it off the
+    // media query too, so the page does not count it twice.
     final insets = MediaQuery.viewInsetsOf(tester.element(find.byKey(bodyKey)));
-    expect(insets.bottom, 400);
+    expect(insets.bottom, 0);
+    // With the bar behind the keyboard there is nothing left to clear: the
+    // page keeps the real inset only. (iOS itself zeroes `padding.bottom`
+    // while the keyboard is up; this fake view keeps its 20.)
+    expect(seen, const EdgeInsets.only(top: 24, bottom: 20));
   });
 
   testWidgets('landscape: the rail ignores the keyboard too', (tester) async {
@@ -256,5 +268,9 @@ void main() {
     final without = rail(tester);
     await pump(tester, size: phone, insets: phoneInsets, keyboard: 300);
     expect(rail(tester), without);
+    // The page shrinks and the inset is spent, in this branch as well.
+    expect(body(tester).bottom, phone.height - 300);
+    final insets = MediaQuery.viewInsetsOf(tester.element(find.byKey(bodyKey)));
+    expect(insets.bottom, 0);
   });
 }

@@ -7,15 +7,23 @@ import 'package:go_router/go_router.dart';
 import '../../auth/auth_bloc.dart';
 import '../../auth/auth_service.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../../core/routes.dart';
+import '../../core/text/mention.dart';
 import '../../core/util/format.dart';
+import '../../data/mention_recents.dart';
 import '../../data/models/work_item.dart';
 import '../../data/models/work_item_form.dart';
+import '../../data/repositories/people_repository.dart';
+import '../../data/repositories/pull_request_repository.dart';
+import '../../data/repositories/search_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
 import '../shared/anchor_highlight.dart';
+import '../shared/mention/mention_source.dart';
+import '../shared/mention/mention_sources.dart';
 import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
 import 'form/type_chooser.dart';
@@ -112,6 +120,18 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
   /// refresh: someone reading further down must not be yanked back.
   int? _anchoredFor;
 
+  /// The item as it was last read, for the mention picker's participants —
+  /// the body itself is drawn from the drift stream.
+  WorkItem? _item;
+
+  /// The Discussion composer's picker (research/16 §4.5) and the names any
+  /// `@<guid>` in a Markdown-format field resolves to. A comment arrives as
+  /// server-rendered HTML with the name already inside the anchor, so the
+  /// map is only needed for the fields.
+  MentionSources? _sources;
+  MentionSource? _mentions;
+  Map<String, String> _mentionNames = const {};
+
   @override
   void initState() {
     super.initState();
@@ -192,8 +212,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
         widget.id,
       );
       if (mounted) {
-        setState(() => _comments = comments);
+        setState(() {
+          _item = item;
+          _comments = comments;
+        });
         _anchorComment();
+        unawaited(_prepareMentions());
       }
     } on AdoAuthException catch (e) {
       if (mounted) {
@@ -208,6 +232,71 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// The Discussion composer's picker, off the page's critical path.
+  ///
+  /// The people already on the item are seeded into the identity memory
+  /// first, so a `@<guid>` in one of its fields can be named without a call
+  /// (M9), and the source itself is built once: a new instance would make an
+  /// open picker reload its bands.
+  Future<void> _prepareMentions() async {
+    final people = context.read<PeopleRepository>();
+    unawaited(people.rememberIdentities(widget.org, _participants()));
+    final item = _item;
+    final names = await MentionSources.namesFor(people, widget.org, [
+      if (item != null)
+        for (final value in item.fields.values)
+          if (value is String) value,
+    ]);
+    if (!mounted) return;
+    if (names.isNotEmpty && names.length != _mentionNames.length) {
+      setState(() => _mentionNames = names);
+    }
+    if (_mentions != null) return;
+    final sources = _sources ??= MentionSources(
+      org: widget.org,
+      project: widget.project,
+      people: people,
+      forms: context.read<WorkItemFormRepository>(),
+      recents: context.read<MentionRecents>(),
+      workItems: context.read<WorkItemRepository>(),
+      pullRequests: context.read<PullRequestRepository>(),
+      search: context.read<SearchRepository>(),
+      // The Links row already resolved these, and they are the items most
+      // likely to be named in a comment about this one (M8).
+      extraWorkItems: () => _linked.values.toList(),
+    );
+    final me = await sources.me(uniqueName: _me);
+    if (!mounted || _mentions != null) return;
+    setState(() {
+      _mentions = sources.source(
+        participants: () async => _participants(),
+        participantReason: MentionSources.onThisItem,
+        me: me,
+      );
+    });
+  }
+
+  /// Everybody already on this item, newest commenter first.
+  List<IdentityRef> _participants() => MentionSources.workItemParticipants(
+    item: _item,
+    comments: _comments ?? const [],
+  );
+
+  /// A `#123` or `!456` tapped in a comment or a field (M10). The project is
+  /// this page's own: a reference is written against the item being read.
+  void _openMention(MentionKind kind, String id) {
+    final account = AccountScope.of(context);
+    switch (kind) {
+      case MentionKind.workItem:
+        if (id == '${widget.id}') return;
+        context.push(Routes.workItem(account, widget.org, widget.project, id));
+      case MentionKind.pullRequest:
+        context.push(Routes.pullRequest(account, widget.org, id));
+      case MentionKind.person:
+        break;
     }
   }
 
@@ -530,6 +619,8 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                 content: item.field<String>(entry.key)!,
                 format: item.formatOf(entry.key),
                 headers: _headers,
+                mentionNames: _mentionNames,
+                onOpenMention: _openMention,
               ),
             ),
       if (spec != null && groups.isNotEmpty)
@@ -538,6 +629,8 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
           item: item,
           groups: groups,
           headers: _headers,
+          mentionNames: _mentionNames,
+          onOpenMention: _openMention,
         ),
     ];
   }
@@ -550,6 +643,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
       bottomNavigationBar: CommentComposer(
         onSubmit: _postComment,
         busy: _writing,
+        mentions: _mentions,
       ),
       appBar: AppBar(
         title: Text(
@@ -642,6 +736,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage> {
                       child: _Discussion(
                         comments: _comments,
                         headers: _headers,
+                        onOpenMention: _openMention,
                         keyFor: (id) =>
                             _commentKeys.putIfAbsent(id, GlobalKey.new),
                         highlighted: _highlighted,
@@ -783,10 +878,14 @@ class _Discussion extends StatelessWidget {
     required this.headers,
     required this.keyFor,
     this.highlighted,
+    this.onOpenMention,
   });
 
   final List<WorkItemComment>? comments;
   final Map<String, String> headers;
+
+  /// Tapping a `#123` or `!456` the service linked in a comment (M10).
+  final void Function(MentionKind kind, String id)? onOpenMention;
 
   /// One stable key per comment id, so a pushed `?comment={id}` has
   /// something to scroll to (research/14 §4.2).
@@ -852,7 +951,11 @@ class _Discussion extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: Spacing.xs),
-                        RichTextView(content: c.renderedText, headers: headers),
+                        RichTextView(
+                          content: c.renderedText,
+                          headers: headers,
+                          onOpenMention: onOpenMention,
+                        ),
                       ],
                     ),
                   ),

@@ -9,6 +9,7 @@ import 'package:boardhop/data/repositories/pr_diff_source.dart';
 import 'package:boardhop/data/repositories/pull_request_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
 import 'package:boardhop/features/pull_requests/pull_request_detail_page.dart';
+import 'package:boardhop/data/repositories/work_item_form_repository.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/features/shared/anchor_highlight.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
@@ -18,6 +19,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+
+import 'mention_stubs.dart';
 
 class _Repo extends Mock implements PullRequestRepository {}
 
@@ -91,6 +94,8 @@ void main() {
   late _Repo repo;
   late _WorkItems workItems;
   late List<Map<String, dynamic>> threads;
+  late MentionStubs stubs;
+  late MentionForms forms;
 
   final pr = PullRequest.fromJson({
     'pullRequestId': 8334,
@@ -109,6 +114,12 @@ void main() {
   setUp(() {
     repo = _Repo();
     workItems = _WorkItems();
+    // The page builds its mention picker in the background; these answer
+    // its reads with nothing (research/16 §4.5).
+    stubs = mentionStubs();
+    forms = MentionForms();
+    stubMentionProject(forms, project: 'DevOps Mobile App');
+    stubMentionPullRequests(repo);
     threads = [
       for (var i = 1; i <= 10; i++) _thread(42500 + i, 'conversation $i'),
       _thread(42511, 'on a line', path: '/src/app.ts'),
@@ -175,6 +186,8 @@ void main() {
           RepositoryProvider<PullRequestRepository>.value(value: repo),
           RepositoryProvider<WorkItemRepository>.value(value: workItems),
           RepositoryProvider<AdoClient>.value(value: client),
+          RepositoryProvider<WorkItemFormRepository>.value(value: forms),
+          ...mentionProviders(stubs),
         ],
         child: BlocProvider<AuthBloc>.value(
           value: auth,
