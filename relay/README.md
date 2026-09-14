@@ -749,7 +749,7 @@ are missing and never overwrites one that is there.
 | `APNS_KEY_ID` | Apple's ten-character Key ID. `9L94ZN33Y3` since 2026-09-13; empty means APNs is off, which `/healthz` reports as `disabled (no key id)` |
 | `APNS_TEAM_ID` | `73W98CESN9` |
 | `APNS_TOPIC` | `com.kammcs.boardhop` |
-| `APNS_ENV` | `sandbox` (debug builds and TestFlight) or `production` |
+| `APNS_ENV` | `production` (TestFlight and App Store installs; the box since 2026-09-14) or `sandbox` (debug builds run from Xcode or `flutter run`). A token from one environment sent to the other host gets `400 BadDeviceToken` and the device is marked dead. |
 | `APNS_KEY_FILE` | `/secrets/apns-authkey.p8` |
 | `FCM_PROJECT_ID` | `boardhop-d4b8f` |
 | `FCM_SERVICE_ACCOUNT` | `/secrets/fcm-service-account.json` |
