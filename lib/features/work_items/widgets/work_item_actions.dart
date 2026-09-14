@@ -305,16 +305,28 @@ class _CommentComposerState extends State<CommentComposer> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // A `Scaffold` never lifts its `bottomNavigationBar` for the keyboard:
+    // it only shortens the body, and the bar stays at the bottom of the box
+    // it was given. Inside the project shell that box already stops above
+    // the keyboard (the shell spends the inset and zeroes it below), so
+    // this is 0 there; on a page over the shell — the pull request detail
+    // page, a work item opened from one — the box is the whole screen and
+    // the bar would sit behind the keyboard and its suggestion strip
+    // (Kelly's iPhone, 2026-09-14). Growing the bar by the inset keeps the
+    // field above the keyboard on both.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return Material(
       color: scheme.surfaceContainer,
       child: SafeArea(
         top: false,
+        // The home indicator is under the keyboard; nothing to clear.
+        bottom: keyboard <= 0,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             Spacing.lg,
             Spacing.sm,
             Spacing.sm,
-            Spacing.sm,
+            Spacing.sm + keyboard,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

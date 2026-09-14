@@ -87,4 +87,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(node.hasFocus, isFalse);
   });
+
+  testWidgets('over the shell, the composer rides the keyboard', (
+    tester,
+  ) async {
+    // The pull request page's Scaffold is the whole screen: a
+    // bottomNavigationBar stays at the very bottom whatever the keyboard
+    // does, so the composer grows by the inset instead.
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BoardhopTheme.light(),
+        home: Scaffold(
+          body: const SizedBox.expand(),
+          bottomNavigationBar: CommentComposer(onSubmit: (_) async => true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final field = tester.getRect(find.byType(TextField));
+    expect(field.bottom, lessThanOrEqualTo(500));
+    expect(field.bottom, greaterThan(440));
+  });
+
+  testWidgets('inside the shell, with the inset already spent, it does not', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: BoardhopTheme.light(),
+        home: Scaffold(
+          body: const SizedBox.expand(),
+          bottomNavigationBar: CommentComposer(onSubmit: (_) async => true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final field = tester.getRect(find.byType(TextField));
+    expect(field.bottom, greaterThan(740));
+  });
 }
