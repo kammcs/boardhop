@@ -39,6 +39,16 @@ import UserNotifications
   /// Hex APNs token, kept so a late `register` call can be answered at once.
   private var apnsToken: String?
 
+  /// True once Dart has asked for a token. iOS does not retry a failed
+  /// `registerForRemoteNotifications` on its own, and it does not answer at
+  /// all while the phone has no route to APNs, so the Runner asks again: after
+  /// a failure with a growing delay, and whenever the app becomes active
+  /// without a token. Registration with the relay follows the user's grant of
+  /// the permission, not the next cold start.
+  private var wantsToken = false
+  private var registrationRetries = 0
+  private static let maxRegistrationRetries = 5
+
   private func registerPushChannel(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "com.kammcs.boardhop/push", binaryMessenger: messenger)
@@ -49,6 +59,8 @@ import UserNotifications
         // Safe to call repeatedly; iOS answers with the same token unless it
         // rotated. Does not prompt: without permission the delegate simply
         // never fires.
+        self?.wantsToken = true
+        self?.registrationRetries = 0
         UIApplication.shared.registerForRemoteNotifications()
         result(self?.apnsToken)
         self?.installNotificationCentreProxy()
@@ -93,6 +105,7 @@ import UserNotifications
   ) {
     let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
     apnsToken = hex
+    registrationRetries = 0
     pushChannel?.invokeMethod("onToken", arguments: hex)
     super.application(
       application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
@@ -105,6 +118,7 @@ import UserNotifications
     // Expected on the simulator without a paired Apple ID, and whenever the
     // user has not granted notifications. Never log the token; there is none.
     NSLog("Boardhop: remote notification registration failed: \(error.localizedDescription)")
+    retryRegistrationLater()
     super.application(
       application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
@@ -161,7 +175,26 @@ import UserNotifications
   /// becomes active, wrapping whatever it displaces.
   override func applicationDidBecomeActive(_ application: UIApplication) {
     installNotificationCentreProxy()
+    if wantsToken, apnsToken == nil {
+      // The earlier ask went unanswered (no network, or it failed and the
+      // retries ran out); the app is in front again, so ask once more.
+      registrationRetries = 0
+      application.registerForRemoteNotifications()
+    }
     super.applicationDidBecomeActive(application)
+  }
+
+  /// 5, 10, 20, 40, 60 seconds, then wait for the next activation.
+  private func retryRegistrationLater() {
+    guard wantsToken, apnsToken == nil,
+      registrationRetries < Self.maxRegistrationRetries
+    else { return }
+    let delay = min(60.0, 5.0 * pow(2.0, Double(registrationRetries)))
+    registrationRetries += 1
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, self.wantsToken, self.apnsToken == nil else { return }
+      UIApplication.shared.registerForRemoteNotifications()
+    }
   }
 
   private func installNotificationCentreProxy() {

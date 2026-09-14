@@ -78,11 +78,26 @@ class PushService {
   /// `android` or `ios`; what the relay stores. Null where push does not
   /// exist.
   String? get platform {
+    final forced = platformOverride;
+    if (forced != null) return forced;
     if (kIsWeb) return null;
     if (Platform.isAndroid) return 'android';
     if (Platform.isIOS) return 'ios';
     return null;
   }
+
+  /// Tests only: pretend to be `ios` or `android` on the host running them.
+  @visibleForTesting
+  static String? platformOverride;
+
+  /// How long the "Turn on" flow waits for the OS to hand over a token.
+  ///
+  /// iOS answers `registerForRemoteNotifications` asynchronously and, on a
+  /// phone whose network is not up yet, sometimes not for a while; Android's
+  /// FCM does the same. Registration with the relay must follow the user's
+  /// grant of the permission, not the next app start, so both platforms wait
+  /// here instead of giving up on a token that is seconds away.
+  static const tokenWait = Duration(seconds: 30);
 
   /// The notification that launched the app from cold, once.
   PushPointer? takeLaunchPointer() {
@@ -147,7 +162,7 @@ class PushService {
     try {
       await FirebaseMessaging.instance.setAutoInitEnabled(true);
       await channel.invokeMethod<void>('register');
-      final value = await _awaitToken(const Duration(seconds: 30));
+      final value = await _awaitToken(tokenWait);
       if (value != null) return value;
     } catch (e) {
       debugPrint('Push register failed: $e');
@@ -252,9 +267,13 @@ class PushService {
       // on for the install, and the switch does not survive a restart.
       if (platform == 'android') return await _androidRegister();
       if (platform == 'ios') {
+        // `register` answers with the token the Runner already holds, or null
+        // while APNs is still being asked; the token then arrives as
+        // `onToken`. Wait for it here, so the caller registers with the relay
+        // the moment the permission is granted rather than on a later start.
         final value = await channel.invokeMethod<String>('register');
         if (value != null && value.isNotEmpty) token.value = value;
-        return token.value;
+        return token.value ?? await _awaitToken(tokenWait);
       }
     } catch (e) {
       debugPrint('Push token unavailable: $e');

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../data/models/activity.dart';
@@ -59,7 +59,13 @@ class PushCoordinator {
   final Set<String> _accounts = {};
   StreamSubscription<PushPointer>? _foreground;
   StreamSubscription<PushPointer>? _opened;
+  AppLifecycleListener? _lifecycle;
   bool _started = false;
+
+  /// One registration pass at a time: the pass waits up to
+  /// [PushService.tokenWait] for a token, and a resume or a second enable in
+  /// the meantime must not start another that races it at the relay.
+  bool _registering = false;
 
   void start() {
     if (_started) return;
@@ -68,6 +74,15 @@ class PushCoordinator {
     _opened = push.opened.listen(_open);
     push.token.addListener(_onTokenChanged);
     notifications.enabledNotifier.addListener(_onEnabledChanged);
+    // Coming back to the foreground is the other moment a token can be
+    // missing for a reason that has since gone away (the phone had no
+    // network when it was asked, the OS answered late): register then rather
+    // than at the next cold start. Not every test has a widgets binding.
+    try {
+      _lifecycle = AppLifecycleListener(onResume: _onResume);
+    } catch (_) {
+      _lifecycle = null;
+    }
     final launch = push.takeLaunchPointer();
     if (launch != null) _open(launch);
   }
@@ -96,10 +111,22 @@ class PushCoordinator {
     if (!notifications.enabled) return;
     final platform = push.platform;
     if (platform == null) return;
+    if (_registering) return;
+    _registering = true;
+    try {
+      await _registerAllOnce(platform);
+    } finally {
+      _registering = false;
+    }
+  }
+
+  Future<void> _registerAllOnce(String platform) async {
     // Always through refreshToken: on Android that is what turns FCM on for
-    // the install, and it is a no-op once a token is in hand.
+    // the install, and it is a no-op once a token is in hand. Both platforms
+    // wait for a token that is still on its way.
     final token = await push.refreshToken();
     if (token == null || token.isEmpty) return;
+    if (!notifications.enabled) return;
 
     for (final accountId in _accounts.toList()) {
       final registrar = registrarFor(accountId);
@@ -123,6 +150,10 @@ class PushCoordinator {
   void _onTokenChanged() {
     final token = push.token.value;
     if (token == null || token.isEmpty) return;
+    // The first token of a registration pass lands here too, while the pass
+    // that asked for it is still running and will register with it; only a
+    // rotation outside a pass needs its own round.
+    if (_registering) return;
     unawaited(_reregister(token));
   }
 
@@ -137,6 +168,13 @@ class PushCoordinator {
       if (org == null) continue;
       await registrar.register(org: org, platform: platform, token: token);
     }
+  }
+
+  /// Foreground again: a registration pass, which is a heartbeat at most for
+  /// an account that is already registered and the missing registration for
+  /// one that is not.
+  void _onResume() {
+    unawaited(_registerAll());
   }
 
   void _onEnabledChanged() {
@@ -229,6 +267,8 @@ class PushCoordinator {
     _opened?.cancel();
     push.token.removeListener(_onTokenChanged);
     notifications.enabledNotifier.removeListener(_onEnabledChanged);
+    _lifecycle?.dispose();
+    _lifecycle = null;
     _started = false;
   }
 }
@@ -246,9 +286,10 @@ ActivityItem? pushedActivityItem(PushPointer pointer, String accountId) {
     kind: switch (pointer.artifactType) {
       'workItem' => ActivityKind.workItem,
       'build' || 'approval' => ActivityKind.build,
-      _ => _authorFacing.contains(pointer.verb)
-          ? ActivityKind.prMine
-          : ActivityKind.prReview,
+      _ =>
+        _authorFacing.contains(pointer.verb)
+            ? ActivityKind.prMine
+            : ActivityKind.prReview,
     },
     key: key,
     title: pointer.fallbackTitle ?? pointer.title ?? pointer.heading,
