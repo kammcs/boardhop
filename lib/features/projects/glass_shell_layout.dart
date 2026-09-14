@@ -119,6 +119,12 @@ class GlassShellLayout extends StatelessWidget {
     final inset = mq.padding;
     if (mq.orientation == Orientation.portrait) {
       return Scaffold(
+        // The keyboard covers the bar, as it covers Apple's own tab bar. With
+        // the default the whole stack, bar included, rose above the keyboard
+        // inset (a page's focused search field on the iPad put the dock a
+        // third of the way up the screen, 2026-09-14). Each page's Scaffold
+        // still resizes for the keyboard on its own.
+        resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
             Positioned.fill(
@@ -190,6 +196,8 @@ class GlassShellLayout extends StatelessWidget {
             ),
           );
     return Scaffold(
+      // As above: the rail sits under the keyboard, not above it.
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(child: page),

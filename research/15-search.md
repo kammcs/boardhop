@@ -1,6 +1,6 @@
 # 15. Search across Azure DevOps content
 
-**Status:** planned with Kelly 2026-09-14 (interview below), spike s44 done, build in progress (dispatcher + Opus subagents, phases S1–S3).
+**Status:** planned with Kelly 2026-09-14 (interview below), spike s44 done, **built and accepted the same day** (S1–S3, see NEXT-STEPS item 20 and `research/walkthroughs/2026-09-14-search.md`). Decisions S2/S3 made where this document was silent are in their sections of the walkthrough: the route lives in the shell's Home branch; the scope switch is page state, not a navigation; facets are remembered from the last unfiltered answer; paging is infinite scroll; a title match is bolded in the title itself and the extra line is kept for description/history matches.
 
 ## 1. What exists
 

@@ -47,10 +47,12 @@ void main() {
     bool bleed = false,
     bool onRight = true,
     CutoutSide cutout = CutoutSide.unknown,
+    double keyboard = 0,
   }) async {
     seen = null;
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
     tester.view.padding = FakeViewPadding(
       left: insets.left,
       top: insets.top,
@@ -233,5 +235,26 @@ void main() {
       seen,
       const EdgeInsets.only(top: 24, bottom: GlassShellLayout.barGutter),
     );
+  });
+
+  testWidgets('the keyboard covers the bar instead of lifting it', (
+    tester,
+  ) async {
+    // A focused field on the iPad reported a 400 pt keyboard inset and the
+    // shell's Scaffold raised the whole stack, dock included, above it
+    // (2026-09-14). Apple's tab bar stays put under the keyboard.
+    await pump(tester, size: tablet, insets: tabletInsets, keyboard: 400);
+    final r = rail(tester);
+    expect(r.bottom, tablet.height - GlassShellLayout.barBottomMargin);
+    // The page still sees the keyboard through its own MediaQuery.
+    final insets = MediaQuery.viewInsetsOf(tester.element(find.byKey(bodyKey)));
+    expect(insets.bottom, 400);
+  });
+
+  testWidgets('landscape: the rail ignores the keyboard too', (tester) async {
+    await pump(tester, size: phone, insets: phoneInsets);
+    final without = rail(tester);
+    await pump(tester, size: phone, insets: phoneInsets, keyboard: 300);
+    expect(rail(tester), without);
   });
 }
