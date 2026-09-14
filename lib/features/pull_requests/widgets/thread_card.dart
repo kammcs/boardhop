@@ -5,11 +5,15 @@ import '../../../core/util/format.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
 import '../../shared/attachments/inline_attachments.dart';
+import '../../shared/attachments/pending_attachments.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_markdown.dart';
 import '../../shared/mention/mention_source.dart';
+import '../../work_items/form/controls/attachment_picker.dart';
+import '../../work_items/form/controls/attachments_section.dart'
+    show AttachmentSource;
 import '../../work_items/widgets/work_item_visuals.dart';
 
 /// One PR thread: status, comments, an inline reply box and a status menu
@@ -28,6 +32,9 @@ class ThreadCard extends StatefulWidget {
     this.mentions,
     this.mentionNames = const {},
     this.attachments,
+    this.uploads,
+    this.offline = false,
+    this.pick = pickAttachment,
     this.onOpenMention,
   });
 
@@ -60,6 +67,18 @@ class ThreadCard extends StatefulWidget {
   /// without this it renders as nothing (research/17 §1 bug (b)).
   final InlineAttachments? attachments;
 
+  /// Where a file picked into the **reply** box is uploaded on Send. Named
+  /// apart from [attachments], which is the read side of the same feature:
+  /// one draws the images already in the thread, the other puts a new one
+  /// there. Null leaves no attach button (research/17 §4).
+  final AttachmentSource? uploads;
+
+  /// The page's last request could not reach the service (decision T6).
+  final bool offline;
+
+  /// The platform picker, injected by the tests.
+  final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
+
   /// Tapping a `#123` or `!456` in a comment.
   final void Function(MentionKind kind, String id)? onOpenMention;
 
@@ -67,8 +86,22 @@ class ThreadCard extends StatefulWidget {
   State<ThreadCard> createState() => _ThreadCardState();
 }
 
-class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
+class _ThreadCardState extends State<ThreadCard>
+    with WidgetsBindingObserver, ComposerAttachments<ThreadCard> {
   final _controller = MentionController();
+
+  @override
+  AttachmentSource? get attachmentSource => widget.uploads;
+
+  @override
+  Future<PickedAttachment?> Function(AttachmentPickSource) get attachmentPick =>
+      widget.pick;
+
+  @override
+  bool get attachmentsOffline => widget.offline;
+
+  /// One busy state covers the uploads and the post (T3).
+  bool get _busy => widget.busy || uploadingAttachments;
 
   /// The reply field and its buttons, so both can be scrolled clear of
   /// the keyboard.
@@ -125,17 +158,23 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
   /// matters: if the status call fails the reply is kept and the failure
   /// is said out loud, rather than rolling anything back.
   Future<void> _send({String? thenStatus}) async {
-    if (_controller.text.trim().isEmpty || widget.onReply == null) return;
+    if (widget.onReply == null || _busy) return;
     // Every picked person becomes `@<guid>` here, at the submit boundary
     // (research/16 §4.3): the repository below takes a plain string.
     final text = _controller.toWire(MentionWire.markdown).trim();
-    if (text.isEmpty) return;
+    // A reply may be files alone (T3).
+    if (text.isEmpty && pending.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
-    final posted = await widget.onReply!(text);
+    // Uploads first, then one Markdown line each on the end (T8). A
+    // refusal keeps the text and the chips and posts nothing.
+    final body = await bodyWithAttachments(text);
+    if (body == null || body.isEmpty || !mounted) return;
+    final posted = await widget.onReply!(body);
     if (!mounted) return;
     if (posted) {
       setState(() => _replying = false);
       _controller.clear();
+      clearAttachments();
       // The keyboard goes with the reply (Kelly, 2026-09-14).
       FocusManager.instance.primaryFocus?.unfocus();
     }
@@ -307,7 +346,8 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                         autofocus: true,
                         minLines: 1,
                         maxLines: 5,
-                        enabled: !widget.busy,
+                        enabled: !_busy,
+                        contentInsertionConfiguration: contentInsertion,
                         onChanged: (v) {
                           final draft = v.trim();
                           // Only the empty/non-empty flip changes the row.
@@ -326,25 +366,36 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                         ),
                       ),
                       MentionHint(controller: _controller),
+                      attachmentsBar(busy: _busy),
                       const SizedBox(height: Spacing.xs),
                       // Empty box: the only sensible action is the status
-                      // change, so nothing typed can be lost. With text,
-                      // the paired button posts and then flips the status.
+                      // change, so nothing typed can be lost. With text —
+                      // or with a file attached — the paired button posts
+                      // and then flips the status.
                       Wrap(
                         alignment: WrapAlignment.end,
                         spacing: Spacing.xs,
                         runSpacing: Spacing.xs,
                         children: [
+                          // At the start of the row, so it does not compete
+                          // with the two text actions (a2 §3.1).
+                          if (canAttach) attachButton(busy: _busy),
                           TextButton(
-                            onPressed: widget.busy
+                            onPressed: _busy
                                 ? null
-                                : () => setState(() => _replying = false),
+                                : () => setState(() {
+                                    _replying = false;
+                                    // Cancelling leaves nothing behind:
+                                    // nothing was uploaded (T3).
+                                    pending.clear();
+                                    attachmentError = null;
+                                  }),
                             child: const Text('Cancel'),
                           ),
-                          if (_draft.isEmpty)
+                          if (_draft.isEmpty && pending.isEmpty)
                             if (widget.onSetStatus != null)
                               FilledButton(
-                                onPressed: widget.busy
+                                onPressed: _busy
                                     ? null
                                     : () => widget.onSetStatus!(_pairedStatus),
                                 child: Text(
@@ -357,13 +408,13 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                               const SizedBox.shrink()
                           else ...[
                             TextButton(
-                              onPressed: widget.busy ? null : () => _send(),
+                              onPressed: _busy ? null : () => _send(),
                               // Azure DevOps reopens a settled thread as
                               // soon as a comment lands on it, whatever
                               // the app asks (spike note, 2026-09-12), so
                               // the plain Reply says what it will do.
                               child: Text(
-                                widget.busy
+                                _busy
                                     ? 'Posting…'
                                     : (t.isResolved
                                           ? 'Reply (reopens)'
@@ -372,7 +423,7 @@ class _ThreadCardState extends State<ThreadCard> with WidgetsBindingObserver {
                             ),
                             if (widget.onSetStatus != null)
                               FilledButton(
-                                onPressed: widget.busy
+                                onPressed: _busy
                                     ? null
                                     : () => _send(thenStatus: _pairedStatus),
                                 child: Text(_pairedLabel),

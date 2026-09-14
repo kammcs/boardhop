@@ -1,8 +1,10 @@
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/features/shared/attachments/attachment_links.dart';
+import 'package:boardhop/features/shared/attachments/inline_attachments.dart';
 import 'package:boardhop/features/work_items/widgets/rich_text_view.dart';
 import 'package:boardhop/theme/theme.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -160,6 +162,146 @@ void main() {
       await tester.pump();
 
       expect(find.byType(Image), findsNothing);
+    });
+  });
+
+  /// T-A open item 2 / decision T9: a **file** attached to a work item
+  /// comment arrives as an ordinary `<a rel=nofollow>` in the service's
+  /// rendered HTML. Left alone it would open in a browser, which cannot
+  /// authenticate an attachment URL and lands on a sign-in page.
+  group('a file link inside a comment', () {
+    const fileUrl =
+        'https://dev.azure.com/contoso/$projectGuid'
+        '/_apis/wit/attachments/$guid?fileName=notes.txt';
+
+    late List<String> opened;
+
+    Future<void> pumpBody(
+      WidgetTester tester,
+      String html, {
+      bool withOpener = true,
+      String? base,
+    }) async {
+      opened = [];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: Scaffold(
+            body: RichTextView(
+              content: html,
+              headers: headers,
+              attachmentBase: base,
+              attachments: InlineAttachments(
+                headers: headers,
+                onOpen: withOpener
+                    ? (context, url, name) async {
+                        opened.add('$url|$name');
+                        return null;
+                      }
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// What a tap on the one image would run, if anything.
+    VoidCallback? tapImage(WidgetTester tester) {
+      final detectors = find.ancestor(
+        of: find.byType(Image),
+        matching: find.byType(GestureDetector),
+      );
+      if (detectors.evaluate().isEmpty) return null;
+      return tester.widget<GestureDetector>(detectors.first).onTap;
+    }
+
+    /// Every tappable run on screen.
+    List<TapGestureRecognizer> taps(WidgetTester tester) {
+      final out = <TapGestureRecognizer>[];
+      for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+        rich.text.visitChildren((span) {
+          if (span is TextSpan && span.recognizer is TapGestureRecognizer) {
+            out.add(span.recognizer! as TapGestureRecognizer);
+          }
+          return true;
+        });
+      }
+      return out;
+    }
+
+    testWidgets('opens through the share sheet, not the browser', (
+      tester,
+    ) async {
+      await pumpBody(tester, '<p><a href="$fileUrl">notes.txt</a></p>');
+      expect(
+        find.textContaining('notes.txt', findRichText: true),
+        findsWidgets,
+      );
+      final tap = taps(tester);
+      expect(tap, hasLength(1));
+      tap.single.onTap!();
+      await tester.pumpAndSettle();
+      expect(opened, ['$fileUrl|notes.txt']);
+    });
+
+    testWidgets('a sentinel href is repaired first', (tester) async {
+      await pumpBody(
+        tester,
+        '<p><a href="$attachmentSentinel/$guid?fileName=notes.txt">'
+        'notes.txt</a></p>',
+        base: witAttachmentBase(commentUrl),
+      );
+      taps(tester).single.onTap!();
+      await tester.pumpAndSettle();
+      expect(opened, ['$fileUrl|notes.txt']);
+    });
+
+    testWidgets('an ordinary link is left exactly as it was', (tester) async {
+      await pumpBody(
+        tester,
+        '<p><a href="https://example.test/docs">the docs</a></p>',
+      );
+      taps(tester).single.onTap!();
+      await tester.pumpAndSettle();
+      expect(opened, isEmpty);
+    });
+
+    testWidgets('an image in a comment opens the viewer too (T9)', (
+      tester,
+    ) async {
+      // The Markdown path has its own tap; the HTML path is where a work
+      // item comment's image actually arrives.
+      await pumpBody(tester, '<p><img src="$absolute" alt="shot"></p>');
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.image, isA<CachedNetworkImageProvider>());
+      // The image never loads in a test, so it has no box to tap: the
+      // detector the renderer wrapped it in is what a tap would reach.
+      tapImage(tester)!();
+      await tester.pumpAndSettle();
+      expect(opened, ['$absolute|shot.png']);
+    });
+
+    testWidgets('a foreign image is not routed anywhere', (tester) async {
+      await pumpBody(
+        tester,
+        '<p><img src="https://example.test/logo.png" alt="logo"></p>',
+      );
+      tapImage(tester)?.call();
+      await tester.pumpAndSettle();
+      expect(opened, isEmpty);
+    });
+
+    testWidgets('no opener means the link stays inert', (tester) async {
+      await pumpBody(
+        tester,
+        '<p><a href="$fileUrl">notes.txt</a></p>',
+        withOpener: false,
+      );
+      taps(tester).single.onTap!();
+      await tester.pumpAndSettle();
+      expect(opened, isEmpty);
     });
   });
 }

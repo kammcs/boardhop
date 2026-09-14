@@ -53,13 +53,43 @@ String attachmentTooLargeMessage(String name, int size) =>
 /// web then show, so every camera and library pick is renamed after the
 /// moment it was taken, keeping its extension. A file chosen through the
 /// file picker keeps the name it has (iOS walkthrough).
-String photoFileName(String pickedName, {DateTime? now}) {
-  final extension = p.extension(pickedName);
-  final stamp = DateFormat(
-    'yyyyMMdd-HHmmss',
-  ).format((now ?? DateTime.now()).toLocal());
+///
+/// [jpeg] forces `.jpg`, which the **camera** path needs: passing any
+/// sizing to `image_picker` re-encodes the capture as JPEG whatever the
+/// source format was (decision T5), and a `.png` name on JPEG bytes is what
+/// the web would then show and what a download would save.
+String photoFileName(String pickedName, {DateTime? now, bool jpeg = false}) {
+  final extension = jpeg ? '.jpg' : p.extension(pickedName);
+  final stamp = DateFormat('yyyyMMdd-HHmmss')
+      .format((now ?? DateTime.now()).toLocal());
   return 'photo-$stamp${extension.isEmpty ? '.jpg' : extension}';
 }
+
+/// A name for an image the **Android keyboard** handed the field —
+/// `keyboard-20260914-183012.png` (decision T10).
+///
+/// Gboard's image button delivers bytes and a MIME type, never a file name,
+/// so the extension comes off the MIME type and the name off the clock, the
+/// same shape [photoFileName] gives a camera pick.
+String keyboardFileName(String mimeType, {DateTime? now}) {
+  final subtype = mimeType.split('/').last.split(';').first.trim();
+  final stamp = DateFormat('yyyyMMdd-HHmmss')
+      .format((now ?? DateTime.now()).toLocal());
+  return 'keyboard-$stamp.${subtype.isEmpty ? 'png' : subtype}';
+}
+
+/// What `contentInsertionConfiguration` accepts from the keyboard: the
+/// image types Azure DevOps renders inline, which is also Flutter's own
+/// default list (`editable_text.dart`).
+const keyboardImageMimeTypes = <String>[
+  'image/png',
+  'image/bmp',
+  'image/jpg',
+  'image/tiff',
+  'image/gif',
+  'image/jpeg',
+  'image/webp',
+];
 
 /// Where to take the file from: camera, photo library or any file.
 ///
@@ -118,15 +148,23 @@ Future<PickedAttachment?> pickAttachment(AttachmentPickSource source) async {
   switch (source) {
     case AttachmentPickSource.camera:
     case AttachmentPickSource.library:
+      final camera = source == AttachmentPickSource.camera;
+      // Decision T5: the camera only. A 12 MP capture is 4-6 MB for no
+      // benefit in a comment, while a library pick is usually a screenshot
+      // where legibility matters and re-encoding is a trap (Android makes
+      // `imageQuality` a no-op on an image with alpha but re-encodes an
+      // alpha-free PNG as JPEG the moment any sizing is passed). The
+      // 60 MB guard below stays the real boundary, never this.
       final image = await ImagePicker().pickImage(
-        source: source == AttachmentPickSource.camera
-            ? ImageSource.camera
-            : ImageSource.gallery,
+        source: camera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: camera ? 2048 : null,
+        maxHeight: camera ? 2048 : null,
+        imageQuality: camera ? 85 : null,
       );
       if (image == null) return null;
       final size = await image.length();
       return PickedAttachment(
-        name: photoFileName(image.name),
+        name: photoFileName(image.name, jpeg: camera),
         size: size,
         bytes: size > WorkItemFormRepository.maxAttachmentBytes
             ? null

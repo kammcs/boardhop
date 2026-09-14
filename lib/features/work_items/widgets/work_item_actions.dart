@@ -4,10 +4,13 @@ import '../../../core/text/mention.dart';
 import '../../../data/models/work_item.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
+import '../../shared/attachments/pending_attachments.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_source.dart';
+import '../form/controls/attachment_picker.dart';
+import '../form/controls/attachments_section.dart' show AttachmentSource;
 import 'work_item_visuals.dart';
 
 /// What the state sheet answers with: the target state and, when the type's
@@ -257,6 +260,10 @@ class CommentComposer extends StatefulWidget {
     required this.onSubmit,
     this.busy = false,
     this.mentions,
+    this.attachments,
+    this.offline = false,
+    this.onAttachmentsDropped,
+    this.pick = pickAttachment,
   });
 
   final Future<bool> Function(String text) onSubmit;
@@ -266,13 +273,50 @@ class CommentComposer extends StatefulWidget {
   /// not loaded its people yet passes.
   final MentionSource? mentions;
 
+  /// Where a picked file is uploaded on Send. Null — the default, and what
+  /// every host that has not been wired passes — leaves no attach button
+  /// at all (research/17 §4).
+  final AttachmentSource? attachments;
+
+  /// The host's last request could not reach the service: attaching is off
+  /// with the reason in the tooltip (decision T6).
+  final bool offline;
+
+  /// The host queues text offline, so a comment whose files could not be
+  /// uploaded still posts later without them, and it is told how many were
+  /// dropped so its message can say so (T6). Null leaves the comment
+  /// unposted with the failure on the chip.
+  final void Function(int files)? onAttachmentsDropped;
+
+  /// The platform picker, injected by the tests.
+  final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
+
   @override
   State<CommentComposer> createState() => _CommentComposerState();
 }
 
-class _CommentComposerState extends State<CommentComposer> {
+class _CommentComposerState extends State<CommentComposer>
+    with ComposerAttachments<CommentComposer> {
   final _controller = MentionController();
   bool _hasText = false;
+
+  @override
+  AttachmentSource? get attachmentSource => widget.attachments;
+
+  @override
+  Future<PickedAttachment?> Function(AttachmentPickSource) get attachmentPick =>
+      widget.pick;
+
+  @override
+  bool get attachmentsOffline => widget.offline;
+
+  @override
+  void Function(int files)? get onAttachmentsDropped =>
+      widget.onAttachmentsDropped;
+
+  /// One busy state covers the uploads and the post (T3): the host only
+  /// knows about the post.
+  bool get _busy => widget.busy || uploadingAttachments;
 
   @override
   void initState() {
@@ -290,13 +334,19 @@ class _CommentComposerState extends State<CommentComposer> {
   }
 
   Future<void> _send() async {
-    if (_controller.text.trim().isEmpty || widget.busy) return;
+    if (_busy) return;
     // Wire form, not what is on screen: `@Kelly Kamm` posts as `@<guid>`.
     final text = _controller.toWire(MentionWire.markdown).trim();
-    if (text.isEmpty) return;
-    final ok = await widget.onSubmit(text);
+    // A comment may be files alone (T3).
+    if (text.isEmpty && pending.isEmpty) return;
+    // Uploads first, then the links go on the end of the wire text (T8).
+    // A refusal leaves the text and the chips where they are.
+    final body = await bodyWithAttachments(text);
+    if (body == null || body.isEmpty || !mounted) return;
+    final ok = await widget.onSubmit(body);
     if (!ok || !mounted) return;
     _controller.clear();
+    clearAttachments();
     // The keyboard goes with the comment (Kelly, 2026-09-14): the posted
     // comment is what you want to see next, not an empty box.
     FocusManager.instance.primaryFocus?.unfocus();
@@ -335,6 +385,9 @@ class _CommentComposerState extends State<CommentComposer> {
               // Above the Send button, so "@kelly is not a mention" is read
               // before the comment goes (M7).
               MentionHint(controller: _controller),
+              // The files ride above the field, where what is about to be
+              // sent can be read and removed (T7).
+              attachmentsBar(busy: _busy),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -345,23 +398,29 @@ class _CommentComposerState extends State<CommentComposer> {
                       minLines: 1,
                       maxLines: 5,
                       textInputAction: TextInputAction.newline,
+                      contentInsertionConfiguration: contentInsertion,
                       decoration: const InputDecoration(
                         hintText: 'Add a comment (Markdown)',
                         isDense: true,
                       ),
                     ),
                   ),
+                  // Left of Send, so Send stays the rightmost, thumb-
+                  // reachable control (DESIGN §6).
+                  if (canAttach) attachButton(busy: _busy),
                   const SizedBox(width: Spacing.xs),
                   IconButton.filled(
                     tooltip: 'Post comment',
-                    icon: widget.busy
+                    icon: _busy
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.send),
-                    onPressed: _hasText && !widget.busy ? _send : null,
+                    onPressed: (_hasText || pending.isNotEmpty) && !_busy
+                        ? _send
+                        : null,
                   ),
                 ],
               ),

@@ -52,7 +52,7 @@ class AttachmentInfo {
   final int? size;
   final String? comment;
 
-  String get extension => p.extension(name).replaceFirst('.', '').toLowerCase();
+  String get extension => extensionOf(name);
 
   static const _imageExtensions = <String>{
     'png',
@@ -63,10 +63,19 @@ class AttachmentInfo {
     'bmp',
   };
 
-  bool get isImage => _imageExtensions.contains(extension);
+  /// The three rules below are taken by **name** rather than off an
+  /// instance, because a file that is only pending — picked into a comment
+  /// composer and not uploaded yet — has a name and bytes and no relation
+  /// to build an [AttachmentInfo] from (research/17 §4). One rule, one
+  /// place: a chip and the row it becomes after Send must not disagree
+  /// about what counts as an image.
+  static String extensionOf(String name) =>
+      p.extension(name).replaceFirst('.', '').toLowerCase();
 
-  /// A glyph for the kind of file, the same idea as the repo browser's.
-  IconData get icon => switch (extension) {
+  static bool isImageNamed(String name) =>
+      _imageExtensions.contains(extensionOf(name));
+
+  static IconData iconFor(String name) => switch (extensionOf(name)) {
     'pdf' => Icons.picture_as_pdf_outlined,
     'zip' || 'gz' || '7z' || 'rar' => Icons.folder_zip_outlined,
     'txt' || 'md' || 'log' => Icons.description_outlined,
@@ -76,6 +85,11 @@ class AttachmentInfo {
     'json' || 'xml' || 'yml' || 'yaml' => Icons.data_object_outlined,
     _ => Icons.insert_drive_file_outlined,
   };
+
+  bool get isImage => isImageNamed(name);
+
+  /// A glyph for the kind of file, the same idea as the repo browser's.
+  IconData get icon => iconFor(name);
 }
 
 /// What the Attachments page needs, kept apart from the repositories so the

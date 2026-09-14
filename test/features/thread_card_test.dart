@@ -1,8 +1,15 @@
+import 'dart:typed_data';
+
+import 'package:boardhop/core/http/ado_exceptions.dart';
 import 'package:boardhop/core/text/mention.dart';
 import 'package:boardhop/data/models/work_item.dart';
+import 'package:boardhop/data/models/work_item_form.dart';
 import 'package:boardhop/data/repositories/pr_diff_source.dart';
 import 'package:boardhop/features/pull_requests/widgets/thread_card.dart';
 import 'package:boardhop/features/shared/mention/mention_source.dart';
+import 'package:boardhop/features/work_items/form/controls/attachment_picker.dart';
+import 'package:boardhop/features/work_items/form/controls/attachments_section.dart'
+    show AttachmentSource;
 import 'package:boardhop/theme/theme.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +69,9 @@ void main() {
     MentionSource? mentions,
     Map<String, String> names = const {},
     void Function(MentionKind kind, String id)? onOpenMention,
+    AttachmentSource? uploads,
+    bool offline = false,
+    Future<PickedAttachment?> Function(AttachmentPickSource)? pick,
   }) => MaterialApp(
     theme: BoardhopTheme.light(),
     home: Scaffold(
@@ -70,6 +80,9 @@ void main() {
         canAct: true,
         mentions: mentions,
         mentionNames: names,
+        uploads: uploads,
+        offline: offline,
+        pick: pick ?? pickAttachment,
         onOpenMention: onOpenMention,
         onReply: (text) async {
           replies.add(text);
@@ -280,5 +293,141 @@ void main() {
     expect(recognizers, hasLength(1));
     (recognizers.single as TapGestureRecognizer).onTap!();
     expect(opened, ['workItem:15545']);
+  });
+
+  group('attachments in a reply (research/17 T1, T3, T8)', () {
+    final bytes = Uint8List.fromList(const [1, 2, 3, 4]);
+    const store =
+        'https://dev.azure.com/puremedia/proj/_apis/git/repositories/r'
+        '/pullRequests/8334/attachments';
+
+    late List<String> uploads;
+
+    AttachmentSource source({Object? throws}) => AttachmentSource(
+      bytes: (url) async => bytes,
+      upload: (name, body) async {
+        uploads.add(name);
+        if (throws != null) throw throws;
+        return AttachmentRef(id: '1', url: '$store/$name', fileName: name);
+      },
+    );
+
+    Future<PickedAttachment?> onePick(AttachmentPickSource _) async =>
+        PickedAttachment(name: 'shot.png', size: 4, bytes: bytes);
+
+    setUp(() => uploads = []);
+
+    Future<void> openComposer(WidgetTester tester, Widget app) async {
+      await tester.pumpWidget(app);
+      await tester.tap(find.text('Reply'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> attach(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.attach_file));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Choose from library'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('no source leaves the reply box exactly as it was', (
+      tester,
+    ) async {
+      await openComposer(tester, host(thread()));
+      expect(find.byIcon(Icons.attach_file), findsNothing);
+    });
+
+    testWidgets('a file attaches, uploads on Reply and rides on the end of '
+        'the text (T8)', (tester) async {
+      await openComposer(
+        tester,
+        host(thread(), uploads: source(), pick: onePick),
+      );
+      await attach(tester);
+      expect(find.byType(InputChip), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'see this');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Reply'));
+      await tester.pumpAndSettle();
+
+      expect(uploads, ['shot.png']);
+      expect(replies, ['see this\n\n![shot.png]($store/shot.png)']);
+      // Posted: the composer closes and the chip goes with it.
+      expect(find.byType(InputChip), findsNothing);
+    });
+
+    testWidgets('a chip alone is enough to offer Reply', (tester) async {
+      await openComposer(
+        tester,
+        host(thread(), uploads: source(), pick: onePick),
+      );
+      // Empty box: Resolve is the only action until something is attached.
+      expect(find.widgetWithText(TextButton, 'Reply'), findsNothing);
+      await attach(tester);
+      expect(find.widgetWithText(TextButton, 'Reply'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Reply'));
+      await tester.pumpAndSettle();
+      expect(replies, ['![shot.png]($store/shot.png)']);
+    });
+
+    testWidgets('Cancel leaves nothing behind: nothing was uploaded (T3)', (
+      tester,
+    ) async {
+      await openComposer(
+        tester,
+        host(thread(), uploads: source(), pick: onePick),
+      );
+      await attach(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(uploads, isEmpty);
+      await tester.tap(find.text('Reply'));
+      await tester.pumpAndSettle();
+      expect(find.byType(InputChip), findsNothing);
+    });
+
+    testWidgets('a refused upload keeps the reply and posts nothing', (
+      tester,
+    ) async {
+      await openComposer(
+        tester,
+        host(
+          thread(),
+          uploads: source(throws: const AdoServerException('too big')),
+          pick: onePick,
+        ),
+      );
+      await attach(tester);
+      await tester.enterText(find.byType(TextField), 'keep me');
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Reply'));
+      await tester.pumpAndSettle();
+      expect(replies, isEmpty);
+      expect(find.text('keep me'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets('offline the button is there and disabled (T6)', (
+      tester,
+    ) async {
+      await openComposer(
+        tester,
+        host(thread(), uploads: source(), offline: true, pick: onePick),
+      );
+      expect(find.byTooltip('Attachments need a connection'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byIcon(Icons.attach_file),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+    });
   });
 }

@@ -21,6 +21,7 @@ import '../../data/repositories/search_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../shared/account_scope.dart';
+import '../shared/attachments/attachment_links.dart';
 import '../shared/attachments/inline_attachment_source.dart';
 import '../shared/attachments/inline_attachments.dart';
 import '../work_items/form/controls/attachments_section.dart'
@@ -82,6 +83,13 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   /// is authenticated, so this page needs a bearer token of its own
   /// (research/17 §1 bug (b)).
   InlineAttachments? _attachments;
+
+  /// The same source in the shape the line composer and the reply boxes
+  /// need: where a picked file is uploaded on Send (T3).
+  AttachmentSource? _uploads;
+
+  /// The last request could not reach the service (decision T6).
+  bool _offline = false;
 
   @override
   void initState() {
@@ -173,13 +181,21 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     final accountId = AccountScope.of(context);
     try {
       final token = await auth.accessToken(accountId: accountId);
-      _attachments = inlineAttachmentsOf(
-        AttachmentSource(
-          bytes: repo.attachmentBytes,
-          headers: {'Authorization': 'Bearer $token'},
-        ),
-      );
       final pr = _pr ?? await repo.get(widget.org, widget.id);
+      // The pull request store is keyed by the file name and refuses one it
+      // already holds (w32 §4), so the uniquify lives here rather than in
+      // the composer.
+      _uploads = AttachmentSource(
+        bytes: repo.attachmentBytes,
+        upload: (name, bytes) => repo.uploadAttachment(
+          widget.org,
+          pr,
+          uniqueAttachmentName(name),
+          bytes,
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      _attachments = inlineAttachmentsOf(_uploads!);
       final ref = repo.ref(widget.org, pr);
       final iterations = _iterations.isEmpty
           ? await source.iterations(ref)
@@ -239,6 +255,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
           brightness,
         );
         _threads = _forThisFile(threads);
+        _offline = false;
       });
       unawaited(_prepareMentions(pr));
     } on AdoAuthException catch (e) {
@@ -251,7 +268,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         );
       }
     } on AdoException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _offline = e is AdoNetworkException;
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -309,7 +331,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         );
       }
     } on AdoException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _offline = e is AdoNetworkException;
+        });
+      }
     } finally {
       if (mounted) setState(() => _posting = false);
     }
@@ -491,6 +518,8 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                       mentions: _mentions,
                       mentionNames: _mentionNames,
                       attachments: _attachments,
+                      uploads: _uploads,
+                      offline: _offline,
                       onOpenMention: _openMention,
                       onGutterTap: _pr?.isActive == true
                           ? (line) => setState(

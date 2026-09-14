@@ -7,11 +7,15 @@ import '../../../core/text/mention.dart';
 import '../../../data/repositories/pr_diff_source.dart';
 import '../../../theme/theme.dart';
 import '../../shared/attachments/inline_attachments.dart';
+import '../../shared/attachments/pending_attachments.dart';
 import '../../shared/dismiss_keyboard_on_drag.dart';
 import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_source.dart';
+import '../../work_items/form/controls/attachment_picker.dart';
+import '../../work_items/form/controls/attachments_section.dart'
+    show AttachmentSource;
 import '../widgets/thread_card.dart';
 import 'diff_model.dart';
 import 'highlighter.dart';
@@ -38,6 +42,9 @@ class DiffView extends StatefulWidget {
     this.mentions,
     this.mentionNames = const {},
     this.attachments,
+    this.uploads,
+    this.offline = false,
+    this.pick = pickAttachment,
     this.onOpenMention,
   });
 
@@ -77,6 +84,17 @@ class DiffView extends StatefulWidget {
 
   /// Images and files the threads under these lines carry (research/17 §4).
   final InlineAttachments? attachments;
+
+  /// Where a file picked into the line composer or a reply box is uploaded
+  /// on Send — the write side of [attachments]. Null leaves no attach
+  /// button on either.
+  final AttachmentSource? uploads;
+
+  /// The page's last request could not reach the service (decision T6).
+  final bool offline;
+
+  /// The platform picker, injected by the tests.
+  final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
 
   /// Tapping a `#123` or `!456` inside a comment.
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -253,6 +271,9 @@ class _DiffViewState extends State<DiffView> {
           mentions: widget.mentions,
           mentionNames: widget.mentionNames,
           attachments: widget.attachments,
+          uploads: widget.uploads,
+          offline: widget.offline,
+          pick: widget.pick,
           onOpenMention: widget.onOpenMention,
           onReply: widget.onReply == null
               ? null
@@ -272,6 +293,9 @@ class _DiffViewState extends State<DiffView> {
           viewportWidth: viewportWidth,
           posting: widget.posting,
           mentions: widget.mentions,
+          attachments: widget.uploads,
+          offline: widget.offline,
+          pick: widget.pick,
           onCancel: widget.onCancelComposer,
           onPost: widget.onPost == null
               ? null
@@ -418,6 +442,9 @@ class _ThreadView extends StatelessWidget {
     this.mentions,
     this.mentionNames = const {},
     this.attachments,
+    this.uploads,
+    this.offline = false,
+    this.pick = pickAttachment,
     this.onOpenMention,
   });
 
@@ -432,6 +459,11 @@ class _ThreadView extends StatelessWidget {
 
   /// Images and files the threads under these lines carry (research/17 §4).
   final InlineAttachments? attachments;
+
+  /// Where a file picked into this thread's reply box is uploaded.
+  final AttachmentSource? uploads;
+  final bool offline;
+  final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
   final void Function(MentionKind kind, String id)? onOpenMention;
   final Future<bool> Function(String text)? onReply;
   final Future<bool> Function(String status)? onSetStatus;
@@ -468,6 +500,9 @@ class _ThreadView extends StatelessWidget {
               mentions: mentions,
               mentionNames: mentionNames,
               attachments: attachments,
+              uploads: uploads,
+              offline: offline,
+              pick: pick,
               onOpenMention: onOpenMention,
               onReply: onReply,
               onSetStatus: onSetStatus,
@@ -491,6 +526,9 @@ class _ComposerView extends StatefulWidget {
     required this.onCancel,
     required this.onPost,
     this.mentions,
+    this.attachments,
+    this.offline = false,
+    this.pick = pickAttachment,
   });
 
   final int line;
@@ -499,6 +537,11 @@ class _ComposerView extends StatefulWidget {
   final double viewportWidth;
   final bool posting;
   final MentionSource? mentions;
+
+  /// Where a file picked into this composer is uploaded on Post.
+  final AttachmentSource? attachments;
+  final bool offline;
+  final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
   final VoidCallback? onCancel;
   final Future<void> Function(String text)? onPost;
 
@@ -506,8 +549,35 @@ class _ComposerView extends StatefulWidget {
   State<_ComposerView> createState() => _ComposerViewState();
 }
 
-class _ComposerViewState extends State<_ComposerView> {
+class _ComposerViewState extends State<_ComposerView>
+    with ComposerAttachments<_ComposerView> {
   final _controller = MentionController();
+
+  @override
+  AttachmentSource? get attachmentSource => widget.attachments;
+
+  @override
+  Future<PickedAttachment?> Function(AttachmentPickSource) get attachmentPick =>
+      widget.pick;
+
+  @override
+  bool get attachmentsOffline => widget.offline;
+
+  /// One busy state covers the uploads and the post (T3).
+  bool get _busy => widget.posting || uploadingAttachments;
+
+  Future<void> _post() async {
+    if (_busy || widget.onPost == null) return;
+    // `@Kelly Kamm` posts as `@<guid>`.
+    final text = _controller.toWire(MentionWire.markdown).trim();
+    // A line comment may be files alone (T3).
+    if (text.isEmpty && pending.isEmpty) return;
+    final body = await bodyWithAttachments(text);
+    if (body == null || body.isEmpty || !mounted) return;
+    // The keyboard goes with the comment (Kelly, 2026-09-14).
+    FocusManager.instance.primaryFocus?.unfocus();
+    await widget.onPost!(body);
+  }
 
   @override
   void dispose() {
@@ -553,37 +623,31 @@ class _ComposerViewState extends State<_ComposerView> {
                     autofocus: true,
                     maxLines: 5,
                     minLines: 2,
-                    enabled: !widget.posting,
+                    enabled: !_busy,
+                    contentInsertionConfiguration: contentInsertion,
                     decoration: const InputDecoration(
                       hintText: 'Markdown, or a ```suggestion block',
                     ),
                   ),
                   MentionHint(controller: _controller),
+                  attachmentsBar(busy: _busy),
                   const SizedBox(height: Spacing.sm),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      // The leading edge of the button row, so Post stays
+                      // the rightmost control (a2 §3.1).
+                      if (canAttach) attachButton(busy: _busy),
+                      const Spacer(),
                       TextButton(
-                        onPressed: widget.posting ? null : widget.onCancel,
+                        onPressed: _busy ? null : widget.onCancel,
                         child: const Text('Cancel'),
                       ),
                       const SizedBox(width: Spacing.sm),
                       FilledButton(
-                        onPressed: widget.posting || widget.onPost == null
+                        onPressed: _busy || widget.onPost == null
                             ? null
-                            : () {
-                                if (_controller.text.trim().isEmpty) return;
-                                // `@Kelly Kamm` posts as `@<guid>`.
-                                final text = _controller
-                                    .toWire(MentionWire.markdown)
-                                    .trim();
-                                if (text.isEmpty) return;
-                                // The keyboard goes with the comment
-                                // (Kelly, 2026-09-14).
-                                FocusManager.instance.primaryFocus?.unfocus();
-                                widget.onPost!(text);
-                              },
-                        child: Text(widget.posting ? 'Posting…' : 'Post'),
+                            : _post,
+                        child: Text(_busy ? 'Posting…' : 'Post'),
                       ),
                     ],
                   ),

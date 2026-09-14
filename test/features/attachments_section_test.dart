@@ -158,6 +158,58 @@ void main() {
       expect(photoFileName('42', now: at), 'photo-20260912-095803.jpg');
     });
 
+    test('the camera path names its file .jpg, whatever it was (T5)', () {
+      final at = DateTime(2026, 9, 12, 9, 58, 3);
+      // `pickImage` with any sizing re-encodes the capture as JPEG, so a
+      // `.png` name would be a lie the web and every download would carry.
+      expect(
+        photoFileName('IMG_0042.png', now: at, jpeg: true),
+        'photo-20260912-095803.jpg',
+      );
+      expect(
+        photoFileName('IMG_0042.heic', now: at, jpeg: true),
+        'photo-20260912-095803.jpg',
+      );
+      // A library pick is byte-exact and keeps its own extension.
+      expect(
+        photoFileName('IMG_0042.png', now: at),
+        'photo-20260912-095803.png',
+      );
+    });
+
+    test('an image from the Android keyboard is named off the clock and the '
+        'MIME type (T10)', () {
+      final at = DateTime(2026, 9, 14, 18, 30, 12);
+      expect(
+        keyboardFileName('image/png', now: at),
+        'keyboard-20260914-183012.png',
+      );
+      expect(
+        keyboardFileName('image/jpeg', now: at),
+        'keyboard-20260914-183012.jpeg',
+      );
+      // A parameterised type, and a malformed one, still make a name.
+      expect(
+        keyboardFileName('image/gif;charset=binary', now: at),
+        'keyboard-20260914-183012.gif',
+      );
+      expect(keyboardFileName('', now: at), 'keyboard-20260914-183012.png');
+      // What the field will accept from the keyboard.
+      expect(keyboardImageMimeTypes, contains('image/png'));
+      expect(keyboardImageMimeTypes, contains('image/webp'));
+    });
+
+    test('the image and glyph rules read a bare name, for a pending file', () {
+      expect(AttachmentInfo.isImageNamed('shot.PNG'), isTrue);
+      expect(AttachmentInfo.isImageNamed('notes.txt'), isFalse);
+      expect(AttachmentInfo.isImageNamed('nodots'), isFalse);
+      expect(AttachmentInfo.iconFor('logs.zip'), Icons.folder_zip_outlined);
+      expect(
+        AttachmentInfo.iconFor('whatever.qqq'),
+        Icons.insert_drive_file_outlined,
+      );
+    });
+
     test('an oversize pick carries no bytes', () {
       const picked = PickedAttachment(name: 'big.zip', size: 80_000_000);
       expect(picked.isTooLarge, isTrue);

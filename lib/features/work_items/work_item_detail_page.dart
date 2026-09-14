@@ -114,9 +114,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
       .read<WorkItemRepository>()
       .watchItem(widget.org, widget.id);
 
-  /// Reading and opening the item's attachments on the Related tab. Built
-  /// once the bearer token is known; no `upload`, because adding a file is
-  /// the form's job.
+  /// Reading and opening the item's attachments on the Related tab, and
+  /// uploading a file picked into the Discussion composer (T3). Built once
+  /// the bearer token is known.
   AttachmentSource? _attachments;
 
   /// The same source as [_attachments], in the shape a Markdown or HTML
@@ -139,6 +139,14 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
   String? _error;
   bool _refreshing = false;
   bool _writing = false;
+
+  /// The last request could not reach the service, which is the only
+  /// "offline" this app has: attaching is off while it holds (T6).
+  bool _offline = false;
+
+  /// Files a Send could not upload because the connection was gone. The
+  /// comment itself still queues, and the snackbar says what did not go.
+  int _droppedAttachments = 0;
   List<WorkItemComment>? _comments;
   Map<String, String> _headers = const {};
   WorkItemVisuals _visuals = const WorkItemVisuals({});
@@ -262,6 +270,10 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
       _headers = {'Authorization': 'Bearer $token'};
       _attachments = AttachmentSource(
         bytes: forms.attachmentBytes,
+        // The work item store keys by GUID, so no name can collide and the
+        // file goes up as it was picked (research/17 §1).
+        upload: (name, bytes) =>
+            forms.uploadAttachment(widget.org, widget.project, name, bytes),
         headers: _headers,
       );
       _inlineAttachments = inlineAttachmentsOf(_attachments!);
@@ -285,6 +297,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         setState(() {
           _item = item;
           _comments = comments;
+          _offline = false;
         });
         _anchorComment();
         unawaited(_prepareMentions());
@@ -299,7 +312,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         );
       }
     } on AdoException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _offline = e is AdoNetworkException;
+        });
+      }
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -615,6 +633,8 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
       _writing = true;
       _error = null;
     });
+    final dropped = _droppedAttachments;
+    _droppedAttachments = 0;
     final repo = context.read<WorkItemRepository>();
     final queue = context.read<WriteQueue>();
     try {
@@ -624,7 +644,12 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         widget.project,
         widget.id,
       );
-      if (mounted) setState(() => _comments = comments);
+      if (mounted) {
+        setState(() {
+          _comments = comments;
+          _offline = false;
+        });
+      }
       return true;
     } on AdoAuthException catch (e) {
       if (mounted) {
@@ -645,9 +670,15 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         description: 'Comment on ${widget.id}',
       );
       if (mounted) {
+        setState(() => _offline = true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Offline: the comment will post later.'),
+          SnackBar(
+            content: Text(
+              dropped == 0
+                  ? 'Offline: the comment will post later.'
+                  : 'Offline: the comment will post later, without the '
+                        '${dropped == 1 ? 'file' : '$dropped files'}.',
+            ),
           ),
         );
       }
@@ -813,6 +844,9 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
                   onSubmit: _postComment,
                   busy: _writing,
                   mentions: _mentions,
+                  attachments: _attachments,
+                  offline: _offline,
+                  onAttachmentsDropped: (files) => _droppedAttachments = files,
                 ),
           appBar: AppBar(
             title: Text(

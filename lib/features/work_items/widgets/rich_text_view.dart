@@ -86,8 +86,24 @@ class RichTextView extends StatelessWidget {
       // never reached.
       normalizeAttachmentHtml(content, base: attachmentBase),
       textStyle: theme.textTheme.bodyMedium,
-      factoryBuilder: () =>
-          _AuthedWidgetFactory(headers, onOpenMention, attachmentBase),
+      factoryBuilder: () => _AuthedWidgetFactory(
+        headers,
+        onOpenMention,
+        attachmentBase,
+        attachments,
+        context,
+      ),
+      // An image inside a work item comment is an `<img>` in the service's
+      // rendered HTML, not Markdown, so the Markdown path's own tap does
+      // not reach it: without this an inline image is the one image in the
+      // app that does not open (decision T9).
+      onTapImage: (image) {
+        final url = image.sources.isEmpty ? null : image.sources.first.url;
+        if (url == null || attachments?.onOpen == null) return;
+        final full = normalizeAttachmentUrl(url, base: attachmentBase);
+        if (!isAttachmentUrl(full)) return;
+        openInlineAttachment(context, full, attachments);
+      },
       onErrorBuilder: (context, element, error) => Text(
         'Could not render part of this field.',
         style: theme.textTheme.bodySmall?.copyWith(
@@ -149,7 +165,13 @@ class MentionAnchor {
 }
 
 class _AuthedWidgetFactory extends WidgetFactory {
-  _AuthedWidgetFactory(this.headers, this.onOpenMention, this.attachmentBase);
+  _AuthedWidgetFactory(
+    this.headers,
+    this.onOpenMention,
+    this.attachmentBase,
+    this.attachments,
+    this.host,
+  );
 
   final Map<String, String> headers;
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -158,12 +180,37 @@ class _AuthedWidgetFactory extends WidgetFactory {
   /// normalised before it is parsed, so a sentinel should never reach here.
   final String? attachmentBase;
 
+  /// How a file link inside this body is opened, and the element it is
+  /// opened from — the factory has no context of its own and the viewer
+  /// needs a navigator.
+  final InlineAttachments? attachments;
+  final BuildContext host;
+
   @override
   ImageProvider? imageProviderFromNetwork(String url) =>
       CachedNetworkImageProvider(
         normalizeAttachmentUrl(url, base: attachmentBase),
         headers: headers,
       );
+
+  /// A file attached to a work item **comment** is an ordinary `<a href>`
+  /// in the service's rendered HTML (`<a rel=nofollow>`, research/17 §1), so
+  /// without this it would open in a browser, which cannot authenticate the
+  /// URL and lands on a sign-in page. It goes through the same opener the
+  /// Markdown side and the attachment rows use instead: the viewer for an
+  /// image, the share sheet for anything else (T9).
+  ///
+  /// Every other link is left exactly as it was.
+  @override
+  Future<bool> onTapUrl(String url) async {
+    final full = normalizeAttachmentUrl(url, base: attachmentBase);
+    if (attachments?.onOpen != null && isAttachmentUrl(full)) {
+      if (!host.mounted) return false;
+      await openInlineAttachment(host, full, attachments);
+      return true;
+    }
+    return super.onTapUrl(url);
+  }
 
   /// Mention anchors never become live links.
   ///

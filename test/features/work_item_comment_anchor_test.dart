@@ -11,6 +11,7 @@ import 'package:boardhop/features/shared/anchor_highlight.dart';
 import 'package:boardhop/features/work_items/work_item_detail_page.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -39,6 +40,9 @@ const kelly = IdentityRef(
 );
 
 void main() {
+  // `any()` for an upload's bytes needs a fallback instance.
+  setUpAll(() => registerFallbackValue(Uint8List(0)));
+
   const comments = 12;
 
   final item = WorkItem(
@@ -306,5 +310,68 @@ void main() {
         description: any(named: 'description'),
       ),
     ).called(1);
+  });
+
+  /// research/17 T6: attachments need a connection. A comment written with
+  /// files while the connection is gone still queues — as text — and the
+  /// snackbar says which files did not go with it.
+  testWidgets('offline, a comment with files queues the text alone and says '
+      'what was left out', (tester) async {
+    await pump(tester, tab: 'comments');
+    final bytes = Uint8List.fromList(const [1, 2, 3, 4]);
+    when(() => forms.uploadAttachment('o', 'p', any(), any()))
+        .thenThrow(const AdoNetworkException('offline'));
+    when(() => repo.addComment('o', 'p', 15545, any()))
+        .thenThrow(const AdoNetworkException('offline'));
+    when(
+      () => queue.enqueueComment(
+        org: any(named: 'org'),
+        project: any(named: 'project'),
+        id: any(named: 'id'),
+        text: any(named: 'text'),
+        description: any(named: 'description'),
+      ),
+    ).thenAnswer((_) async {});
+
+    // Two files, through the Android keyboard rather than the platform
+    // picker: the page builds the composer itself, so there is nothing to
+    // inject here (T10 is the same seam).
+    final insert = tester
+        .widget<TextField>(find.byType(TextField))
+        .contentInsertionConfiguration!;
+    for (var i = 0; i < 2; i++) {
+      insert.onContentInserted(
+        KeyboardInsertedContent(
+          mimeType: 'image/png',
+          uri: 'content://x/$i',
+          data: bytes,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+    expect(find.byType(InputChip), findsNWidgets(2));
+
+    await tester.enterText(find.byType(TextField), 'still worth saying');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post comment'));
+    await tester.pumpAndSettle();
+
+    // The text alone is what is queued — no attachment markup.
+    verify(
+      () => queue.enqueueComment(
+        org: 'o',
+        project: 'p',
+        id: 15545,
+        text: 'still worth saying',
+        description: any(named: 'description'),
+      ),
+    ).called(1);
+    expect(
+      find.text('Offline: the comment will post later, without the 2 files.'),
+      findsOneWidget,
+    );
+    // And now that the page knows it is offline, nothing more can be
+    // attached until the connection is back (T6).
+    expect(find.byTooltip('Attachments need a connection'), findsOneWidget);
   });
 }

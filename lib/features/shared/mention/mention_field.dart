@@ -43,6 +43,7 @@ class MentionField extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
+    this.contentInsertionConfiguration,
   });
 
   /// The composer's controller. It has to be a [MentionController] because
@@ -62,6 +63,13 @@ class MentionField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
+
+  /// Rich content from the **Android** keyboard — Gboard's image button
+  /// (decision T10). Flutter's clipboard API cannot carry an image at all
+  /// and `onContentInserted` is Android-only, so this is a pass-through to
+  /// the one [TextField] and nothing more; there is no paste path on iOS
+  /// (a2 §3.7).
+  final ContentInsertionConfiguration? contentInsertionConfiguration;
 
   @override
   State<MentionField> createState() => _MentionFieldState();
@@ -573,6 +581,7 @@ class _MentionFieldState extends State<MentionField> {
     autofocus: widget.autofocus,
     onChanged: widget.onChanged,
     onSubmitted: widget.onSubmitted,
+    contentInsertionConfiguration: widget.contentInsertionConfiguration,
   );
 
   Widget _buildOptions(BuildContext context, OverlayChildLayoutInfo info) {

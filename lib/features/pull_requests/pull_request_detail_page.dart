@@ -31,6 +31,7 @@ import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
 import '../shared/anchor_highlight.dart';
+import '../shared/attachments/attachment_links.dart';
 import '../shared/attachments/inline_attachment_source.dart';
 import '../shared/attachments/inline_attachments.dart';
 import '../work_items/form/controls/attachments_section.dart'
@@ -135,6 +136,13 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   /// (research/17 §1 bug (b)).
   InlineAttachments? _attachments;
 
+  /// The same source in the shape the composers need: where a file picked
+  /// into a comment or a reply is uploaded on Send (T3).
+  AttachmentSource? _uploads;
+
+  /// The last request could not reach the service (decision T6).
+  bool _offline = false;
+
   @override
   void initState() {
     super.initState();
@@ -206,13 +214,21 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final accountId = AccountScope.of(context);
     try {
       final token = await auth.accessToken(accountId: accountId);
-      _attachments = inlineAttachmentsOf(
-        AttachmentSource(
-          bytes: repo.attachmentBytes,
-          headers: {'Authorization': 'Bearer $token'},
-        ),
-      );
       final pr = await repo.get(widget.org, widget.id);
+      // The pull request store is keyed by the file name and answers 400
+      // for one it already holds (w32 §4), so the uniquify lives here
+      // rather than in the composer, which stays surface-agnostic.
+      _uploads = AttachmentSource(
+        bytes: repo.attachmentBytes,
+        upload: (name, bytes) => repo.uploadAttachment(
+          widget.org,
+          pr,
+          uniqueAttachmentName(name),
+          bytes,
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      _attachments = inlineAttachmentsOf(_uploads!);
       _me = await repo.meId(widget.org);
       final ref = repo.ref(widget.org, pr);
       final results = await Future.wait<Object>([
@@ -238,6 +254,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       if (!mounted) return;
       setState(() {
         _pr = pr;
+        _offline = false;
         _iterations = iterations;
         _iteration = selected;
         _changes = changes;
@@ -257,7 +274,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
         );
       }
     } on AdoException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _offline = e is AdoNetworkException;
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -394,7 +416,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
         );
       }
     } on AdoException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _offline = e is AdoNetworkException;
+        });
+      }
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -664,6 +691,8 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
               onSubmit: _comment,
               busy: _acting,
               mentions: _mentions,
+              attachments: _uploads,
+              offline: _offline,
             ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -722,6 +751,8 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                           mentions: _mentions,
                           mentionNames: _mentionNames,
                           attachments: _attachments,
+                          uploads: _uploads,
+                          offline: _offline,
                           onOpenMention: _openMention,
                           onReply: _reply,
                           onSetStatus: _setThreadStatus,
@@ -1174,6 +1205,8 @@ class _Conversation extends StatelessWidget {
     this.mentions,
     this.mentionNames = const {},
     this.attachments,
+    this.uploads,
+    this.offline = false,
     this.onOpenMention,
   });
 
@@ -1203,8 +1236,11 @@ class _Conversation extends StatelessWidget {
   final MentionSource? mentions;
   final Map<String, String> mentionNames;
 
-  /// Images and files the comments carry.
+  /// Images and files the comments carry, and where a file picked into a
+  /// reply is uploaded (research/17 §4).
   final InlineAttachments? attachments;
+  final AttachmentSource? uploads;
+  final bool offline;
   final void Function(MentionKind kind, String id)? onOpenMention;
 
   @override
@@ -1303,6 +1339,8 @@ class _Conversation extends StatelessWidget {
                                   mentions: mentions,
                                   mentionNames: mentionNames,
                                   attachments: attachments,
+                                  uploads: uploads,
+                                  offline: offline,
                                   onOpenMention: onOpenMention,
                                   onReply: (text) => onReply(t, text),
                                   onSetStatus: (status) =>
