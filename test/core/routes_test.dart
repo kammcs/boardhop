@@ -155,4 +155,44 @@ void main() {
       );
     });
   });
+
+  group('the Home tab\'s views (research/19 D8)', () {
+    const account = 'u1';
+    const org = 'puremedia';
+    const project = 'DevOps Mobile App';
+    const base = '/a/u1/orgs/puremedia/projects/DevOps%20Mobile%20App';
+
+    test('Summary is the tab\'s landing page', () {
+      expect(Routes.home(account, org, project), '$base/home');
+    });
+
+    test('the plain dashboards route is the remembered or default one', () {
+      expect(Routes.dashboards(account, org, project), '$base/dashboards');
+      // An empty id is not a deep link either.
+      expect(
+        Routes.dashboards(account, org, project, dashboard: ''),
+        '$base/dashboards',
+      );
+    });
+
+    test('a named dashboard rides in the query', () {
+      expect(
+        Routes.dashboards(
+          account,
+          org,
+          project,
+          dashboard: '985ff75c-bdf6-4b2d-a2b0-0ef63431e6ec',
+        ),
+        '$base/dashboards?dashboard=985ff75c-bdf6-4b2d-a2b0-0ef63431e6ec',
+      );
+    });
+
+    test('the project name is encoded once, by the project helper', () {
+      expect(
+        Routes.dashboards('u1', 'puremedia', 'a b', dashboard: 'x y'),
+        '/a/u1/orgs/puremedia/projects/a%20b/dashboards?dashboard=x+y',
+      );
+    });
+  });
+
 }

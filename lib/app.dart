@@ -16,6 +16,7 @@ import 'data/mention_recents.dart';
 import 'data/repositories/account_repository.dart';
 import 'data/repositories/activity_repository.dart';
 import 'data/repositories/analytics_repository.dart';
+import 'data/repositories/dashboard_repository.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/people_repository.dart';
 import 'data/repositories/board_repository.dart';
@@ -65,6 +66,7 @@ class AccountDeps {
     );
     sprints = SprintRepository(client, workItems, workItemForms, db, accountId);
     analytics = AnalyticsRepository(client, db, accountId);
+    dashboards = DashboardRepository(client, db, accountId);
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
       client,
@@ -124,6 +126,7 @@ class AccountDeps {
   late final WorkItemFormRepository workItemForms;
   late final SprintRepository sprints;
   late final AnalyticsRepository analytics;
+  late final DashboardRepository dashboards;
   late final WriteQueue queue;
   late final ActivityRepository activity;
   late final AccountRepository account;
@@ -141,6 +144,7 @@ class AccountDeps {
     RepositoryProvider<WorkItemFormRepository>.value(value: workItemForms),
     RepositoryProvider<SprintRepository>.value(value: sprints),
     RepositoryProvider<AnalyticsRepository>.value(value: analytics),
+    RepositoryProvider<DashboardRepository>.value(value: dashboards),
     RepositoryProvider<WriteQueue>.value(value: queue),
     RepositoryProvider<PullRequestRepository>.value(value: pullRequests),
     RepositoryProvider<PipelineRepository>.value(value: pipelines),

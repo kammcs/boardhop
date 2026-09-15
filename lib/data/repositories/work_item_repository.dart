@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../core/http/ado_client.dart';
+import '../../core/http/ado_exceptions.dart';
+import '../../core/http/ado_host.dart';
 import '../db/app_database.dart';
+import '../db/json_cache.dart';
 import '../models/work_item.dart';
 
 /// Work item reads and the one write the first milestone needs (a JSON
@@ -11,10 +14,15 @@ import '../models/work_item.dart';
 /// screens render from the cache and refresh behind a progress bar.
 class WorkItemRepository {
   WorkItemRepository(this._client, this._db, {String? userId})
-    : _listPrefix = userId == null ? '' : listPrefixFor(userId);
+    : _listPrefix = userId == null ? '' : listPrefixFor(userId),
+      _cache = JsonCache(_db, namespace: userId);
 
   final AdoClient _client;
   final AppDatabase _db;
+
+  /// Small JSON blobs that are not work item lists (a saved query's
+  /// definition), account-namespaced like every other cache.
+  final JsonCache _cache;
 
   /// Lists are personal ("assigned to me") or permission-dependent, so
   /// their keys are prefixed with the account they were read as.
@@ -27,6 +35,13 @@ class WorkItemRepository {
   static const assignedToMeKey = 'assigned-to-me';
   static const recentlyUpdatedKey = 'recently-updated';
   static String queryKey(String queryId) => 'query:$queryId';
+
+  /// A saved query's definition, which the dashboard's query-backed widgets
+  /// read before they run it.
+  static String queryMetaKey(String queryId) => 'query:meta:$queryId';
+
+  /// A query's shape changes when somebody edits it, which is rare.
+  static const queryMetaTtl = Duration(hours: 24);
 
   /// Fields every list and card needs. Kept to System.* plus Priority so the
   /// batch never names a field a process does not have (that is a 400).
@@ -457,4 +472,96 @@ class WorkItemRepository {
     await _upsert(org, project, updated, DateTime.now());
     return updated;
   }
+
+  /// One saved query's definition, cached under `query:meta:{id}`.
+  ///
+  /// `$expand=wiql` is the smallest expansion that carries `queryType` and
+  /// `columns` (spike s60: 0.006 TSTU); `$expand=none` carries neither, and
+  /// the query-backed dashboard widgets need the type to know whether the
+  /// result is rows or relations.
+  Future<SavedQueryMeta> queryMeta(
+    String org,
+    String project,
+    String queryId, {
+    bool refresh = false,
+  }) async {
+    final key = queryMetaKey(queryId);
+    if (!refresh) {
+      final hit = await _cache.get(key);
+      if (hit != null &&
+          DateTime.now().difference(hit.fetchedAt) < queryMetaTtl) {
+        final cached = _tryQueryMeta(hit.json);
+        if (cached != null) return cached;
+      }
+    }
+    try {
+      final json = await _client.getJson(
+        org: org,
+        project: project,
+        path: '_apis/wit/queries/$queryId',
+        apiVersion: apiVersion,
+        query: const {r'$expand': 'wiql'},
+      );
+      await _cache.put(key, json);
+      return SavedQueryMeta.fromJson(json);
+    } on AdoAuthException {
+      rethrow;
+    } on AdoException {
+      final stale = await _cache.get(key);
+      final cached = stale == null ? null : _tryQueryMeta(stale.json);
+      if (cached != null) return cached;
+      rethrow;
+    }
+  }
+
+  /// How many work items a saved query returns, without fetching their ids.
+  ///
+  /// `HEAD wiql/{id}` answers `X-Total-Count` and no body — the only ids-free
+  /// count the service offers (spike s60; `$top=0` is a 400). Not every proxy
+  /// or future API version has to honour a HEAD, so a missing or unparsable
+  /// header falls back to the ordinary GET and counts the ids it returns,
+  /// which is what [refreshQuery] already does for the rows themselves.
+  Future<int> queryCount(
+    String org,
+    String project,
+    String queryId, {
+    int top = 200,
+  }) async {
+    final uri = AdoClient.buildUri(
+      host: AdoHost.core,
+      path: '_apis/wit/wiql/$queryId',
+      apiVersion: apiVersion,
+      org: org,
+      project: project,
+    );
+    try {
+      final response = await _client.sendRaw(method: 'HEAD', uri: uri);
+      final header = response.headers.value('X-Total-Count');
+      final count = int.tryParse(header ?? '');
+      if (count != null) return count;
+    } on AdoAuthException {
+      rethrow;
+    } on AdoException {
+      // Fall through to the GET: a service that refuses HEAD is not a
+      // failure of the card.
+    }
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/wit/wiql/$queryId',
+      apiVersion: apiVersion,
+      query: {r'$top': '$top'},
+    );
+    return idsFromQueryResult(json).length;
+  }
+
+  SavedQueryMeta? _tryQueryMeta(Object? json) {
+    if (json is! Map) return null;
+    try {
+      return SavedQueryMeta.fromJson(json.cast<String, dynamic>());
+    } catch (_) {
+      return null;
+    }
+  }
+
 }

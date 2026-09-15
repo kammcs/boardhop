@@ -17,6 +17,25 @@ abstract final class Routes {
   static String activity(String accountId, String org) =>
       '${Routes.org(accountId, org)}/activity';
 
+  /// The Home tab's views (research/19 §4.3). [home] is the Summary segment,
+  /// which is the tab's landing page; [dashboards] is the second segment and
+  /// Wiki slots in as the third later (D8).
+  static String home(String accountId, String org, String project) =>
+      '${Routes.project(accountId, org, project)}/home';
+
+  /// The Dashboards view. [dashboard] is a dashboard GUID and is **left out
+  /// for the default** — the one last opened, or the default team's Overview
+  /// — so the plain route is the plain view, the rule [sprint] and [search]
+  /// already follow.
+  static String dashboards(
+    String accountId,
+    String org,
+    String project, {
+    String? dashboard,
+  }) => _withQuery('${Routes.project(accountId, org, project)}/dashboards', {
+    'dashboard': dashboard,
+  });
+
   /// The Work tab's three views, so the view switch and the pages stop
   /// concatenating route strings by hand (research/18 §4.3).
   static String workItems(String accountId, String org, String project) =>

@@ -574,6 +574,67 @@ class WorkItemType extends Equatable {
 }
 
 /// A saved query or folder from `GET _apis/wit/queries?$depth=2`.
+/// One saved query's definition: what `queries/{id}?$expand=wiql` answers.
+///
+/// The query-backed dashboard widgets (Query Tile, Query Results, Chart for
+/// Work Items) need the **type** before they can render: a flat query has
+/// rows, a tree or one-hop query has relations, and the widget's own settings
+/// say nothing about which it is (research/19 §1, spike s60).
+class SavedQueryMeta extends Equatable {
+  const SavedQueryMeta({
+    required this.id,
+    required this.name,
+    this.path = '',
+    this.queryType = '',
+    this.columns = const [],
+    this.wiql,
+    this.isPublic = false,
+  });
+
+  factory SavedQueryMeta.fromJson(Map<String, dynamic> json) => SavedQueryMeta(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    path: json['path'] as String? ?? '',
+    queryType: json['queryType'] as String? ?? '',
+    columns: [
+      for (final c in (json['columns'] as List?) ?? const [])
+        if (c is Map && c['referenceName'] is String)
+          c['referenceName'] as String,
+    ],
+    wiql: json['wiql'] as String?,
+    isPublic: json['isPublic'] as bool? ?? false,
+  );
+
+  final String id;
+  final String name;
+  final String path;
+
+  /// `flat`, `tree` or `oneHop`.
+  final String queryType;
+
+  /// Reference names, in the order the web shows them.
+  final List<String> columns;
+  final String? wiql;
+  final bool isPublic;
+
+  bool get isFlat => queryType.toLowerCase() == 'flat';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'path': path,
+    'queryType': queryType,
+    'columns': [
+      for (final c in columns) {'referenceName': c},
+    ],
+    if (wiql != null) 'wiql': wiql,
+    'isPublic': isPublic,
+  };
+
+  @override
+  List<Object?> get props => [id, name, path, queryType, columns, wiql];
+}
+
 class SavedQuery extends Equatable {
   const SavedQuery({
     required this.id,

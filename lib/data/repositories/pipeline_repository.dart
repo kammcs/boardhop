@@ -18,6 +18,14 @@ class PipelineRepository {
 
   static const apiVersion = '7.1';
 
+  /// The Runs tab's order: newest queued first, so a run that is still
+  /// waiting for an agent is at the top where the user put it.
+  static const queueTimeDescending = 'queueTimeDescending';
+
+  /// The Build History widget's order: newest **finished** first, which is
+  /// what the web's histogram draws (research/19 §1).
+  static const finishTimeDescending = 'finishTimeDescending';
+
   static String definitionsKey(String org, String project) =>
       'pipelines:definitions:$org:$project';
   static String runsKey(String org, String project) =>
@@ -68,6 +76,7 @@ class PipelineRepository {
     int? definitionId,
     int top = 50,
     bool cache = true,
+    String queryOrder = queueTimeDescending,
   }) async {
     final json = await _client.getJson(
       org: org,
@@ -76,7 +85,7 @@ class PipelineRepository {
       apiVersion: apiVersion,
       query: {
         r'$top': '$top',
-        'queryOrder': 'queueTimeDescending',
+        'queryOrder': queryOrder,
         'definitions': ?definitionId?.toString(),
       },
     );
