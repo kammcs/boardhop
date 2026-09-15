@@ -45,6 +45,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     required this.mention,
     required this.burndownActual,
     required this.burndownIdeal,
+    required this.chartSeries,
   });
 
   // Work item types
@@ -106,6 +107,20 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
   /// dashed and labelled.
   final Color burndownIdeal;
 
+  /// A categorical ramp for chart series the data names and the palette
+  /// cannot: a board's columns in a cumulative flow, the planned bar of a
+  /// velocity chart (research/19, phase D-C).
+  ///
+  /// Seven values, because the cumulative flow draws at most six columns
+  /// plus an "Other". Neighbours differ in hue *and* in lightness, so the
+  /// bands of a stacked area stay apart without colour vision — and every
+  /// chart using them still labels its series (DESIGN.md §3).
+  final List<Color> chartSeries;
+
+  /// The [chartSeries] entry for a series index, wrapping round when a
+  /// chart has more series than the ramp has values.
+  Color series(int index) => chartSeries[index.abs() % chartSeries.length];
+
   static const light = BoardhopColors(
     bug: Color(0xFFCC293D),
     task: Color(0xFFB8860B),
@@ -140,6 +155,15 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     mention: Color(0xFF0B6BCB),
     burndownActual: Color(0xFF0B6BCB),
     burndownIdeal: Color(0xFF8A94A6),
+    chartSeries: [
+      Color(0xFF0B6BCB),
+      Color(0xFF7B3FB8),
+      Color(0xFF2E8B57),
+      Color(0xFFE0700F),
+      Color(0xFF0E7490),
+      Color(0xFFB03A6E),
+      Color(0xFF6B7280),
+    ],
   );
 
   static const dark = BoardhopColors(
@@ -176,6 +200,15 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     mention: Color(0xFF7CC0FF),
     burndownActual: Color(0xFF6FB1F5),
     burndownIdeal: Color(0xFF9CA3AF),
+    chartSeries: [
+      Color(0xFF6FB1F5),
+      Color(0xFFB88BE8),
+      Color(0xFF6CCB8A),
+      Color(0xFFF5A35C),
+      Color(0xFF5FC5D9),
+      Color(0xFFE590B6),
+      Color(0xFF9CA3AF),
+    ],
   );
 
   /// Color for a work item type by its Azure DevOps name.
@@ -236,6 +269,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     Color? mention,
     Color? burndownActual,
     Color? burndownIdeal,
+    List<Color>? chartSeries,
   }) {
     return BoardhopColors(
       bug: bug ?? this.bug,
@@ -273,6 +307,7 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
       mention: mention ?? this.mention,
       burndownActual: burndownActual ?? this.burndownActual,
       burndownIdeal: burndownIdeal ?? this.burndownIdeal,
+      chartSeries: chartSeries ?? this.chartSeries,
     );
   }
 
@@ -320,6 +355,12 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
       mention: l(mention, other.mention),
       burndownActual: l(burndownActual, other.burndownActual),
       burndownIdeal: l(burndownIdeal, other.burndownIdeal),
+      chartSeries: [
+        for (var i = 0; i < chartSeries.length; i++)
+          i < other.chartSeries.length
+              ? l(chartSeries[i], other.chartSeries[i])
+              : chartSeries[i],
+      ],
     );
   }
 }

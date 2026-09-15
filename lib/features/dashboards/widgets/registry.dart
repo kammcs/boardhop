@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/models/dashboard.dart';
+import '../charts/chart_payload.dart';
 import '../team_overview.dart';
 import 'cards/assigned_to_me_card.dart';
 import 'cards/build_history_card.dart';
+import 'cards/burndown_card.dart';
+import 'cards/cfd_card.dart';
 import 'cards/code_tile_card.dart';
+import 'cards/cycle_time_card.dart';
 import 'cards/links_card.dart';
 import 'cards/markdown_card.dart';
+import 'cards/pipeline_outcomes_card.dart';
 import 'cards/pull_requests_card.dart';
 import 'cards/query_results_card.dart';
 import 'cards/query_tile_card.dart';
+import 'cards/sprint_burndown_card.dart';
 import 'cards/sprint_overview_card.dart';
 import 'cards/team_members_card.dart';
+import 'cards/velocity_card.dart';
+import 'cards/work_by_state_card.dart';
 import 'dashboard_card.dart';
 
 typedef DashboardCardBuilder = Widget Function(DashboardCardArgs args);
@@ -66,10 +74,9 @@ abstract final class DashboardRegistry {
     WidgetKind.cumulativeFlow,
   };
 
-  /// The chart kinds: recognised, laid out and named, but drawn by the
-  /// placeholder until the charting phase lands. They are **not** hidden —
-  /// a person who put a burndown on their dashboard should see it named
-  /// where they put it, not be told a widget is missing.
+  /// The kinds drawn by a chart (phase D-C). They all read Analytics, so
+  /// they all degrade on their own through the D14 notice, and they all
+  /// open the focus view when tapped (D7).
   static const chartKinds = <WidgetKind>{
     WidgetKind.burndown,
     WidgetKind.burnup,
@@ -100,12 +107,14 @@ abstract final class DashboardRegistry {
   /// service is already dropped by the layout mapper.
   static bool renders(DashboardWidget widget) => cardFor(widget) != null;
 
+  /// True when tapping the card opens the chart focus view (D7) rather
+  /// than a page of the app.
+  static bool isChart(DashboardWidget widget) =>
+      widget.isBuiltIn || chartKinds.contains(widget.kind);
+
   /// The builder for [widget], or null when Boardhop hides it (D10).
   static DashboardCardBuilder? cardFor(DashboardWidget widget) {
-    if (widget.isBuiltIn) {
-      final note = TeamOverview.noteFor(widget.builtInKind);
-      return (args) => ComingCard(args: args, note: note);
-    }
+    if (widget.isBuiltIn) return _builtIn(widget.builtInKind);
     final kind = widget.kind;
     if (hiddenKinds.contains(kind)) return null;
     final settings = parseWidgetSettings(widget);
@@ -147,10 +156,146 @@ abstract final class DashboardRegistry {
         return (args) => CodeTileCard(args: args, settings: typed);
       case WidgetKind.sprintOverview:
         return (args) => SprintOverviewCard(args: args);
-      case _ when chartKinds.contains(kind):
-        return (args) => ComingCard(args: args);
+      case WidgetKind.burndown || WidgetKind.burnup:
+        final typed = settings! as BurndownSettings;
+        return (args) => BurndownCard(
+          args: args,
+          settings: typed,
+          burnup: kind == WidgetKind.burnup,
+        );
+      case WidgetKind.sprintBurndown || WidgetKind.sprintBurndownLegacy:
+        final typed = settings! as SprintBurndownSettings;
+        return (args) => SprintBurndownCard(args: args, settings: typed);
+      case WidgetKind.velocity:
+        // Velocity's settings are null on every dashboard seen, and the
+        // parser answers `defaults` rather than null for that (D3).
+        final typed =
+            settings as VelocitySettings? ?? VelocitySettings.defaults;
+        return (args) => VelocityCard(args: args, settings: typed);
+      case WidgetKind.cumulativeFlow:
+        final typed = settings! as CfdSettings;
+        return (args) => CfdCard(args: args, settings: typed);
+      case WidgetKind.cycleTime || WidgetKind.leadTime:
+        final typed = settings! as CycleTimeSettings;
+        return (args) => CycleTimeCard(
+          args: args,
+          settings: typed,
+          lead: kind == WidgetKind.leadTime,
+        );
       default:
         return null;
     }
+  }
+
+  /// The Team overview's six cards (D9). Each is the same card class the
+  /// matching dashboard widget uses, with no settings behind it.
+  static DashboardCardBuilder? _builtIn(String builtInKind) =>
+      switch (builtInKind) {
+        TeamOverview.sprintBurndown => (args) => SprintBurndownCard(args: args),
+        TeamOverview.workByState => (args) => WorkByStateCard(args: args),
+        TeamOverview.cumulativeFlow => (args) => CfdCard(args: args),
+        TeamOverview.cycleLeadTime => (args) => CycleTimeCard(
+          args: args,
+          showBoth: true,
+        ),
+        TeamOverview.velocity => (args) => VelocityCard(
+          args: args,
+          settings: VelocitySettings.defaults,
+        ),
+        TeamOverview.pipelineOutcomes => (args) => PipelineOutcomesCard(
+          args: args,
+        ),
+        _ => (args) => ComingCard(args: args),
+      };
+
+  /// Loads a chart's data without its card — what the focus view uses when
+  /// it is opened cold and has no payload to draw (D7).
+  ///
+  /// The same `load` each card calls, so a focus view opened from a deep
+  /// link shows exactly what the card would have.
+  static Future<ChartPayload?> loadChart(
+    BuildContext context,
+    DashboardCardArgs args, {
+    required bool refresh,
+  }) {
+    final widget = args.widget;
+    if (widget.isBuiltIn) {
+      return switch (widget.builtInKind) {
+        TeamOverview.sprintBurndown => SprintBurndownCard.load(
+          context,
+          args,
+          null,
+          refresh: refresh,
+        ),
+        TeamOverview.workByState => WorkByStateCard.load(
+          context,
+          args,
+          refresh: refresh,
+        ),
+        TeamOverview.cumulativeFlow => CfdCard.load(
+          context,
+          args,
+          null,
+          refresh: refresh,
+        ),
+        TeamOverview.cycleLeadTime => CycleTimeCard.load(
+          context,
+          args,
+          null,
+          lead: false,
+          showBoth: true,
+          refresh: refresh,
+        ),
+        TeamOverview.velocity => VelocityCard.load(
+          context,
+          args,
+          VelocitySettings.defaults,
+          refresh: refresh,
+        ),
+        TeamOverview.pipelineOutcomes => PipelineOutcomesCard.load(
+          context,
+          args,
+          refresh: refresh,
+        ),
+        _ => Future<ChartPayload?>.value(),
+      };
+    }
+    final settings = parseWidgetSettings(widget);
+    return switch (widget.kind) {
+      WidgetKind.burndown ||
+      WidgetKind.burnup when settings is BurndownSettings => BurndownCard.load(
+        context,
+        args,
+        settings,
+        burnup: widget.kind == WidgetKind.burnup,
+        refresh: refresh,
+      ),
+      WidgetKind.sprintBurndown || WidgetKind.sprintBurndownLegacy
+          when settings is SprintBurndownSettings =>
+        SprintBurndownCard.load(context, args, settings, refresh: refresh),
+      WidgetKind.velocity => VelocityCard.load(
+        context,
+        args,
+        settings as VelocitySettings? ?? VelocitySettings.defaults,
+        refresh: refresh,
+      ),
+      WidgetKind.cumulativeFlow when settings is CfdSettings => CfdCard.load(
+        context,
+        args,
+        settings,
+        refresh: refresh,
+      ),
+      WidgetKind.cycleTime || WidgetKind.leadTime
+          when settings is CycleTimeSettings =>
+        CycleTimeCard.load(
+          context,
+          args,
+          settings,
+          lead: widget.kind == WidgetKind.leadTime,
+          showBoth: false,
+          refresh: refresh,
+        ),
+      _ => Future<ChartPayload?>.value(),
+    };
   }
 }

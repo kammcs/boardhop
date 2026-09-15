@@ -12,9 +12,11 @@ import '../../data/models/dashboard.dart';
 /// Marketplace widget (`WidgetKind.fromContributionId` treats any publisher
 /// but `ms` as one) and hidden.
 ///
-/// The cards themselves arrive with the charting phase; until then every
-/// one of them draws the placeholder frame, so the page, the picker entry
-/// and the empty-dashboard offer all work end to end.
+/// Each card is the same class the matching dashboard widget uses, with no
+/// settings behind it: the sprint burndown charts the team's current
+/// sprint, the cumulative flow its default board, and so on
+/// (`DashboardRegistry.cardFor`). Every one of them loads and degrades on
+/// its own (D14).
 abstract final class TeamOverview {
   /// The id the route and [DashboardPrefs] use for it. Not a GUID on
   /// purpose: it can never collide with a dashboard of the service, and a
@@ -71,25 +73,15 @@ abstract final class TeamOverview {
     builtInKind: kind,
   );
 
-  /// What each card will draw once the charting phase lands, for the
-  /// placeholder to name.
+  /// What each card draws, for the picker's description and for a
+  /// built-in kind a future version adds that this one does not know.
   static String noteFor(String builtInKind) => switch (builtInKind) {
-    sprintBurndown =>
-      'The current sprint’s burndown arrives in the '
-          'next phase.',
-    workByState => 'Work by state arrives in the next phase.',
-    cumulativeFlow =>
-      'The cumulative flow of the last 30 days arrives in '
-          'the next phase.',
-    cycleLeadTime =>
-      'Cycle and lead time over 60 days arrive in the next '
-          'phase.',
-    velocity =>
-      'Velocity over the last six sprints arrives in the next '
-          'phase.',
-    pipelineOutcomes =>
-      'The 90-day pipeline pass rate arrives in the next '
-          'phase.',
-    _ => 'Chart arrives in the next phase.',
+    sprintBurndown => 'The current sprint’s burndown.',
+    workByState => 'Work by type and state.',
+    cumulativeFlow => 'The cumulative flow of the last 30 days.',
+    cycleLeadTime => 'Cycle and lead time over 60 days.',
+    velocity => 'Velocity over the last six sprints.',
+    pipelineOutcomes => 'The 90-day pipeline pass rate.',
+    _ => 'Chart arrives in a later version.',
   };
 }

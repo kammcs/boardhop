@@ -5,17 +5,27 @@ import '../../../data/models/dashboard_layout.dart';
 import '../../../data/models/sprint.dart' show SprintTeamRef;
 import '../../../theme/theme.dart';
 import '../../boards/widgets/kanban_board.dart' show boardTextScale;
+import '../../dashboards/chart_focus_page.dart';
+import '../../dashboards/charts/chart_payload.dart';
 import '../../dashboards/team_overview.dart';
+import '../../dashboards/widgets/chart_card.dart';
 import '../../dashboards/widgets/dashboard_card.dart';
 import '../../dashboards/widgets/dashboard_chrome.dart';
 import '../../dashboards/widgets/picker_sheet.dart';
 import '../../dashboards/widgets/registry.dart';
+import 'dashboard_probe_data.dart';
 
-/// Phase D-B probe: the Dashboards view's layout, card frames and page
-/// furniture on **canned** widgets, so the grid, the four card states, the
-/// empty-dashboard offer, the hidden-widget line and the picker can be
-/// looked at on both simulators in light and dark and at xxxL without a
-/// network, an account or a repository (D14).
+/// The dashboards probe: the Dashboards view's layout, card frames, page
+/// furniture **and every chart** (phase D-C) on canned data, so the grid,
+/// the four card states, the empty-dashboard offer, the hidden-widget line,
+/// the picker, the seven charts and the focus view can all be looked at on
+/// both simulators in light and dark and at xxxL without a network, an
+/// account or a repository (D14).
+///
+/// The charts matter here more than anywhere: the scratch project has one
+/// dated sprint, a handful of work items and one pipeline, so six sprints
+/// of velocity and a month of cumulative flow exist nowhere else to look
+/// at. The data is in `DashboardProbeData` and is entirely invented.
 ///
 /// Nothing here touches Azure DevOps and nothing here is client data: every
 /// name is invented. Diagnostics only (`AppConfig.diagnosticsEnabled`), like
@@ -113,7 +123,7 @@ class _DashboardProbePageState extends State<DashboardProbePage> {
     final hidden = _current.widgets.length - widgets.length;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboards (D-B)'),
+        title: const Text('Dashboards (D-C)'),
         actions: [
           IconButton(
             tooltip: 'Picker',
@@ -223,6 +233,24 @@ class _DashboardProbePageState extends State<DashboardProbePage> {
                   Padding(
                     padding: Spacing.pageHorizontal,
                     child: Text(
+                      'Charts (canned data, D-C)',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  for (final payload in DashboardProbeData.all)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Spacing.lg,
+                        Spacing.sm,
+                        Spacing.lg,
+                        Spacing.sm,
+                      ),
+                      child: CannedChartCard(payload: payload),
+                    ),
+                  const Divider(height: Spacing.xl),
+                  Padding(
+                    padding: Spacing.pageHorizontal,
+                    child: Text(
                       'Card states',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
@@ -290,7 +318,15 @@ class _DashboardProbePageState extends State<DashboardProbePage> {
     );
     // The repository-backed cards cannot run without an account, so the
     // probe draws their frame with a canned body; the ones that need
-    // nothing (links, markdown, the placeholders) are the real cards.
+    // nothing (links, markdown) are the real cards, and every chart draws
+    // its real chart over canned data.
+    if (widget.isBuiltIn) {
+      return CannedChartCard(
+        payload: DashboardProbeData.forBuiltIn(widget.builtInKind),
+        title: widget.name,
+        filled: filled,
+      );
+    }
     return switch (widget.kind) {
       WidgetKind.markdown ||
       WidgetKind.workLinks ||
@@ -299,7 +335,18 @@ class _DashboardProbePageState extends State<DashboardProbePage> {
       WidgetKind.vsShortcuts ||
       WidgetKind.newWorkItem ||
       WidgetKind.codeTile => DashboardRegistry.cardFor(widget)!(args),
-      _ when widget.isBuiltIn => DashboardRegistry.cardFor(widget)!(args),
+      _ when DashboardRegistry.chartKinds.contains(widget.kind) =>
+        CannedChartCard(
+          payload: DashboardProbeData.forBuiltIn(switch (widget.kind) {
+            WidgetKind.velocity => TeamOverview.velocity,
+            WidgetKind.cumulativeFlow => TeamOverview.cumulativeFlow,
+            WidgetKind.cycleTime ||
+            WidgetKind.leadTime => TeamOverview.cycleLeadTime,
+            _ => TeamOverview.sprintBurndown,
+          }),
+          title: widget.name,
+          filled: filled,
+        ),
       _ => DashboardCard(
         title: widget.name,
         icon: Icons.dashboard_outlined,
@@ -308,4 +355,50 @@ class _DashboardProbePageState extends State<DashboardProbePage> {
       ),
     };
   }
+}
+
+/// One canned chart in the card frame, opening the real focus view (D7,
+/// D15) with a plain push rather than the route — the probe has no account
+/// and no dashboard to name in a URL.
+class CannedChartCard extends StatelessWidget {
+  const CannedChartCard({
+    super.key,
+    required this.payload,
+    this.title,
+    this.filled = false,
+  });
+
+  final ChartPayload payload;
+  final String? title;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) => DashboardCard(
+    title: title?.isNotEmpty ?? false ? title! : payload.title,
+    icon: Icons.show_chart,
+    filled: filled,
+    maxBodyHeight: filled ? null : 240,
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ProbeFocusPage(payload: payload),
+      ),
+    ),
+    child: ChartCardBody(payload: payload),
+  );
+}
+
+class _ProbeFocusPage extends StatelessWidget {
+  const _ProbeFocusPage({required this.payload});
+
+  final ChartPayload payload;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(payload.title)),
+    body: SafeArea(
+      top: false,
+      bottom: false,
+      child: ContentColumn(child: ChartFocusView(payload: payload)),
+    ),
+  );
 }

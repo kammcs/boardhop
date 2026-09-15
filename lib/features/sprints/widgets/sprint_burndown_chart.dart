@@ -108,6 +108,8 @@ class SprintBurndownChart extends StatelessWidget {
     this.unit = 'items',
     this.height,
     this.isNonWorkingDay,
+    this.semanticsLabel,
+    this.actualColor,
   });
 
   final List<BurndownDay> days;
@@ -128,6 +130,16 @@ class SprintBurndownChart extends StatelessWidget {
   /// Faint vertical bands. Defaults to Saturday and Sunday, which is every
   /// probed team's `workingDays` (`monday`…`friday`).
   final bool Function(DateTime day)? isNonWorkingDay;
+
+  /// What a screen reader is told, when the caller knows better than
+  /// [burndownSemanticsLabel] does: a dashboard's Burnup widget draws the
+  /// same shape reading the other way, and a team burndown is not a
+  /// sprint's (research/19 D-C).
+  final String? semanticsLabel;
+
+  /// The colour of the drawn series, for the burnup that is climbing rather
+  /// than burning down. Defaults to `BoardhopColors.burndownActual`.
+  final Color? actualColor;
 
   bool get _sparkline => mode == BurndownMode.sparkline;
 
@@ -204,7 +216,7 @@ class SprintBurndownChart extends StatelessWidget {
             ),
           LineChartBarData(
             spots: points,
-            color: colors.burndownActual,
+            color: actualColor ?? colors.burndownActual,
             barWidth: _sparkline ? 2 : 3,
             isStrokeCapRound: true,
             dotData: FlDotData(show: !_sparkline && points.length <= 20),
@@ -214,7 +226,9 @@ class SprintBurndownChart extends StatelessWidget {
     );
 
     return Semantics(
-      label: burndownSemanticsLabel(days, ideal: line, unit: unit),
+      label:
+          semanticsLabel ??
+          burndownSemanticsLabel(days, ideal: line, unit: unit),
       child: ExcludeSemantics(
         child: SizedBox(
           height: height ?? (_sparkline ? 48 : 220),
@@ -254,32 +268,51 @@ class SprintBurndownChart extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final format = DateFormat('d MMM');
-    // Roughly five dates across, whatever the sprint's length.
-    final step = math.max(1, (days.length / 5).ceil()).toDouble();
+    final scale = axisTextScale(context);
+    // Roughly five dates across, whatever the sprint's length — and fewer
+    // of them as the text grows, or they run into each other.
+    final step = math.max(1, (days.length * scale / 5).ceil()).toDouble();
     return FlTitlesData(
       topTitles: const AxisTitles(),
       rightTitles: const AxisTitles(),
       leftTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 36,
-          getTitlesWidget: (value, meta) => SideTitleWidget(
-            meta: meta,
-            child: Text(_number(value), style: style),
-          ),
+          reservedSize: 36 * scale,
+          getTitlesWidget: (value, meta) => value >= meta.max
+              ? const SizedBox.shrink()
+              : SideTitleWidget(
+                  meta: meta,
+                  child: Text(
+                    _number(value),
+                    style: style,
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
+                ),
         ),
       ),
       bottomTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 28,
+          reservedSize: 28 * scale,
           interval: step,
           getTitlesWidget: (value, meta) {
             final i = value.round();
             if (i < 0 || i >= days.length) return const SizedBox.shrink();
+            // The chart always labels its last day; an interval label too
+            // close to it would overprint.
+            if (value != meta.max && meta.max - value < step * 0.75) {
+              return const SizedBox.shrink();
+            }
             return SideTitleWidget(
               meta: meta,
-              child: Text(format.format(days[i].date), style: style),
+              child: Text(
+                format.format(days[i].date),
+                style: style,
+                maxLines: 1,
+                softWrap: false,
+              ),
             );
           },
         ),
@@ -312,9 +345,20 @@ class SprintBurndownChart extends StatelessWidget {
 /// The legend the full chart needs so the dashed line is named and not just
 /// differently coloured (DESIGN.md §3).
 class BurndownLegend extends StatelessWidget {
-  const BurndownLegend({super.key, this.showPoints = false});
+  const BurndownLegend({
+    super.key,
+    this.showPoints = false,
+    this.actualLabel = 'Remaining',
+    this.idealLabel = 'Ideal',
+    this.actualColor,
+  });
 
   final bool showPoints;
+
+  /// "Remaining" on a burndown, "Completed" on the dashboard's burnup.
+  final String actualLabel;
+  final String idealLabel;
+  final Color? actualColor;
 
   @override
   Widget build(BuildContext context) {
@@ -324,8 +368,8 @@ class BurndownLegend extends StatelessWidget {
       spacing: Spacing.lg,
       runSpacing: Spacing.xs,
       children: [
-        _Key(color: colors.burndownActual, label: 'Remaining'),
-        _Key(color: colors.burndownIdeal, label: 'Ideal', dashed: true),
+        _Key(color: actualColor ?? colors.burndownActual, label: actualLabel),
+        _Key(color: colors.burndownIdeal, label: idealLabel, dashed: true),
         if (showPoints)
           _Key(
             color: theme.colorScheme.tertiary,

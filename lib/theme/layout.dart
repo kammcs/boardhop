@@ -28,6 +28,16 @@ extension BreakpointContext on BuildContext {
       Breakpoint.fromWidth(MediaQuery.sizeOf(this).width);
 }
 
+/// How much bigger than the default the user's text is, capped where chart
+/// axes stop being readable.
+///
+/// A chart's axis labels are laid out in a box of a fixed width, so at xxxL
+/// a two-digit number wrapped onto two lines and the dates ran into each
+/// other (iPhone 17, research/19 D-C). Every chart sizes its reserved axis
+/// space and thins its ticks with this.
+double axisTextScale(BuildContext context) =>
+    (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, 1.6);
+
 /// How far a menu opened from an app bar's trailing action is nudged away
 /// from that edge.
 ///

@@ -151,6 +151,26 @@ abstract final class Routes {
     return query.isEmpty ? base : '$base?$query';
   }
 
+  /// One dashboard chart, full screen (research/19 D7, D15).
+  ///
+  /// Outside the tab shell like [workItemStandalone], and for the same
+  /// reason: it is pushed over a page that is itself inside the shell, and
+  /// two pages with one shell key is an assert. [widget] is the dashboard
+  /// widget's id — a GUID on a real dashboard, `boardhop.velocity` and the
+  /// like on the Team overview — and [dashboard] is the dashboard it sits
+  /// on, which is what lets a cold open find the widget again.
+  static String chartFocus(
+    String accountId,
+    String org,
+    String project, {
+    required String widget,
+    String? dashboard,
+  }) => _withQuery(
+    '${Routes.project(accountId, org, project)}'
+    '/chart/${Uri.encodeComponent(widget)}',
+    {'dashboard': dashboard},
+  );
+
   static String pipelines(String accountId, String org, String project) =>
       '${Routes.project(accountId, org, project)}/pipelines';
 

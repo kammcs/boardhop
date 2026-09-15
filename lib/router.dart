@@ -11,7 +11,9 @@ import 'data/repositories/repo_repository.dart';
 import 'features/activity/activity_page.dart';
 import 'features/auth/sign_in_page.dart';
 import 'features/boards/boards_page.dart';
+import 'features/dashboards/chart_focus_page.dart';
 import 'features/dashboards/dashboard_page.dart';
+import 'features/dashboards/widgets/chart_card.dart';
 import 'features/diagnostics/dashboard_probe/dashboard_probe_page.dart';
 import 'features/diagnostics/diagnostics_page.dart';
 import 'features/diagnostics/diff_probe/diff_probe_page.dart';
@@ -492,6 +494,23 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
               // .workItemStandalone` is the only thing that builds this
               // location; everything inside the shell keeps using the
               // branch route below, dock and all.
+              // The dashboard's chart focus view (research/19 D7), over
+              // the shell for the same reason: the card that pushes it is
+              // inside the shell's Home branch. The chart it drew rides
+              // along in `extra`; a cold open finds the widget on the
+              // cached dashboard instead.
+              GoRoute(
+                path: ':project/chart/:widget',
+                builder: (_, state) => ChartFocusPage(
+                  org: state.pathParameters['org']!,
+                  project: state.pathParameters['project']!,
+                  widgetId: state.pathParameters['widget']!,
+                  dashboardId: state.uri.queryParameters['dashboard'],
+                  initial: state.extra is ChartFocusArgs
+                      ? state.extra! as ChartFocusArgs
+                      : null,
+                ),
+              ),
               GoRoute(
                 path: ':project/work-item/:id',
                 builder: (_, state) => WorkItemDetailPage(

@@ -254,7 +254,6 @@ class AnalyticsRepository {
     }
   }
 
-
   // --------------------------------------------- the dashboard queries (D9)
   //
   // Everything below is research/19 §1 and spike s61, which timed each of
@@ -364,6 +363,50 @@ class AnalyticsRepository {
           if (t is String) t,
       ],
       _ => throw const FormatException('not a type list'),
+    },
+    refresh: refresh,
+    maxAge: const Duration(days: 1),
+  );
+
+  /// The name of the team's requirement backlog — `Stories`, `Backlog
+  /// items`, `Requirements`, depending on the process — which is also the
+  /// name of its default board (research/19 §1: the backlog level's name is
+  /// the board's name in every process seen).
+  ///
+  /// The Team overview's cumulative flow has no widget settings to name a
+  /// board with, and this is the board the web's own CFD widget defaults
+  /// to. Same `Processes` row as [requirementTypes], different column.
+  Future<String?> requirementBoardName(
+    String org,
+    String project,
+    String teamSk, {
+    bool refresh = false,
+  }) => _typed<String?>(
+    cacheKey('board', org, project, teamSk, 'requirement'),
+    () async {
+      final rows = await _query(
+        odataUri(
+          org: org,
+          project: project,
+          entitySet: 'Processes',
+          query:
+              r'$filter=TeamSK eq '
+              '$teamSk'
+              " and BacklogType eq 'RequirementBacklog'"
+              r'&$select=BacklogName,BacklogType',
+        ),
+      );
+      for (final r in rows) {
+        if (r['BacklogName'] case final String name when name.isNotEmpty) {
+          return name;
+        }
+      }
+      return null;
+    },
+    (value) => {'board': value},
+    (json) => switch (json) {
+      Map() => json['board'] as String?,
+      _ => throw const FormatException('not a board name'),
     },
     refresh: refresh,
     maxAge: const Duration(days: 1),
@@ -489,7 +532,9 @@ class AnalyticsRepository {
             r'&$select=IterationSK,IterationName,StartDate,EndDate,IsEnded',
       ),
     );
-    final sprints = [for (final r in iterationRows) AnalyticsIteration.fromRow(r)];
+    final sprints = [
+      for (final r in iterationRows) AnalyticsIteration.fromRow(r),
+    ];
     if (sprints.isEmpty) return const [];
     final sks = sprints.map((i) => i.sk).join(',');
     final scope =
@@ -559,7 +604,10 @@ class AnalyticsRepository {
         ),
     ]);
 
-    ({int count, double sp}) bucket(List<Map<String, dynamic>> rows, String sk) {
+    ({int count, double sp}) bucket(
+      List<Map<String, dynamic>> rows,
+      String sk,
+    ) {
       var n = 0;
       var sp = 0.0;
       for (final r in rows) {
@@ -824,7 +872,8 @@ class AnalyticsRepository {
         order.add(day);
         return <String, int>{};
       });
-      counts[name] = (counts[name] ?? 0) + ((row['Count'] as num?)?.toInt() ?? 0);
+      counts[name] =
+          (counts[name] ?? 0) + ((row['Count'] as num?)?.toInt() ?? 0);
       // A column the board no longer has still has history: keep it, after
       // the current ones.
       if (!ordered.contains(name)) ordered.add(name);

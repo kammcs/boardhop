@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:boardhop/auth/auth_bloc.dart';
 import 'package:boardhop/auth/auth_service.dart';
 import 'package:boardhop/core/http/ado_exceptions.dart';
+import 'package:boardhop/data/models/analytics.dart';
 import 'package:boardhop/data/models/dashboard.dart';
 import 'package:boardhop/data/models/pipeline.dart';
 import 'package:boardhop/data/models/project.dart';
 import 'package:boardhop/data/models/pull_request.dart';
 import 'package:boardhop/data/models/sprint.dart';
 import 'package:boardhop/data/models/work_item.dart';
+import 'package:boardhop/data/repositories/analytics_repository.dart';
 import 'package:boardhop/data/repositories/dashboard_repository.dart';
 import 'package:boardhop/data/repositories/people_repository.dart';
 import 'package:boardhop/data/repositories/pipeline_repository.dart';
@@ -18,6 +20,12 @@ import 'package:boardhop/data/repositories/sprint_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
 import 'package:boardhop/features/dashboards/dashboard_page.dart';
 import 'package:boardhop/features/dashboards/team_overview.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/cfd_card.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/cycle_time_card.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/pipeline_outcomes_card.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/sprint_burndown_card.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/velocity_card.dart';
+import 'package:boardhop/features/dashboards/widgets/cards/work_by_state_card.dart';
 import 'package:boardhop/features/dashboards/widgets/dashboard_card.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
@@ -42,6 +50,8 @@ class _Pipelines extends Mock implements PipelineRepository {}
 class _People extends Mock implements PeopleRepository {}
 
 class _Projects extends Mock implements ProjectRepository {}
+
+class _Analytics extends Mock implements AnalyticsRepository {}
 
 class _AuthService extends Mock implements AuthService {}
 
@@ -150,12 +160,14 @@ void main() {
   late _Pipelines pipelines;
   late _People people;
   late _Projects projects;
+  late _Analytics analytics;
   late _AuthService auth;
   late List<String> visited;
   late String location;
 
   setUpAll(() {
     registerFallbackValue(PrListFilter.toReview);
+    registerFallbackValue(DateTime.now());
   });
 
   setUp(() {
@@ -167,6 +179,7 @@ void main() {
     pipelines = _Pipelines();
     people = _People();
     projects = _Projects();
+    analytics = _Analytics();
     auth = _AuthService();
     visited = <String>[];
     location = '';
@@ -253,6 +266,77 @@ void main() {
       ),
     ).thenAnswer((_) async => const <BuildRun>[]);
 
+    when(
+      () =>
+          analytics.teamSk(org, project, any(), refresh: any(named: 'refresh')),
+    ).thenAnswer((i) async => i.positionalArguments[2] as String);
+    when(
+      () => analytics.requirementTypes(
+        org,
+        project,
+        any(),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const ['User Story']);
+    when(
+      () => analytics.requirementBoardName(
+        org,
+        project,
+        any(),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => 'Stories');
+    when(
+      () => analytics.burndown(
+        org,
+        project,
+        any(),
+        start: any(named: 'start'),
+        end: any(named: 'end'),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const <BurndownDay>[]);
+    when(
+      () => analytics.velocity(
+        org,
+        project,
+        any(),
+        any(),
+        iterations: any(named: 'iterations'),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const <VelocityIteration>[]);
+    when(
+      () => analytics.cumulativeFlow(
+        org,
+        project,
+        any(),
+        any(),
+        any(),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const CumulativeFlow());
+    when(
+      () => analytics.cycleAndLeadTime(
+        org,
+        project,
+        any(),
+        any(),
+        types: any(named: 'types'),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const CycleLeadTime());
+    when(
+      () => analytics.workByState(
+        org,
+        project,
+        any(),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const <WorkStateCount>[]);
+    when(() => pipelines.definitions(org, project))
+        .thenAnswer((_) async => const <PipelineDefinition>[]);
+
     when(() => projects.watch(org))
         .thenAnswer((_) => Stream<List<Project>>.value(const []));
     when(
@@ -322,6 +406,7 @@ void main() {
           RepositoryProvider<PipelineRepository>.value(value: pipelines),
           RepositoryProvider<PeopleRepository>.value(value: people),
           RepositoryProvider<ProjectRepository>.value(value: projects),
+          RepositoryProvider<AnalyticsRepository>.value(value: analytics),
           RepositoryProvider<AuthService>.value(value: auth),
         ],
         child: BlocProvider<AuthBloc>.value(
@@ -453,11 +538,12 @@ void main() {
       expect(find.text('1 widget not shown in Boardhop'), findsOneWidget);
     });
 
-    testWidgets('a chart kind is named, not hidden', (tester) async {
+    testWidgets('a chart kind draws its own card (D-C)', (tester) async {
       await pump(tester);
 
       expect(find.text('Sprint burndown'), findsOneWidget);
-      expect(find.byType(ComingCard), findsOneWidget);
+      expect(find.byType(SprintBurndownCard), findsOneWidget);
+      expect(find.byType(ComingCard), findsNothing);
     });
 
     testWidgets('a disabled widget is dropped and not counted', (tester) async {
@@ -519,7 +605,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(TeamOverview.name), findsOneWidget);
-      expect(find.byType(ComingCard), findsNWidgets(6));
+      expect(find.byType(SprintBurndownCard), findsOneWidget);
+      expect(find.byType(WorkByStateCard), findsOneWidget);
+      expect(find.byType(CfdCard), findsOneWidget);
+      expect(find.byType(CycleTimeCard), findsOneWidget);
+      expect(find.byType(VelocityCard), findsOneWidget);
+      expect(find.byType(PipelineOutcomesCard), findsOneWidget);
       expect(location, contains('dashboard=${TeamOverview.id}'));
     });
   });
@@ -615,7 +706,8 @@ void main() {
 
       expect(askedToSignIn.isCompleted, isFalse);
       expect(find.text(TeamOverview.name), findsOneWidget);
-      expect(find.byType(ComingCard), findsNWidgets(6));
+      expect(find.byType(SprintBurndownCard), findsOneWidget);
+      expect(find.byType(VelocityCard), findsOneWidget);
       expect(
         find.textContaining('cannot read this project’s dashboards'),
         findsOneWidget,

@@ -640,6 +640,7 @@ class _DashboardPageState extends State<DashboardPage> with ReloadOnReturn {
         project: this.widget.project,
         widget: widget,
         teamId: _dashboard?.teamId ?? _teamId,
+        dashboardId: _dashboard?.id ?? _currentId,
         filled: filled,
         // A phone's card sizes itself, capped per kind so one long list
         // cannot own the screen (D4).

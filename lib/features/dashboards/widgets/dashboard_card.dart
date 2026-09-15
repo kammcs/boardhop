@@ -19,6 +19,7 @@ class DashboardCardArgs {
     required this.project,
     required this.widget,
     this.teamId,
+    this.dashboardId,
     this.filled = false,
     this.maxBodyHeight,
   });
@@ -26,6 +27,11 @@ class DashboardCardArgs {
   final String org;
   final String project;
   final DashboardWidget widget;
+
+  /// The dashboard the card sits on, so the chart focus route (D7) can find
+  /// the widget again when it is opened cold — a deep link, or the app
+  /// restored after the page that pushed it is gone.
+  final String? dashboardId;
 
   /// The dashboard's owning team (`groupId`). Null on a project-scoped
   /// dashboard, which no puremedia project has.
@@ -46,6 +52,7 @@ class DashboardCardArgs {
         project: project,
         widget: widget,
         teamId: teamId,
+        dashboardId: dashboardId,
         filled: filled ?? this.filled,
         maxBodyHeight: maxBodyHeight ?? this.maxBodyHeight,
       );
