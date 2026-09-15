@@ -52,6 +52,17 @@ class BoardColumn extends Equatable {
   /// Work item type → state a card takes when it lands here.
   final Map<String, String> stateMappings;
 
+  /// The wire shape again, so a cached board reads back unchanged.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'columnType': columnType,
+    'itemLimit': itemLimit,
+    'isSplit': isSplit,
+    if (description != null) 'description': description,
+    'stateMappings': stateMappings,
+  };
+
   @override
   List<Object?> get props => [id, name, columnType, itemLimit, isSplit];
 }
@@ -68,6 +79,12 @@ class BoardRow extends Equatable {
   final String? id;
   final String? name;
   final String? color;
+
+  Map<String, dynamic> toJson() => {
+    if (id != null) 'id': id,
+    if (name != null) 'name': name,
+    if (color != null) 'color': color,
+  };
 
   @override
   List<Object?> get props => [id, name];
@@ -87,6 +104,12 @@ class BoardFields extends Equatable {
   final String? columnField;
   final String? rowField;
   final String? doneField;
+
+  Map<String, dynamic> toJson() => {
+    if (columnField != null) 'columnField': {'referenceName': columnField},
+    if (rowField != null) 'rowField': {'referenceName': rowField},
+    if (doneField != null) 'doneField': {'referenceName': doneField},
+  };
 
   @override
   List<Object?> get props => [columnField, rowField, doneField];
@@ -180,6 +203,19 @@ class Board extends Equatable {
     final byState = columns.indexWhere((c) => c.stateMappings[type] == state);
     return byState >= 0 ? byState : 0;
   }
+
+  /// The wire shape again ([Board.fromJson] reads it back unchanged), so a
+  /// board snapshot can be cached and the page can open offline.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'columns': [for (final c in columns) c.toJson()],
+    'rows': [for (final r in rows) r.toJson()],
+    'fields': fields.toJson(),
+    'allowedMappings': allowedMappings,
+    'canEdit': canEdit,
+    'isValid': isValid,
+  };
 
   @override
   List<Object?> get props => [id, name, columns, rows, fields, canEdit];

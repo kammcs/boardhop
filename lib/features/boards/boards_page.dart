@@ -51,6 +51,15 @@ class _BoardsPageState extends State<BoardsPage> {
   bool _loading = false;
   int _movesInFlight = 0;
 
+  /// When the cards on screen came from the cache rather than the network,
+  /// the time they were read; null once a live answer has replaced them.
+  DateTime? _shownAt;
+
+  /// The last refresh failed with a network error and the cached copy is
+  /// still on screen (decision S9). A network failure with nothing cached
+  /// is still the error strip.
+  bool _offline = false;
+
   /// The team the board belongs to, which the create form takes its area
   /// and iteration defaults from (research/11 4.7).
   String? _teamId;
@@ -78,6 +87,25 @@ class _BoardsPageState extends State<BoardsPage> {
     });
     final boards = context.read<BoardRepository>();
     final workItems = context.read<WorkItemRepository>();
+    // Cached first, live second: the board list and the board definition
+    // are both network reads, so without this the board shows a spinner and
+    // then an error strip when the phone is offline (decision S9).
+    if (_board == null) {
+      final cached = await boards.cachedSnapshot(
+        widget.org,
+        widget.project,
+        boardId ?? _boardId,
+      );
+      if (cached != null && mounted && _board == null) {
+        setState(() {
+          _boardId = cached.board.id;
+          _board = cached.board;
+          _cards = cached.cardsBySlot;
+          _rankField = cached.rankField;
+          _shownAt = cached.fetchedAt;
+        });
+      }
+    }
     try {
       final types = await workItems.types(widget.org, widget.project);
       _visuals = WorkItemVisuals({for (final t in types) t.name: t});
@@ -100,6 +128,8 @@ class _BoardsPageState extends State<BoardsPage> {
         _board = snapshot.board;
         _cards = snapshot.cardsBySlot;
         _rankField = snapshot.rankField;
+        _shownAt = null;
+        _offline = false;
         if (_lane != null && !snapshot.board.laneNames.contains(_lane)) {
           _lane = null;
         }
@@ -113,11 +143,58 @@ class _BoardsPageState extends State<BoardsPage> {
           ),
         );
       }
+    } on AdoNetworkException catch (e) {
+      // Offline with cards on screen is not an error: say where they came
+      // from and leave them there.
+      if (!mounted) return;
+      setState(() {
+        if (_board == null) {
+          _error = e.message;
+        } else {
+          _offline = true;
+        }
+      });
     } on AdoException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// "offline · showing the cached copy · 3m", the line the search and repo
+  /// pages show over stale content.
+  Widget _cacheLine(BuildContext context) {
+    final at = _shownAt;
+    if (at == null && !_offline) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final age = at == null ? '' : ' · ${relativeTime(at)}';
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        Spacing.lg + MediaQuery.paddingOf(context).left,
+        Spacing.xs,
+        Spacing.lg + MediaQuery.paddingOf(context).right,
+        0,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _offline ? Icons.cloud_off_outlined : Icons.history_toggle_off,
+            size: 14,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Spacing.xs),
+          Expanded(
+            child: Text(
+              _offline ? 'offline · showing the cached copy$age' : 'cached$age',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   List<WorkItem> _visible(int slot) {
@@ -427,6 +504,7 @@ class _BoardsPageState extends State<BoardsPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_loading || _movesInFlight > 0) const LinearProgressIndicator(),
+          _cacheLine(context),
           if (_error != null)
             Material(
               color: scheme.errorContainer,

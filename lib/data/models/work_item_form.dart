@@ -897,6 +897,20 @@ class TeamIteration extends Equatable {
     this.finishDate,
   });
 
+  /// The shape [toJson] writes, not the wire shape: the wire keeps the
+  /// dates and the time frame under `attributes` and the path in its
+  /// project-relative form, both of which `parseTeamIterations` has already
+  /// normalized by the time an iteration is cached inside a sprint
+  /// snapshot.
+  factory TeamIteration.fromJson(Map<String, dynamic> json) => TeamIteration(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    path: json['path'] as String? ?? '',
+    timeFrame: json['timeFrame'] as String?,
+    startDate: DateTime.tryParse(json['startDate'] as String? ?? ''),
+    finishDate: DateTime.tryParse(json['finishDate'] as String? ?? ''),
+  );
+
   final String id;
   final String name;
 
@@ -910,6 +924,15 @@ class TeamIteration extends Equatable {
   final DateTime? finishDate;
 
   bool get isCurrent => (timeFrame ?? '').toLowerCase() == 'current';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'path': path,
+    if (timeFrame != null) 'timeFrame': timeFrame,
+    if (startDate != null) 'startDate': startDate!.toIso8601String(),
+    if (finishDate != null) 'finishDate': finishDate!.toIso8601String(),
+  };
 
   @override
   List<Object?> get props => [id, name, path, timeFrame];

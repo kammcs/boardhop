@@ -1,5 +1,7 @@
 import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
+import '../db/app_database.dart';
+import '../db/json_cache.dart';
 import '../models/board.dart';
 import '../models/work_item.dart';
 import 'work_item_repository.dart';
@@ -23,15 +25,55 @@ class BoardSnapshot {
   final String? rankField;
 
   int get cardCount => cardsBySlot.fold(0, (n, c) => n + c.length);
+
+  factory BoardSnapshot.fromJson(Map<String, dynamic> json) => BoardSnapshot(
+    board: Board.fromJson(
+      ((json['board'] as Map?) ?? const {}).cast<String, dynamic>(),
+    ),
+    cardsBySlot: [
+      for (final slot in (json['cardsBySlot'] as List?) ?? const [])
+        [
+          for (final c in (slot as List?) ?? const [])
+            if (c is Map) WorkItem.fromJson(c.cast<String, dynamic>()),
+        ],
+    ],
+    fetchedAt:
+        DateTime.tryParse(json['fetchedAt'] as String? ?? '') ?? DateTime.now(),
+    rankField: json['rankField'] as String?,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'board': board.toJson(),
+    'cardsBySlot': [
+      for (final slot in cardsBySlot) [for (final c in slot) c.toJson()],
+    ],
+    'fetchedAt': fetchedAt.toIso8601String(),
+    if (rankField != null) 'rankField': rankField,
+  };
 }
 
 class BoardRepository {
-  BoardRepository(this._client, this._workItems);
+  BoardRepository(
+    this._client,
+    this._workItems, [
+    AppDatabase? db,
+    String? userId,
+  ]) : _cache = JsonCache(db, namespace: userId);
 
   final AdoClient _client;
   final WorkItemRepository _workItems;
 
+  /// The whole snapshot, so the board opens offline showing the cards it
+  /// last saw. The cards were already written to drift, but nothing ever
+  /// read them back and the board definition itself was not cached at all,
+  /// so an offline board showed a spinner and then an error strip
+  /// (decision S9).
+  final JsonCache _cache;
+
   static const apiVersion = '7.1';
+
+  static String snapshotKey(String org, String project, String boardId) =>
+      'board:snapshot:$org:$project:$boardId';
 
   final Map<String, String> _defaultTeams = {};
 
@@ -188,12 +230,47 @@ class BoardRepository {
         ? <WorkItem>[]
         : await _workItems.batch(org, project, ids, fields: fields);
     await _workItems.storeList(org, project, boardId, items);
-    return BoardSnapshot(
+    final snapshot = BoardSnapshot(
       board: board,
       cardsBySlot: distribute(board, items),
       fetchedAt: DateTime.now(),
       rankField: rankField,
     );
+    await _cache.put(snapshotKey(org, project, boardId), snapshot.toJson());
+    return snapshot;
+  }
+
+  /// The last snapshot read for this board, or null when there is none.
+  /// The page draws this before the network answers and keeps it when the
+  /// network fails.
+  ///
+  /// With no [boardId] the most recently read board of the project is
+  /// answered, which is what a cold start offline needs: the board list is
+  /// itself a network read, so the page does not yet know which board it
+  /// would have opened.
+  Future<BoardSnapshot?> cachedSnapshot(
+    String org,
+    String project, [
+    String? boardId,
+  ]) async {
+    var key = boardId == null ? null : snapshotKey(org, project, boardId);
+    if (key == null) {
+      // Newest first.
+      final keys = await _cache.keysWithPrefix(
+        snapshotKey(org, project, ''),
+        limit: 1,
+      );
+      key = keys.firstOrNull;
+    }
+    if (key == null) return null;
+    final hit = await _cache.get(key);
+    final json = hit?.json;
+    if (json is! Map) return null;
+    try {
+      return BoardSnapshot.fromJson(json.cast<String, dynamic>());
+    } catch (_) {
+      return null;
+    }
   }
 
   /// What to send to the reorder route so that the card at [index] lands

@@ -12,6 +12,8 @@ import '../../core/http/ado_client.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/http/ado_host.dart';
 import '../../core/routes.dart';
+import '../../data/models/sprint.dart';
+import '../../data/repositories/analytics_repository.dart';
 import '../../theme/theme.dart';
 import '../notifications/push_service.dart';
 
@@ -40,6 +42,10 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   bool _running = false;
   final _orgController = TextEditingController(text: 'puremedia');
 
+  /// The Analytics probe is project-scoped: the org-level OData route is
+  /// 403 for everyone (spike s55).
+  final _projectController = TextEditingController(text: 'DevOps Mobile App');
+
   /// Harmless claims request: re-states the CP1 capability MSAL already
   /// sends, so the token endpoint accepts it. Proves the `claims` plumbing
   /// reaches native MSAL and forces a network round trip.
@@ -48,6 +54,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   @override
   void dispose() {
     _orgController.dispose();
+    _projectController.dispose();
     super.dispose();
   }
 
@@ -66,6 +73,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
     final auth = context.read<AuthService>();
     final client = context.read<AdoClient>();
     final org = _orgController.text.trim();
+    final project = _projectController.text.trim();
     setState(() {
       _running = true;
       _checks
@@ -81,6 +89,12 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           _Check('Projects: dev.azure.com/$org'),
           _Check('Org-scoped profile: vssps.dev.azure.com/$org'),
           _Check('Rate-limit headers seen'),
+          // The S6 gate (research/18): `vso.analytics` is on the
+          // registration, but `analytics.dev.azure.com` is a different host
+          // from `dev.azure.com` and only the spike PAT had ever been tried
+          // against it. If this fails there is no burndown and no cheap
+          // fallback.
+          _Check('Analytics: burndown for $org/$project'),
         ]);
     });
 
@@ -206,8 +220,63 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return log.map((e) => e.toString()).join('\n');
     });
 
+    await step(10, () async {
+      if (project.isEmpty) throw const AdoNotFoundException('no project set');
+      final projectJson = await client.getJson(
+        org: org,
+        path: '_apis/projects/$project',
+        apiVersion: '7.1',
+      );
+      final team = (projectJson['defaultTeam'] as Map?)?['id'] as String?;
+      if (team == null) {
+        throw AdoServerException('$project has no default team');
+      }
+      // `$timeframe` accepts only `current`; anything else is a 400.
+      final iterations = await client.getJson(
+        org: org,
+        project: project,
+        team: team,
+        path: '_apis/work/teamsettings/iterations',
+        apiVersion: '7.1',
+        query: {r'$timeframe': 'current'},
+      );
+      final current = ((iterations['value'] as List?) ?? const [])
+          .whereType<Map>()
+          .firstOrNull;
+      if (current == null) {
+        throw const AdoNotFoundException('no current iteration for this team');
+      }
+      final id = current['id'] as String? ?? '';
+      final attributes = (current['attributes'] as Map?) ?? const {};
+      final now = DateTime.now().toUtc();
+      final start =
+          DateTime.tryParse(attributes['startDate'] as String? ?? '') ??
+          now.subtract(const Duration(days: 14));
+      final end =
+          DateTime.tryParse(attributes['finishDate'] as String? ?? '') ?? now;
+      final sw = Stopwatch()..start();
+      final days = await AnalyticsRepository(client)
+          .burndown(org, project, id, start: start, end: end, refresh: true);
+      final dated = attributes['startDate'] == null ? ' (undated sprint)' : '';
+      if (days.isEmpty) {
+        return 'token ACCEPTED by analytics.dev.azure.com; '
+            '0 rows for "${current['name']}"$dated in ${sw.elapsedMilliseconds} ms '
+            '(no snapshot history for this sprint)';
+      }
+      final first = days.first;
+      final last = days.last;
+      return 'token ACCEPTED by analytics.dev.azure.com; '
+          '${days.length} days for "${current['name']}"$dated '
+          'in ${sw.elapsedMilliseconds} ms; '
+          'first ${_dayLabel(first)} last ${_dayLabel(last)}';
+    });
+
     if (mounted) setState(() => _running = false);
   }
+
+  static String _dayLabel(BurndownDay d) =>
+      '${d.date.toIso8601String().substring(0, 10)} '
+      'remaining=${d.remaining} done=${d.done} sp=${d.points}';
 
   String _report() {
     final b = StringBuffer(
@@ -250,6 +319,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/mention'),
           ),
           IconButton(
+            tooltip: 'Sprint widgets probe (P-B)',
+            icon: const Icon(Icons.timelapse),
+            onPressed: () => context.push('/diagnostics/sprint'),
+          ),
+          IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),
             onPressed: _checks.isEmpty
@@ -275,6 +349,14 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               controller: _orgController,
               decoration: const InputDecoration(
                 labelText: 'Organization to probe',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _projectController,
+              decoration: const InputDecoration(
+                labelText: 'Project to probe (Analytics)',
                 border: OutlineInputBorder(),
               ),
             ),

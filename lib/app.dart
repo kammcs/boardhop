@@ -15,6 +15,7 @@ import 'data/db/json_cache.dart';
 import 'data/mention_recents.dart';
 import 'data/repositories/account_repository.dart';
 import 'data/repositories/activity_repository.dart';
+import 'data/repositories/analytics_repository.dart';
 import 'data/repositories/org_repository.dart';
 import 'data/repositories/people_repository.dart';
 import 'data/repositories/board_repository.dart';
@@ -24,6 +25,7 @@ import 'data/repositories/pull_request_repository.dart';
 import 'data/repositories/push_prefs_repository.dart';
 import 'data/repositories/repo_repository.dart';
 import 'data/repositories/search_repository.dart';
+import 'data/repositories/sprint_repository.dart';
 import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/search_recents.dart';
@@ -49,7 +51,7 @@ class AccountDeps {
     pullRequests = PullRequestRepository(client, db, accountId);
     pipelines = PipelineRepository(client, db, accountId);
     repos = RepoRepository(client, db, accountId);
-    boards = BoardRepository(client, workItems);
+    boards = BoardRepository(client, workItems, db, accountId);
     search = SearchRepository(client, pullRequests, db, accountId);
     searchRecents = SearchRecents(accountId: accountId);
     people = PeopleRepository(client, db, accountId);
@@ -61,6 +63,8 @@ class AccountDeps {
       accountId,
       people,
     );
+    sprints = SprintRepository(client, workItems, workItemForms, db, accountId);
+    analytics = AnalyticsRepository(client, db, accountId);
     queue = WriteQueue(db, workItems, userId: accountId);
     activity = ActivityRepository(
       client,
@@ -118,6 +122,8 @@ class AccountDeps {
   late final PeopleRepository people;
   late final MentionRecents mentionRecents;
   late final WorkItemFormRepository workItemForms;
+  late final SprintRepository sprints;
+  late final AnalyticsRepository analytics;
   late final WriteQueue queue;
   late final ActivityRepository activity;
   late final AccountRepository account;
@@ -133,6 +139,8 @@ class AccountDeps {
     RepositoryProvider<WorkItemRepository>.value(value: workItems),
     RepositoryProvider<BoardRepository>.value(value: boards),
     RepositoryProvider<WorkItemFormRepository>.value(value: workItemForms),
+    RepositoryProvider<SprintRepository>.value(value: sprints),
+    RepositoryProvider<AnalyticsRepository>.value(value: analytics),
     RepositoryProvider<WriteQueue>.value(value: queue),
     RepositoryProvider<PullRequestRepository>.value(value: pullRequests),
     RepositoryProvider<PipelineRepository>.value(value: pipelines),

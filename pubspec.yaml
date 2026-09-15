@@ -72,6 +72,13 @@ dependencies:
   # Both are BSD-3, free, and pinned.
   firebase_core: 4.14.0
   firebase_messaging: 16.6.0
+  # Burndown charts (research/18 S6, r2 §3.2). MIT, no native code, and it
+  # pulls in nothing new: `equatable` is already a direct dependency and
+  # `vector_math` already transitive. Pinned exactly, not a caret: the
+  # package has a 0.x churn history and one maintainer, so an upgrade is a
+  # deliberate act. Kept behind `SprintBurndownChart` so a future break
+  # touches one file.
+  fl_chart: 1.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -43,6 +43,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     required this.diffRemovedBackground,
     required this.codeBackground,
     required this.mention,
+    required this.burndownActual,
+    required this.burndownIdeal,
   });
 
   // Work item types
@@ -92,6 +94,18 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
   /// DevOps link blue, well clear of the slate text around it.
   final Color mention;
 
+  // Burndown
+  /// The work actually left, day by day. The neutral slate theme's `primary`
+  /// is all but the same value as `onSurfaceVariant`, so a chart drawn from
+  /// scheme colors alone would show its two lines in one color; these are
+  /// the pair that keeps them apart (DESIGN.md §3: the dash pattern and the
+  /// labels still carry the meaning, the color only supports them).
+  final Color burndownActual;
+
+  /// The straight line from the sprint's opening scope to zero, drawn
+  /// dashed and labelled.
+  final Color burndownIdeal;
+
   static const light = BoardhopColors(
     bug: Color(0xFFCC293D),
     task: Color(0xFFB8860B),
@@ -124,6 +138,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     diffRemovedBackground: Color(0xFFFCE8E6),
     codeBackground: Color(0xFFF3F4F6),
     mention: Color(0xFF0B6BCB),
+    burndownActual: Color(0xFF0B6BCB),
+    burndownIdeal: Color(0xFF8A94A6),
   );
 
   static const dark = BoardhopColors(
@@ -158,6 +174,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     diffRemovedBackground: Color(0xFF3B1714),
     codeBackground: Color(0xFF1B1F27),
     mention: Color(0xFF7CC0FF),
+    burndownActual: Color(0xFF6FB1F5),
+    burndownIdeal: Color(0xFF9CA3AF),
   );
 
   /// Color for a work item type by its Azure DevOps name.
@@ -216,6 +234,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
     Color? diffRemovedBackground,
     Color? codeBackground,
     Color? mention,
+    Color? burndownActual,
+    Color? burndownIdeal,
   }) {
     return BoardhopColors(
       bug: bug ?? this.bug,
@@ -251,6 +271,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
           diffRemovedBackground ?? this.diffRemovedBackground,
       codeBackground: codeBackground ?? this.codeBackground,
       mention: mention ?? this.mention,
+      burndownActual: burndownActual ?? this.burndownActual,
+      burndownIdeal: burndownIdeal ?? this.burndownIdeal,
     );
   }
 
@@ -296,6 +318,8 @@ class BoardhopColors extends ThemeExtension<BoardhopColors> {
       ),
       codeBackground: l(codeBackground, other.codeBackground),
       mention: l(mention, other.mention),
+      burndownActual: l(burndownActual, other.burndownActual),
+      burndownIdeal: l(burndownIdeal, other.burndownIdeal),
     );
   }
 }

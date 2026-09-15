@@ -23,7 +23,14 @@ enum AdoHost {
   feeds('feeds.dev.azure.com', orgInPath: true),
 
   /// Audit log.
-  audit('auditservice.dev.azure.com', orgInPath: true);
+  audit('auditservice.dev.azure.com', orgInPath: true),
+
+  /// Analytics OData (`{org}/{project}/_odata/{version}/…`), the burndown's
+  /// only source. Project-scoped: the org-level route with no project
+  /// segment answers 403 (spike s55). Its paths carry the OData version
+  /// instead of an `api-version` query, so callers build the URI and go
+  /// through `AdoClient.sendRaw` rather than `getJson`.
+  analytics('analytics.dev.azure.com', orgInPath: true);
 
   const AdoHost(this.hostname, {required this.orgInPath});
 

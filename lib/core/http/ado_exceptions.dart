@@ -147,6 +147,24 @@ class CodeSearchUnavailable extends AdoNotFoundException {
       );
 }
 
+/// The Analytics OData host refused the app's token, or the organization
+/// has no Analytics.
+///
+/// `analytics.dev.azure.com` is a different host from `dev.azure.com` and
+/// grants `vso.analytics` separately, so a token that reads work items fine
+/// can still be rejected there (research/18 §1, the S6 gate). It is a
+/// subtype of [AdoForbiddenException] and deliberately **not** of
+/// [AdoAuthException]: a page that met it must say the burndown is
+/// unavailable, not throw the user into interactive sign-in.
+class AnalyticsUnavailable extends AdoForbiddenException {
+  const AnalyticsUnavailable({super.statusCode, super.typeKey, super.url})
+    : super(
+        'The Analytics service did not accept this sign-in. A project or '
+        'organization administrator can check that Analytics is enabled and '
+        'that you have access to it.',
+      );
+}
+
 /// Any other non-success status.
 class AdoServerException extends AdoException {
   const AdoServerException(
