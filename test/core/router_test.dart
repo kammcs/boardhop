@@ -30,6 +30,7 @@ void main() {
     final project = Routes.project('u1', 'puremedia', 'DevOps Mobile App');
     for (final tail in [
       'home',
+      'dashboards',
       'work-items/15503',
       'boards',
       'sprint',
@@ -53,6 +54,27 @@ void main() {
     expect(sprint.isError, isFalse);
     expect(sprint.uri.queryParameters['iteration'], 'abc-123');
     expect(sprint.uri.queryParameters['tab'], 'burndown');
+
+    // Dashboards is the Home tab's second view (research/19 D5/D8): the
+    // same branch as Summary and search, with the dashboard in the query.
+    final dashboards = router.configuration.findMatch(
+      Uri.parse('$project/dashboards?dashboard=abc-123'),
+    );
+    expect(dashboards.isError, isFalse);
+    expect(dashboards.uri.queryParameters['dashboard'], 'abc-123');
+    expect(
+      dashboards.matches.any((m) => m.route is ShellRouteBase),
+      isTrue,
+      reason: 'the Dashboards view keeps the project shell and its dock',
+    );
+
+    // A dashboard's query card opens the Work items view on that query.
+    final query = router.configuration.findMatch(
+      Uri.parse('$project/work-items?query=q-1&queryName=Open+bugs'),
+    );
+    expect(query.isError, isFalse);
+    expect(query.uri.queryParameters['query'], 'q-1');
+    expect(query.uri.queryParameters['queryName'], 'Open bugs');
   });
 
   // The standalone work item route (`Routes.workItemStandalone`) is the same

@@ -78,9 +78,14 @@ two segments and Wiki slots in later. Decisions here; state in NEXT-STEPS item 2
   `work/boards/{board}/chartimages/CumulativeFlow`, white background) and are not used (D14).
 - **Favorites:** `artifactType=Microsoft.TeamFoundation.Dashboards.Dashboard`,
   `artifactScopeType=Project`. Web deep link `{org}/{project}/_dashboards/dashboard/{id}` (unverified).
-- **Unverified:** the app's Entra token against `vso.dashboards` and against the Analytics entity
-  sets beyond `WorkItemSnapshot` (D12 gates on the diagnostics check); `project`-scoped dashboards
-  (none exist here); the deep-link form.
+- **Settled on the device (D-B, iPhone 17 simulator, 2026-09-15):** the app's Entra token is
+  **refused by the Dashboard API** — `401 InvalidIdentityException / TF400813` — while the same
+  token is accepted by the Analytics entity sets the Team overview needs (`WorkItems` work-by-state
+  answered 8 groups / 30 items in 422 ms). The registration has no `vso.dashboards` (research/09);
+  **Kelly has to add it and re-grant admin consent** before any real dashboard renders. Until then
+  the page says so inline and falls back to the Team overview, because a sign-in sheet cannot fix a
+  missing scope and looping into one is worse than saying nothing.
+- **Unverified:** `project`-scoped dashboards (none exist here); the deep-link form.
 
 ## 2. Best practice (survey)
 

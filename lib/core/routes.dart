@@ -38,8 +38,23 @@ abstract final class Routes {
 
   /// The Work tab's three views, so the view switch and the pages stop
   /// concatenating route strings by hand (research/18 §4.3).
-  static String workItems(String accountId, String org, String project) =>
-      '${Routes.project(accountId, org, project)}/work-items';
+  ///
+  /// [query] is a saved query GUID and is **left out for the default list**
+  /// (Assigned to me), so the plain route stays the plain view. It exists
+  /// because the dashboard's query-backed cards open their query in the
+  /// Work items page (research/19 D7) and the page had no way to be told
+  /// which one. [queryName] is only the label to show until the query tree
+  /// has been read; the id is what selects the list.
+  static String workItems(
+    String accountId,
+    String org,
+    String project, {
+    String? query,
+    String? queryName,
+  }) => _withQuery('${Routes.project(accountId, org, project)}/work-items', {
+    'query': query,
+    'queryName': query == null ? null : queryName,
+  });
 
   static String board(String accountId, String org, String project) =>
       '${Routes.project(accountId, org, project)}/boards';

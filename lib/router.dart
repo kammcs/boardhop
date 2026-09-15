@@ -11,6 +11,8 @@ import 'data/repositories/repo_repository.dart';
 import 'features/activity/activity_page.dart';
 import 'features/auth/sign_in_page.dart';
 import 'features/boards/boards_page.dart';
+import 'features/dashboards/dashboard_page.dart';
+import 'features/diagnostics/dashboard_probe/dashboard_probe_page.dart';
 import 'features/diagnostics/diagnostics_page.dart';
 import 'features/diagnostics/diff_probe/diff_probe_page.dart';
 import 'features/diagnostics/board_probe/board_probe_page.dart';
@@ -97,6 +99,10 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
           path: '/diagnostics/sprint',
           builder: (_, _) => const SprintProbePage(),
         ),
+        GoRoute(
+          path: '/diagnostics/dashboard',
+          builder: (_, _) => const DashboardProbePage(),
+        ),
       ],
       GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),
       ShellRoute(
@@ -136,6 +142,19 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           project: state.pathParameters['project']!,
                         ),
                       ),
+                      // The Dashboards view is the Home tab's second
+                      // segment (research/19 D5/D8), so it lives in the
+                      // Home branch beside Summary and search and keeps
+                      // the shell's dock. `dashboard` unset means the one
+                      // last opened, or the default team's Overview.
+                      GoRoute(
+                        path: ':project/dashboards',
+                        builder: (_, state) => DashboardPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                          dashboardId: state.uri.queryParameters['dashboard'],
+                        ),
+                      ),
                       // Search lives in the Home branch, which is where it
                       // is opened from, so it keeps the shell's dock and
                       // its paddings (research/15 §4). `kind` unset is the
@@ -164,6 +183,11 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                         builder: (_, state) => WorkItemsPage(
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
+                          // A dashboard's query card opens its query here
+                          // (research/19 D7).
+                          initialQueryId: state.uri.queryParameters['query'],
+                          initialQueryName:
+                              state.uri.queryParameters['queryName'],
                         ),
                         routes: [
                           // Before ':id': go_router matches in order and

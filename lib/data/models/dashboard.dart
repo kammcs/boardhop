@@ -284,6 +284,7 @@ class DashboardWidget extends Equatable {
     this.isEnabled = true,
     this.typeId,
     this.configurationContributionId,
+    this.builtInKind = '',
   });
 
   factory DashboardWidget.fromJson(Map<String, dynamic> json) {
@@ -323,6 +324,19 @@ class DashboardWidget extends Equatable {
   final bool isEnabled;
   final String? typeId;
   final String? configurationContributionId;
+
+  /// Boardhop's own card name for a **synthetic** widget — one this app
+  /// composed rather than read from the service, which is the Team overview
+  /// and nothing else (research/19 D9). Empty for every widget that came
+  /// off the wire, so [kind] and the hiding rules are untouched by it.
+  ///
+  /// A synthetic contributionId was the alternative and is worse: the
+  /// publisher segment of anything but `ms` is a Marketplace widget
+  /// ([WidgetKind.fromContributionId]), so `boardhop.…` would classify the
+  /// Team overview's own cards as unrenderable.
+  final String builtInKind;
+
+  bool get isBuiltIn => builtInKind.isNotEmpty;
 
   WidgetKind get kind => WidgetKind.fromContributionId(contributionId);
 
@@ -374,6 +388,7 @@ class DashboardWidget extends Equatable {
     columnSpan,
     settings,
     isEnabled,
+    builtInKind,
   ];
 }
 

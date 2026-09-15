@@ -24,6 +24,7 @@ import '../shared/reload_on_return.dart';
 import '../search/search_page.dart';
 import '../shared/widgets/ado_tile.dart';
 import '../work_items/widgets/work_item_visuals.dart';
+import 'widgets/home_view_switch.dart';
 
 /// Landing tab of a project (phase 4 of the repos plan): the project's
 /// tile and description, then what matters to the signed-in person in
@@ -244,6 +245,13 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
                 widget.project,
               ),
             ),
+          ),
+          // The pill stays rightmost so it never moves when an action
+          // appears next to it (D5: Search stays on Summary only).
+          HomeViewSwitch(
+            org: widget.org,
+            project: widget.project,
+            current: HomeView.summary,
           ),
           const SizedBox(width: Spacing.sm),
         ],

@@ -22,6 +22,28 @@ void main() {
       expect(Routes.board(account, org, project), '$base/boards');
     });
 
+    test('a dashboard card opens its saved query in the items view', () {
+      expect(
+        Routes.workItems(account, org, project, query: 'q-1'),
+        '$base/work-items?query=q-1',
+      );
+      expect(
+        Routes.workItems(
+          account,
+          org,
+          project,
+          query: 'q-1',
+          queryName: 'Open bugs',
+        ),
+        '$base/work-items?query=q-1&queryName=Open+bugs',
+      );
+      // A name without a query is not a list: the id is what selects one.
+      expect(
+        Routes.workItems(account, org, project, queryName: 'Open bugs'),
+        '$base/work-items',
+      );
+    });
+
     test('the plain sprint route is the current sprint on the default tab', () {
       expect(Routes.sprint(account, org, project), '$base/sprint');
     });

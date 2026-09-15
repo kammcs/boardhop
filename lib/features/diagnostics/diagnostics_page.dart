@@ -14,7 +14,9 @@ import '../../core/http/ado_host.dart';
 import '../../core/routes.dart';
 import '../../data/models/sprint.dart';
 import '../../data/repositories/analytics_repository.dart';
+import '../../data/repositories/dashboard_repository.dart';
 import '../../theme/theme.dart';
+import '../dashboards/widgets/registry.dart';
 import '../notifications/push_service.dart';
 
 /// Spike F1 and F2 runner (NEXT-STEPS.md steps 2 and 3).
@@ -95,6 +97,13 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           // against it. If this fails there is no burndown and no cheap
           // fallback.
           _Check('Analytics: burndown for $org/$project'),
+          // The D-B gate (research/19 D14). The Dashboard API is
+          // preview-only on every resource, and the Analytics entity sets
+          // the Team overview needs beyond `WorkItemSnapshot` had only ever
+          // been tried with the spike PAT. If either refuses, the affected
+          // cards show the D14 notice instead of content.
+          _Check('Dashboard API: dashboards in $org/$project'),
+          _Check('Analytics widget sets: work by state for $org/$project'),
         ]);
     });
 
@@ -271,6 +280,58 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           'first ${_dayLabel(first)} last ${_dayLabel(last)}';
     });
 
+    await step(11, () async {
+      final repo = DashboardRepository(client);
+      final sw = Stopwatch()..start();
+      final summaries = await repo.list(org, project, refresh: true);
+      final elapsed = sw.elapsedMilliseconds;
+      if (summaries.isEmpty) {
+        return 'token ACCEPTED by the dashboard API; '
+            '0 dashboards in $elapsed ms';
+      }
+      final first = summaries.first;
+      final teamId = first.teamId;
+      if (teamId == null || teamId.isEmpty) {
+        return 'token ACCEPTED; ${summaries.length} dashboards in $elapsed ms; '
+            'first "${first.name}" carries no groupId, so its widgets '
+            'cannot be read';
+      }
+      final full = await repo.get(org, project, teamId, first.id, refresh: true);
+      final drawn = [
+        for (final w in full.widgets)
+          if (w.isEnabled && DashboardRegistry.renders(w)) w,
+      ].length;
+      return 'token ACCEPTED by the dashboard API; '
+          '${summaries.length} dashboards in $elapsed ms; '
+          '"${full.name}" has ${full.widgets.length} widgets, '
+          'Boardhop draws $drawn';
+    });
+
+    await step(12, () async {
+      final projectJson = await client.getJson(
+        org: org,
+        path: '_apis/projects/$project',
+        apiVersion: '7.1',
+      );
+      final team = (projectJson['defaultTeam'] as Map?)?['id'] as String?;
+      if (team == null) {
+        throw AdoServerException('$project has no default team');
+      }
+      final analytics = AnalyticsRepository(client);
+      final sw = Stopwatch()..start();
+      final teamSk = await analytics.teamSk(org, project, team);
+      final rows = await analytics.workByState(
+        org,
+        project,
+        teamSk,
+        refresh: true,
+      );
+      final total = rows.fold<int>(0, (sum, r) => sum + r.count);
+      return 'token ACCEPTED by analytics.dev.azure.com for WorkItems; '
+          '${rows.length} state groups ($total items) '
+          'in ${sw.elapsedMilliseconds} ms';
+    });
+
     if (mounted) setState(() => _running = false);
   }
 
@@ -322,6 +383,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             tooltip: 'Sprint widgets probe (P-B)',
             icon: const Icon(Icons.timelapse),
             onPressed: () => context.push('/diagnostics/sprint'),
+          ),
+          IconButton(
+            tooltip: 'Dashboard widgets probe (D-B)',
+            icon: const Icon(Icons.dashboard_outlined),
+            onPressed: () => context.push('/diagnostics/dashboard'),
           ),
           IconButton(
             tooltip: 'Copy report',

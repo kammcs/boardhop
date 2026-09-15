@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../core/http/ado_exceptions.dart';
-import '../../core/util/format.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
@@ -12,6 +11,7 @@ import '../shared/account_scope.dart';
 import 'form/new_work_item_button.dart';
 import 'widgets/query_picker.dart';
 import 'work_item_detail_page.dart';
+import 'widgets/work_item_list_tile.dart';
 import 'widgets/work_item_visuals.dart';
 import 'widgets/work_view_switch.dart';
 
@@ -53,10 +53,25 @@ List<WorkItem> filterWorkItems(List<WorkItem> items, String query) {
 /// a saved query, rendered from the drift cache and refreshed on open, on
 /// pull and when the list changes.
 class WorkItemsPage extends StatefulWidget {
-  const WorkItemsPage({super.key, required this.org, required this.project});
+  const WorkItemsPage({
+    super.key,
+    required this.org,
+    required this.project,
+    this.initialQueryId,
+    this.initialQueryName,
+  });
 
   final String org;
   final String project;
+
+  /// A saved query GUID from the route (`?query=`), which is how a
+  /// dashboard's query-backed card opens its query here (research/19 D7).
+  /// Null means the page's own default list, Assigned to me.
+  final String? initialQueryId;
+
+  /// The label to show until the query tree has been read; the id is what
+  /// selects the list.
+  final String? initialQueryName;
 
   @override
   State<WorkItemsPage> createState() => _WorkItemsPageState();
@@ -84,7 +99,45 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
   @override
   void initState() {
     super.initState();
+    final queryId = widget.initialQueryId;
+    if (queryId != null && queryId.isNotEmpty) {
+      _listKey = WorkItemRepository.queryKey(queryId);
+      _listLabel = widget.initialQueryName?.trim().isNotEmpty ?? false
+          ? widget.initialQueryName!
+          : 'Saved query';
+      // Enough of a `SavedQuery` for `_refresh` to run it; the picker
+      // replaces it wholesale when the person opens the tree.
+      _query = SavedQuery(
+        id: queryId,
+        name: _listLabel,
+        path: '',
+        isFolder: false,
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
+
+  @override
+  void didUpdateWidget(WorkItemsPage old) {
+    super.didUpdateWidget(old);
+    // A second tap on a dashboard card while this page is already up: the
+    // route changed under the same State.
+    final queryId = widget.initialQueryId;
+    if (queryId == old.initialQueryId || queryId == null || queryId.isEmpty) {
+      return;
+    }
+    _select(
+      WorkItemRepository.queryKey(queryId),
+      widget.initialQueryName?.trim().isNotEmpty ?? false
+          ? widget.initialQueryName!
+          : 'Saved query',
+      query: SavedQuery(
+        id: queryId,
+        name: widget.initialQueryName ?? 'Saved query',
+        path: '',
+        isFolder: false,
+      ),
+    );
   }
 
   Future<void> _refresh() async {
@@ -398,7 +451,7 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
                     ),
                   ),
                 for (final item in items)
-                  _WorkItemTile(
+                  WorkItemListTile(
                     item: item,
                     visuals: _visuals,
                     selected: item.id == _selectedId,
@@ -409,79 +462,6 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           );
         },
       ),
-    );
-  }
-}
-
-class _WorkItemTile extends StatelessWidget {
-  const _WorkItemTile({
-    required this.item,
-    required this.visuals,
-    required this.onTap,
-    this.selected = false,
-  });
-
-  final WorkItem item;
-  final WorkItemVisuals visuals;
-  final VoidCallback onTap;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final iteration = pathLeaf(item.iterationPath);
-    return ListTile(
-      selected: selected,
-      selectedTileColor: scheme.secondaryContainer.withValues(alpha: 0.4),
-      leading: Icon(
-        visuals.typeIcon(item),
-        color: visuals.typeColor(context, item),
-      ),
-      title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: Spacing.xs),
-        // A Wrap rather than a Row: at large text scales (or with a long
-        // state name) the segments flow onto a second line instead of
-        // overflowing the tile.
-        child: Wrap(
-          spacing: Spacing.sm,
-          runSpacing: Spacing.xs,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              '${item.type} ${item.id}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                StateDot(color: visuals.stateColor(context, item)),
-                const SizedBox(width: Spacing.xs),
-                Text(item.state, style: theme.textTheme.labelMedium),
-              ],
-            ),
-            if (iteration.isNotEmpty)
-              Text(
-                iteration,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-          ],
-        ),
-      ),
-      trailing: Text(
-        relativeTime(item.changedDate),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-      onTap: onTap,
     );
   }
 }
