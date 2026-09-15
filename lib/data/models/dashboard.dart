@@ -533,7 +533,33 @@ class WidgetAggregation extends Equatable {
   }
 
   final bool isSum;
+
+  /// The field as the widget stores it: a work item **reference name**, such
+  /// as `Microsoft.VSTS.Scheduling.StoryPoints`.
   final String? field;
+
+  /// [field] as the Analytics entity names the same value.
+  ///
+  /// The widget settings carry the work item reference name, and Analytics
+  /// does not: `Microsoft.VSTS.Scheduling.StoryPoints` in an `aggregate(…
+  /// with sum as …)` is a **400 Bad Request**, which is what the client
+  /// project's Burndown and Burnup cards were showing (D-D walkthrough).
+  /// System and Microsoft fields drop their namespace; a custom field keeps
+  /// its `Custom_` prefix; anything already unqualified is passed through,
+  /// so a settings value that is an Analytics name still works.
+  String? get analyticsField {
+    final name = field?.trim();
+    if (name == null || name.isEmpty) return null;
+    final dot = name.lastIndexOf('.');
+    if (dot < 0) return name;
+    final prefix = name.substring(0, dot);
+    final leaf = name.substring(dot + 1);
+    if (leaf.isEmpty) return null;
+    if (prefix == 'System' || prefix.startsWith('Microsoft.')) return leaf;
+    // A custom field is `Custom.Foo` on the work item and `Custom_Foo` on
+    // the Analytics entity.
+    return '${prefix.replaceAll('.', '_')}_$leaf';
+  }
 
   @override
   List<Object?> get props => [isSum, field];
@@ -1131,10 +1157,8 @@ Object? parseWidgetSettings(DashboardWidget widget) => switch (widget.kind) {
   WidgetKind.workItemChart => WitChartSettings.parse(widget.settingsJson),
   WidgetKind.burndown ||
   WidgetKind.burnup => BurndownSettings.parse(widget.settingsJson),
-  WidgetKind.sprintBurndown ||
-  WidgetKind.sprintBurndownLegacy => SprintBurndownSettings.parse(
-    widget.settingsJson,
-  ),
+  WidgetKind.sprintBurndown || WidgetKind.sprintBurndownLegacy =>
+    SprintBurndownSettings.parse(widget.settingsJson),
   WidgetKind.velocity => VelocitySettings.parse(widget.settingsJson),
   WidgetKind.cumulativeFlow => CfdSettings.parse(widget.settingsJson),
   WidgetKind.cycleTime ||
@@ -1169,6 +1193,8 @@ DateTime? _date(Object? value) {
   if (text == null || text.isEmpty) return null;
   // Dates arrive as `2024-09-23` (date only) or a full timestamp; both are
   // kept in UTC so a local shift never moves a chart's first day.
-  final parsed = DateTime.tryParse(text.length == 10 ? '${text}T00:00:00Z' : text);
+  final parsed = DateTime.tryParse(
+    text.length == 10 ? '${text}T00:00:00Z' : text,
+  );
   return parsed?.toUtc();
 }

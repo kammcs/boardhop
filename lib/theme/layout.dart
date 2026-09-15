@@ -38,6 +38,108 @@ extension BreakpointContext on BuildContext {
 double axisTextScale(BuildContext context) =>
     (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, 1.6);
 
+/// A chart's y axis: a round maximum at or above the data, and the gridline
+/// interval that divides it.
+///
+/// Charts used to take `dataMax * 1.1` as the axis maximum and let fl_chart
+/// pick the interval from that, which put the headroom value itself on the
+/// axis: nine items read **9.9**, seventeen read **18.7**, a bar of two read
+/// **2.3** (D-D walkthrough). Rounding the maximum first makes every label a
+/// number the data could actually take.
+@immutable
+class ChartAxis {
+  const ChartAxis(this.max, this.interval);
+
+  /// The axis maximum: [interval] times a whole number of divisions.
+  final double max;
+
+  /// The gap between gridlines, and so between labels.
+  final double interval;
+
+  /// Whether the label at [value] is drawn.
+  ///
+  /// The topmost one is not: fl_chart centres it on the plot area's top
+  /// edge, so half of it lands in the caption above the chart. Comparing
+  /// against a half interval rather than against the maximum itself is what
+  /// makes that reliable — the generated values accumulate rounding, so a
+  /// `value >= max` test let `9.9` through whenever the last step landed an
+  /// epsilon low.
+  bool showsLabel(double value) => value >= 0 && value <= max - interval * 0.5;
+
+  /// [value] written with exactly the precision this axis needs.
+  ///
+  /// A shared one-decimal formatter printed a gridline at 0.25 as **0.3** and
+  /// the one at 0.75 as **0.8**, so the axis named numbers it was not drawing
+  /// (D-D walkthrough). Trailing zeros are trimmed, so a whole-number axis
+  /// still reads `0 2 4`, not `0.00 2.00 4.00`.
+  String label(double value) {
+    final text = value.toStringAsFixed(_decimals);
+    if (!text.contains('.')) return text;
+    return text.replaceFirst(RegExp(r'\.?0+$'), '');
+  }
+
+  /// How many decimals [interval] needs to be written exactly.
+  int get _decimals {
+    for (var d = 0; d <= 3; d++) {
+      final scaled = interval * math.pow(10, d);
+      if ((scaled - scaled.roundToDouble()).abs() < 1e-9) return d;
+    }
+    return 3;
+  }
+}
+
+/// The nice-number steps an axis may use, smallest first within a decade.
+const _axisSteps = [1.0, 2.0, 2.5, 5.0];
+
+/// A [ChartAxis] covering `0 … dataMax` in at most [ticks] divisions.
+///
+/// [integral] keeps the interval a whole number, which is what a count of
+/// work items wants: "2.5 items" is not a quantity. [strict] adds a division
+/// when the data lands exactly on the maximum, for a chart whose marks have
+/// width of their own — a scatter dot at the top would otherwise be drawn
+/// half outside the plot area.
+ChartAxis chartAxis(
+  double dataMax, {
+  int ticks = 5,
+  bool integral = false,
+  bool strict = false,
+}) {
+  if (!dataMax.isFinite || dataMax <= 0) {
+    return strict ? const ChartAxis(2, 1) : const ChartAxis(1, 1);
+  }
+  for (var power = -6; power <= 15; power++) {
+    final magnitude = math.pow(10, power).toDouble();
+    for (final mantissa in _axisSteps) {
+      final step = mantissa * magnitude;
+      if (integral && (step < 1 || step != step.roundToDouble())) continue;
+      // The epsilon keeps a maximum that is already a multiple of the step
+      // from gaining a whole empty division to floating-point noise.
+      var divisions = (dataMax / step - 1e-9).ceil();
+      if (strict && step * divisions <= dataMax + 1e-9) divisions += 1;
+      if (divisions >= 1 && divisions <= ticks) {
+        return ChartAxis(step * divisions, step);
+      }
+    }
+  }
+  return ChartAxis(dataMax, dataMax);
+}
+
+/// How many gridlines a chart of this text size can carry.
+///
+/// At xxxL the labels are half again as tall, and five of them on a card's
+/// 220 dp chart run together.
+int axisTicks(double textScale) => textScale > 1.3 ? 3 : 5;
+
+/// The padding around a chart's plot area.
+///
+/// The right side is the load-bearing one: the last x label is centred on
+/// the plot area's right edge, so without room for its own second half
+/// `15 Sep` printed as `15 Se` against the card's edge (D-D walkthrough).
+/// Half a `d MMM` label at `labelSmall` is about 16 dp, and it grows with
+/// the text.
+EdgeInsets chartInsets(double textScale) =>
+    EdgeInsets.only(top: Spacing.sm, right: Spacing.sm + 14 * textScale);
+
 /// How far a menu opened from an app bar's trailing action is nudged away
 /// from that edge.
 ///

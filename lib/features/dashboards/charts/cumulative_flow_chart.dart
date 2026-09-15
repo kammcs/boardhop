@@ -119,6 +119,7 @@ class CumulativeFlowChart extends StatelessWidget {
     for (var d = 0; d <= last; d++) {
       maxY = math.max(maxY, series.totalOn(d).toDouble());
     }
+    final axis = chartAxis(maxY, ticks: axisTicks(scale), integral: true);
     final step = math
         .max(1, (series.days.length * scale / 4).ceil())
         .toDouble();
@@ -126,15 +127,16 @@ class CumulativeFlowChart extends StatelessWidget {
     return SizedBox(
       height: height,
       child: Padding(
-        padding: const EdgeInsets.only(top: Spacing.sm, right: Spacing.sm),
+        padding: chartInsets(scale),
         child: LineChart(
           LineChartData(
             minX: 0,
             maxX: last.toDouble(),
             minY: 0,
-            maxY: maxY * 1.1,
+            maxY: axis.max,
             gridData: FlGridData(
               drawVerticalLine: false,
+              horizontalInterval: axis.interval,
               getDrawingHorizontalLine: (_) => FlLine(
                 color: scheme.outlineVariant.withValues(alpha: 0.5),
                 strokeWidth: 1,
@@ -148,17 +150,18 @@ class CumulativeFlowChart extends StatelessWidget {
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 32 * scale,
-                  getTitlesWidget: (value, meta) => value >= meta.max
-                      ? const SizedBox.shrink()
-                      : SideTitleWidget(
+                  interval: axis.interval,
+                  getTitlesWidget: (value, meta) => axis.showsLabel(value)
+                      ? SideTitleWidget(
                           meta: meta,
                           child: Text(
-                            chartNumber(value),
+                            axis.label(value),
                             style: labelStyle,
                             maxLines: 1,
                             softWrap: false,
                           ),
-                        ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
               bottomTitles: AxisTitles(
@@ -169,9 +172,11 @@ class CumulativeFlowChart extends StatelessWidget {
                   getTitlesWidget: (value, meta) {
                     final i = value.round();
                     if (i < 0 || i > last) return const SizedBox.shrink();
-                    // The final date is always drawn; an interval label
-                    // too close to it would overprint.
-                    if (value != meta.max && meta.max - value < step * 0.75) {
+                    // The final date is always drawn; an interval label too
+                    // close to it would overprint. Measured against the last
+                    // index rather than `meta.max`, which fl_chart reports
+                    // for the axis and not for the point being labelled.
+                    if (i != last && last - i < step * 0.75) {
                       return const SizedBox.shrink();
                     }
                     return SideTitleWidget(

@@ -552,8 +552,15 @@ void main() {
       expect(find.text('Completed'), findsOneWidget);
       expect(find.text('Completed late'), findsOneWidget);
       expect(find.text('Incomplete'), findsOneWidget);
-      // Eight completed and late per sprint, every sprint.
-      expect(find.text('8'), findsOneWidget);
+      // Eight completed and late per sprint, every sprint. Matched on the
+      // headline's size: since the y axis rounds to whole numbers (D-D) an
+      // axis label can read "8" as well.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && w.data == '8' && (w.style?.fontSize ?? 0) > 16,
+        ),
+        findsOneWidget,
+      );
       verify(
         () => analytics.velocity(
           org,

@@ -171,23 +171,32 @@ class SprintBurndownChart extends StatelessWidget {
       idealSpots.isEmpty ? 0.0 : idealSpots.map((s) => s.y).reduce(math.max),
     );
 
+    // A flat zero sprint would give a zero-height axis; `chartAxis` answers
+    // 0…1 for that. Story points can be halves, so the axis is only forced
+    // to whole numbers when the chart is counting items.
+    final axis = chartAxis(
+      maxY,
+      ticks: axisTicks(axisTextScale(context)),
+      integral: !showPoints && unit == 'items',
+    );
+
     final chart = LineChart(
       LineChartData(
         minX: 0,
         maxX: (days.length - 1).toDouble(),
         minY: 0,
-        // A flat zero sprint would give a zero-height axis.
-        maxY: maxY <= 0 ? 1 : maxY * 1.1,
+        maxY: axis.max,
         gridData: FlGridData(
           show: !_sparkline,
           drawVerticalLine: false,
+          horizontalInterval: axis.interval,
           getDrawingHorizontalLine: (_) => FlLine(
             color: scheme.outlineVariant.withValues(alpha: 0.5),
             strokeWidth: 1,
           ),
         ),
         borderData: FlBorderData(show: false),
-        titlesData: _titles(context),
+        titlesData: _titles(context, axis),
         rangeAnnotations: RangeAnnotations(
           verticalRangeAnnotations: _nonWorkingBands(scheme),
         ),
@@ -233,10 +242,9 @@ class SprintBurndownChart extends StatelessWidget {
         child: SizedBox(
           height: height ?? (_sparkline ? 48 : 220),
           child: Padding(
-            padding: EdgeInsets.only(
-              top: _sparkline ? 0 : Spacing.sm,
-              right: _sparkline ? 0 : Spacing.sm,
-            ),
+            padding: _sparkline
+                ? EdgeInsets.zero
+                : chartInsets(axisTextScale(context)),
             child: chart,
           ),
         ),
@@ -261,7 +269,7 @@ class SprintBurndownChart extends StatelessWidget {
   static bool _weekend(DateTime day) =>
       day.weekday == DateTime.saturday || day.weekday == DateTime.sunday;
 
-  FlTitlesData _titles(BuildContext context) {
+  FlTitlesData _titles(BuildContext context, ChartAxis axis) {
     if (_sparkline) return const FlTitlesData(show: false);
     final theme = Theme.of(context);
     final style = theme.textTheme.labelSmall?.copyWith(
@@ -279,17 +287,18 @@ class SprintBurndownChart extends StatelessWidget {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 36 * scale,
-          getTitlesWidget: (value, meta) => value >= meta.max
-              ? const SizedBox.shrink()
-              : SideTitleWidget(
+          interval: axis.interval,
+          getTitlesWidget: (value, meta) => axis.showsLabel(value)
+              ? SideTitleWidget(
                   meta: meta,
                   child: Text(
-                    _number(value),
+                    axis.label(value),
                     style: style,
                     maxLines: 1,
                     softWrap: false,
                   ),
-                ),
+                )
+              : const SizedBox.shrink(),
         ),
       ),
       bottomTitles: AxisTitles(
@@ -301,8 +310,11 @@ class SprintBurndownChart extends StatelessWidget {
             final i = value.round();
             if (i < 0 || i >= days.length) return const SizedBox.shrink();
             // The chart always labels its last day; an interval label too
-            // close to it would overprint.
-            if (value != meta.max && meta.max - value < step * 0.75) {
+            // close to it would overprint. Measured against the last index
+            // rather than `meta.max`, which fl_chart reports for the axis
+            // and not for the point being labelled.
+            final last = days.length - 1;
+            if (i != last && last - i < step * 0.75) {
               return const SizedBox.shrink();
             }
             return SideTitleWidget(

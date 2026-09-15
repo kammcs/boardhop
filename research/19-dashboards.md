@@ -203,3 +203,107 @@ Wiki (the third segment), dashboard writes (create, favorite, reorder), `refresh
 Release and Test widgets, Embedded Webpage, Marketplace widgets, Sprint Capacity (no capacity data
 anywhere), Chart for Work Items trend types, the Query Results widget's column choice on phones,
 a Boardhop-authored phone layout per dashboard, PNG charts.
+
+## 7. What landed (2026-09-15)
+
+Built in dispatcher mode over four phases, all on the same day.
+
+**D-A — the data layer.** `lib/data/models/dashboard.dart` (`Dashboard`,
+`DashboardSummary`, `DashboardWidget`, `WidgetKind` from the contributionId's
+last segment, and a tolerant typed settings parser per kind — a shape it does
+not understand returns null and the widget is hidden, D10),
+`lib/features/dashboards/dashboard_layout.dart` (the pure D4 grid mapper),
+`DashboardRepository` in `AccountDeps` (list, get by id with the team segment,
+favorites, widget-type catalog; every read cached and cache-first), eight typed
+Analytics queries on `AnalyticsRepository` (`teamBurndown`, `velocity`,
+`cumulativeFlow`, `cycleAndLeadTime`, `workByState`, `pipelineOutcomes`,
+`requirementTypes`, `teamSk`), and `DashboardPrefs`. Spike **w36** wrote one
+widget of every previously unseen kind to the scratch Overview and read the
+settings back byte for byte; the three shapes only ever seen on a client
+dashboard are pinned by tests from the redacted s58 output.
+
+**D-B — the pill, the page, the picker and the tier-1 cards.**
+`HomeViewSwitch` (`HomeView.summary | dashboards`, icon-only on a phone, shaped
+for Wiki as the third segment, D8/D13), the `':project/dashboards'` route in the
+Home branch, `DashboardPage` (title-as-picker, cache-first open with an
+"Updated N min ago" line, pull-to-refresh that refetches the dashboard and bumps
+every card through `DashboardReloadScope`, the D1 Team-overview offer on an
+empty dashboard, the D10 footer line that opens the web dashboard), the picker
+sheet (grouped by team, favorites starred read-only, Team overview last), the
+card frame with its four states (skeleton, content, inline error above whatever
+was cached, D14 Analytics notice), and ten cards: query tile (colour rules),
+query results, Assigned to me, pull requests, team members, markdown, the five
+link widgets, build history, sprint overview and code tile. Three supporting
+changes outside the feature: `WorkItemListTile` lifted out of
+`work_items_page.dart`, `Routes.workItems` gained `query`/`queryName` (D7 needs
+it), and `DashboardWidget.builtInKind` so the synthetic Team overview is not
+classified as a Marketplace widget. Diagnostics gained `/diagnostics/dashboard`
+and the "Dashboard API" and "Analytics widget sets" checks — and the first of
+those found the app's token **refused** (`401 TF400813`) for want of
+`vso.dashboards`, which Kelly granted and puremedia consented the same day
+(research/09).
+
+**D-C — the charts.** `lib/features/dashboards/charts/` holds the drawing
+layer: a sealed `ChartPayload` per chart carrying the data, the chart, its
+legend, the series as a list of numbers and the sentence a screen reader hears,
+so a card and the focus view draw the same thing. `VelocityChart` (planned
+against completed/late/incomplete, grouped bars), `CumulativeFlowChart` (stacked
+areas as cumulative lines with `belowBarData`, at most six columns then Other),
+`CycleTimeChart` (a `ScatterChart` with the rolling average stacked over it),
+`WorkStateBars` and `RunOutcomeBars`. Seven chart cards on the D-B frame read
+Analytics cache-first and show the D14 notice on a refusal.
+`Routes.chartFocus` + `':project/chart/:widget'` outside the shell open
+`ChartFocusPage` (D7/D15). `BoardhopColors.chartSeries` is the categorical ramp;
+`axisTextScale` sizes every chart's reserved axis space.
+
+**D-D — acceptance.** iPhone 17 and iPad Pro 13" simulators, debug builds, both
+themes, xxxL, portrait and landscape, on the scratch project and (read-only) on
+the client projects. The `vso.dashboards` grant works: the token was accepted by
+the Dashboard API on the first call, with no fresh sign-in. Every §5 item passes
+except the two that cannot be shown on this Mac. Five defects were found and
+fixed, the significant one being that **the Burndown and Burnup widgets were a
+400 on any real dashboard**: the settings carry the work item reference name
+(`Microsoft.VSTS.Scheduling.StoryPoints`) and Analytics wants the entity's own
+`StoryPoints`, so `WidgetAggregation.analyticsField` now maps between them. The
+scratch project could never have shown this — w36's Burndown stores no
+aggregation and so counted items. The other four are chart cosmetics that all
+came back to one cause: the axis maximum was `dataMax × 1.1`, which put the
+headroom value itself on the axis (**9.9** for nine items, **18.7** for
+seventeen, **81.1** on the client velocity) and, being centred on the plot
+area's top edge, half of it landed in the card's caption. `chartAxis` in
+`lib/theme/layout.dart` now rounds the maximum to a nice number and returns the
+interval with it, `ChartAxis.showsLabel` drops the top label against half an
+interval (no epsilon can defeat that), `ChartAxis.label` formats with exactly
+the precision the interval needs, and `chartInsets` leaves the last x label room
+for its own half. The four charts including `SprintBurndownChart`, shared with
+the Sprint page, use it.
+
+**Proven on scratch:** all 13 w36 widgets parse, 12 render and the thirteenth
+(Chart for Work Items) is hidden behind "1 widget not shown in Boardhop"; every
+D7 tap drills where it should; the Team overview draws all six cards; the focus
+view follows the orientation; the last-opened dashboard survives a cold restart
+and the `?dashboard=` deep link overrides it. **Proven read-only on the client
+projects:** the empty-dashboard offer and its Team overview, and a populated
+10-widget Overview where 8 render and the two Chart for Work Items widgets are
+hidden behind the footer count.
+
+**Tests:** the feature's own files run **191** — `test/data/dashboard_models_
+test.dart`, `dashboard_layout_test.dart`, `dashboard_repository_test.dart`,
+`test/features/dashboard_prefs_test.dart`, `dashboard_page_test.dart`,
+`dashboard_cards_test.dart`, `dashboard_chart_cards_test.dart`,
+`chart_focus_page_test.dart`, `home_view_switch_test.dart`, plus the `chartAxis`
+group in `test/theme/layout_test.dart`. D-D added 14 of them (ten for
+`chartAxis`, four for `analyticsField`). Whole suite **1313 green**,
+`flutter analyze` clean. Walkthrough:
+`research/walkthroughs/2026-09-15-dashboards.md`.
+
+**Open:** favorites-first ordering in the picker is test-only (nothing in
+puremedia is favorited and every project has one team with one dashboard);
+`project`-scoped dashboards have still never been seen anywhere; the D14
+Analytics-refused notice is still test-only because the host accepted every
+call; a chart card opens its focus view from the title rather than the plot
+area, because fl_chart owns the touch inside the chart; the packed grid leaves
+half-empty rows on a dashboard whose spans were never laid out for two columns
+(D4 as specified, but it reads sparse); offline stays covered by widget tests;
+`tool/shot-ios.sh` double-rotates landscape thumbnails on iOS 26.5, where
+`simctl` already returns the rotated frame.

@@ -93,7 +93,9 @@ class CycleTimeChart extends StatelessWidget {
     for (final p in sorted) {
       maxY = math.max(maxY, p.days);
     }
-    maxY *= 1.15;
+    // Days are a measurement, so half-days on the axis are meaningful.
+    final axis = chartAxis(maxY, ticks: axisTicks(scale), strict: true);
+    maxY = axis.max;
 
     final average = rollingAverage([for (final p in sorted) p.days], window);
     final trend = <FlSpot>[
@@ -108,11 +110,12 @@ class CycleTimeChart extends StatelessWidget {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 32 * scale,
-          getTitlesWidget: (value, meta) => visible && value < meta.max
+          interval: axis.interval,
+          getTitlesWidget: (value, meta) => visible && axis.showsLabel(value)
               ? SideTitleWidget(
                   meta: meta,
                   child: Text(
-                    chartNumber(value),
+                    axis.label(value),
                     style: labelStyle,
                     maxLines: 1,
                     softWrap: false,
@@ -129,7 +132,9 @@ class CycleTimeChart extends StatelessWidget {
           getTitlesWidget: (value, meta) {
             if (!visible) return const SizedBox.shrink();
             final step = math.max(1, (maxX * scale / 4).ceil()).toDouble();
-            if (value != meta.max && meta.max - value < step * 0.75) {
+            // Measured against the last day rather than `meta.max`, which
+            // fl_chart reports for the axis and not for the labelled point.
+            if (value != maxX && maxX - value < step * 0.75) {
               return const SizedBox.shrink();
             }
             final day = first.add(Duration(days: value.round()));
@@ -149,6 +154,7 @@ class CycleTimeChart extends StatelessWidget {
 
     final grid = FlGridData(
       drawVerticalLine: false,
+      horizontalInterval: axis.interval,
       getDrawingHorizontalLine: (_) => FlLine(
         color: scheme.outlineVariant.withValues(alpha: 0.5),
         strokeWidth: 1,
@@ -158,7 +164,7 @@ class CycleTimeChart extends StatelessWidget {
     return SizedBox(
       height: height,
       child: Padding(
-        padding: const EdgeInsets.only(top: Spacing.sm, right: Spacing.sm),
+        padding: chartInsets(scale),
         child: Stack(
           children: [
             Positioned.fill(

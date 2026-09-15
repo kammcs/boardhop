@@ -56,7 +56,10 @@ class BurndownCard extends StatefulWidget {
     // `aggregation` 1 is a sum of the named field (Story Points on every
     // dashboard seen); 0, and an absent aggregation, count work items.
     final sum = settings.aggregation?.isSum ?? false;
-    final field = settings.aggregation?.field ?? 'StoryPoints';
+    // The Analytics name, not the work item reference name the settings
+    // carry: `Microsoft.VSTS.Scheduling.StoryPoints` in the `aggregate` is a
+    // 400 (D-D walkthrough).
+    final field = settings.aggregation?.analyticsField ?? 'StoryPoints';
     final days = await deps.analytics.teamBurndown(
       args.org,
       args.project,

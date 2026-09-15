@@ -72,18 +72,25 @@ class VelocityChart extends StatelessWidget {
     // Two bars per group, and the group has to stay readable at six
     // iterations on a phone.
     final barWidth = iterations.length > 6 ? 6.0 : 10.0;
+    // Story points can be halves; a count of work items cannot.
+    final axis = chartAxis(
+      maxY,
+      ticks: axisTicks(scale),
+      integral: !useStoryPoints,
+    );
 
     return SizedBox(
       height: height,
       child: Padding(
-        padding: const EdgeInsets.only(top: Spacing.sm, right: Spacing.sm),
+        padding: chartInsets(scale),
         child: BarChart(
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
-            maxY: maxY * 1.15,
+            maxY: axis.max,
             minY: 0,
             gridData: FlGridData(
               drawVerticalLine: false,
+              horizontalInterval: axis.interval,
               getDrawingHorizontalLine: (_) => FlLine(
                 color: scheme.outlineVariant.withValues(alpha: 0.5),
                 strokeWidth: 1,
@@ -97,17 +104,18 @@ class VelocityChart extends StatelessWidget {
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: 32 * scale,
-                  getTitlesWidget: (value, meta) => value >= meta.max
-                      ? const SizedBox.shrink()
-                      : SideTitleWidget(
+                  interval: axis.interval,
+                  getTitlesWidget: (value, meta) => axis.showsLabel(value)
+                      ? SideTitleWidget(
                           meta: meta,
                           child: Text(
-                            chartNumber(value),
+                            axis.label(value),
                             style: labelStyle,
                             maxLines: 1,
                             softWrap: false,
                           ),
-                        ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ),
               bottomTitles: AxisTitles(

@@ -377,6 +377,11 @@ void main() {
       expect(s!.team?.teamId, '22222222-2222-2222-2222-222222222222');
       expect(s.aggregation?.isSum, isTrue);
       expect(s.aggregation?.field, 'Microsoft.VSTS.Scheduling.StoryPoints');
+      // Analytics names the same value without the namespace. Sending the
+      // reference name into an `aggregate(… with sum as …)` is a 400, which
+      // is what the client project's Burndown and Burnup cards showed
+      // before D-D.
+      expect(s.aggregation?.analyticsField, 'StoryPoints');
       expect(s.workItemTypeFilter?.isBacklogCategory, isTrue);
       expect(s.workItemTypeFilter?.settings, 'Microsoft.RequirementCategory');
       expect(s.fieldFilters.single.fieldName, 'System.IterationPath');
@@ -659,6 +664,41 @@ void main() {
       expect(
         DashboardWidgetType.fromJson(t.toJson()).contributionId,
         t.contributionId,
+      );
+    });
+  });
+
+  group('WidgetAggregation.analyticsField', () {
+    WidgetAggregation of(String field) =>
+        WidgetAggregation.parse({'identifier': 1, 'settings': field})!;
+
+    test('drops the namespace of a Microsoft or System field', () {
+      expect(
+        of('Microsoft.VSTS.Scheduling.StoryPoints').analyticsField,
+        'StoryPoints',
+      );
+      expect(of('Microsoft.VSTS.Scheduling.Effort').analyticsField, 'Effort');
+      expect(
+        of('Microsoft.VSTS.Scheduling.RemainingWork').analyticsField,
+        'RemainingWork',
+      );
+      expect(of('System.Id').analyticsField, 'Id');
+    });
+
+    test('passes an already unqualified name through', () {
+      expect(of('StoryPoints').analyticsField, 'StoryPoints');
+    });
+
+    test('a custom field keeps its prefix, joined the Analytics way', () {
+      expect(of('Custom.BusinessValue').analyticsField, 'Custom_BusinessValue');
+    });
+
+    test('nothing usable is null', () {
+      expect(of('   ').analyticsField, isNull);
+      expect(of('Custom.').analyticsField, isNull);
+      expect(
+        WidgetAggregation.parse({'identifier': 0})?.analyticsField,
+        isNull,
       );
     });
   });
