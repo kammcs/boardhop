@@ -11,6 +11,8 @@ import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_markdown.dart';
 import '../../shared/mention/mention_source.dart';
+import '../../wiki/wiki_page_source.dart';
+import '../../wiki/widgets/wiki_page_picker_sheet.dart';
 import '../../work_items/form/controls/attachment_picker.dart';
 import '../../work_items/form/controls/attachments_section.dart'
     show AttachmentSource;
@@ -33,6 +35,7 @@ class ThreadCard extends StatefulWidget {
     this.mentionNames = const {},
     this.attachments,
     this.uploads,
+    this.wikiPages,
     this.offline = false,
     this.pick = pickAttachment,
     this.onOpenMention,
@@ -73,6 +76,10 @@ class ThreadCard extends StatefulWidget {
   /// there. Null leaves no attach button (research/17 §4).
   final AttachmentSource? uploads;
 
+  /// The project's wikis, for the reply box's book button. Null leaves no
+  /// button (research/20 K12).
+  final WikiPageSource? wikiPages;
+
   /// The page's last request could not reach the service (decision T6).
   final bool offline;
 
@@ -89,6 +96,10 @@ class ThreadCard extends StatefulWidget {
 class _ThreadCardState extends State<ThreadCard>
     with WidgetsBindingObserver, ComposerAttachments<ThreadCard> {
   final _controller = MentionController();
+
+  /// Owned here so the wiki picker can give the focus back to the reply
+  /// field after a page is inserted (K12).
+  final _focus = FocusNode();
 
   @override
   AttachmentSource? get attachmentSource => widget.uploads;
@@ -121,6 +132,7 @@ class _ThreadCardState extends State<ThreadCard>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -343,6 +355,7 @@ class _ThreadCardState extends State<ThreadCard>
                       MentionField(
                         controller: _controller,
                         source: widget.mentions,
+                        focusNode: _focus,
                         autofocus: true,
                         minLines: 1,
                         maxLines: 5,
@@ -379,6 +392,13 @@ class _ThreadCardState extends State<ThreadCard>
                         children: [
                           // At the start of the row, so it does not compete
                           // with the two text actions (a2 §3.1).
+                          if (widget.wikiPages != null)
+                            WikiPageButton(
+                              source: widget.wikiPages!,
+                              controller: _controller,
+                              focusNode: _focus,
+                              enabled: !_busy,
+                            ),
                           if (canAttach) attachButton(busy: _busy),
                           TextButton(
                             onPressed: _busy

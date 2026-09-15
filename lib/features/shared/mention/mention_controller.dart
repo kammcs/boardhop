@@ -254,6 +254,33 @@ class MentionController extends TextEditingController {
     _reassertCaret(caret, updated);
   }
 
+  /// Inserts plain text at the caret, replacing the selection.
+  ///
+  /// Nothing about it becomes a token: the wiki picker inserts an ordinary
+  /// `[Page title](url)` Markdown link (K12), and [toWire] must leave it
+  /// exactly as it is. The tokens already in the text shift the way they
+  /// would under a hand edit of the same shape.
+  void insertPlain(String inserted) {
+    if (inserted.isEmpty) return;
+    final source = text;
+    final range = selection;
+    final start = range.isValid
+        ? range.start.clamp(0, source.length)
+        : source.length;
+    final end = range.isValid ? range.end.clamp(start, source.length) : start;
+    final updated = source.replaceRange(start, end, inserted);
+    final caret = start + inserted.length;
+    _tokens = _rederive(_tokens, source, updated);
+    _setRaw(
+      TextEditingValue(
+        text: updated,
+        selection: TextSelection.collapsed(offset: caret),
+        composing: TextRange.empty,
+      ),
+    );
+    _reassertCaret(caret, updated);
+  }
+
   /// The text as Azure DevOps should store it: every person token becomes
   /// `@<guid>` (or the anchor), artifacts keep their plain `#123` / `!456`
   /// because the service links those itself (research/16 §1).

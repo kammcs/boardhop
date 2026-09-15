@@ -13,6 +13,8 @@ import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_source.dart';
+import '../../wiki/wiki_page_source.dart';
+import '../../wiki/widgets/wiki_page_picker_sheet.dart';
 import '../../work_items/form/controls/attachment_picker.dart';
 import '../../work_items/form/controls/attachments_section.dart'
     show AttachmentSource;
@@ -43,6 +45,7 @@ class DiffView extends StatefulWidget {
     this.mentionNames = const {},
     this.attachments,
     this.uploads,
+    this.wikiPages,
     this.offline = false,
     this.pick = pickAttachment,
     this.onOpenMention,
@@ -89,6 +92,10 @@ class DiffView extends StatefulWidget {
   /// on Send — the write side of [attachments]. Null leaves no attach
   /// button on either.
   final AttachmentSource? uploads;
+
+  /// The project's wikis, for the book button in the reply and line-comment
+  /// composers (research/20 K12).
+  final WikiPageSource? wikiPages;
 
   /// The page's last request could not reach the service (decision T6).
   final bool offline;
@@ -272,6 +279,7 @@ class _DiffViewState extends State<DiffView> {
           mentionNames: widget.mentionNames,
           attachments: widget.attachments,
           uploads: widget.uploads,
+          wikiPages: widget.wikiPages,
           offline: widget.offline,
           pick: widget.pick,
           onOpenMention: widget.onOpenMention,
@@ -294,6 +302,7 @@ class _DiffViewState extends State<DiffView> {
           posting: widget.posting,
           mentions: widget.mentions,
           attachments: widget.uploads,
+          wikiPages: widget.wikiPages,
           offline: widget.offline,
           pick: widget.pick,
           onCancel: widget.onCancelComposer,
@@ -443,6 +452,7 @@ class _ThreadView extends StatelessWidget {
     this.mentionNames = const {},
     this.attachments,
     this.uploads,
+    this.wikiPages,
     this.offline = false,
     this.pick = pickAttachment,
     this.onOpenMention,
@@ -462,6 +472,7 @@ class _ThreadView extends StatelessWidget {
 
   /// Where a file picked into this thread's reply box is uploaded.
   final AttachmentSource? uploads;
+  final WikiPageSource? wikiPages;
   final bool offline;
   final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
   final void Function(MentionKind kind, String id)? onOpenMention;
@@ -501,6 +512,7 @@ class _ThreadView extends StatelessWidget {
               mentionNames: mentionNames,
               attachments: attachments,
               uploads: uploads,
+              wikiPages: wikiPages,
               offline: offline,
               pick: pick,
               onOpenMention: onOpenMention,
@@ -527,6 +539,7 @@ class _ComposerView extends StatefulWidget {
     required this.onPost,
     this.mentions,
     this.attachments,
+    this.wikiPages,
     this.offline = false,
     this.pick = pickAttachment,
   });
@@ -540,6 +553,9 @@ class _ComposerView extends StatefulWidget {
 
   /// Where a file picked into this composer is uploaded on Post.
   final AttachmentSource? attachments;
+
+  /// The project's wikis, for the book button (research/20 K12).
+  final WikiPageSource? wikiPages;
   final bool offline;
   final Future<PickedAttachment?> Function(AttachmentPickSource) pick;
   final VoidCallback? onCancel;
@@ -552,6 +568,9 @@ class _ComposerView extends StatefulWidget {
 class _ComposerViewState extends State<_ComposerView>
     with ComposerAttachments<_ComposerView> {
   final _controller = MentionController();
+
+  /// Owned here so the wiki picker can give the focus back (K12).
+  final _focus = FocusNode();
 
   @override
   AttachmentSource? get attachmentSource => widget.attachments;
@@ -582,6 +601,7 @@ class _ComposerViewState extends State<_ComposerView>
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -620,6 +640,7 @@ class _ComposerViewState extends State<_ComposerView>
                   MentionField(
                     controller: _controller,
                     source: widget.mentions,
+                    focusNode: _focus,
                     autofocus: true,
                     maxLines: 5,
                     minLines: 2,
@@ -636,6 +657,13 @@ class _ComposerViewState extends State<_ComposerView>
                     children: [
                       // The leading edge of the button row, so Post stays
                       // the rightmost control (a2 §3.1).
+                      if (widget.wikiPages != null)
+                        WikiPageButton(
+                          source: widget.wikiPages!,
+                          controller: _controller,
+                          focusNode: _focus,
+                          enabled: !_busy,
+                        ),
                       if (canAttach) attachButton(busy: _busy),
                       const Spacer(),
                       TextButton(

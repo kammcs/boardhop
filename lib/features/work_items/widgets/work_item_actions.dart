@@ -9,6 +9,8 @@ import '../../shared/mention/mention_controller.dart';
 import '../../shared/mention/mention_field.dart';
 import '../../shared/mention/mention_hint.dart';
 import '../../shared/mention/mention_source.dart';
+import '../../wiki/wiki_page_source.dart';
+import '../../wiki/widgets/wiki_page_picker_sheet.dart';
 import '../form/controls/attachment_picker.dart';
 import '../form/controls/attachments_section.dart' show AttachmentSource;
 import 'work_item_visuals.dart';
@@ -261,6 +263,7 @@ class CommentComposer extends StatefulWidget {
     this.busy = false,
     this.mentions,
     this.attachments,
+    this.wikiPages,
     this.offline = false,
     this.onAttachmentsDropped,
     this.pick = pickAttachment,
@@ -277,6 +280,10 @@ class CommentComposer extends StatefulWidget {
   /// every host that has not been wired passes — leaves no attach button
   /// at all (research/17 §4).
   final AttachmentSource? attachments;
+
+  /// The project's wikis, for the book button beside attach. Null — what a
+  /// host with no wiki in scope passes — leaves no button (research/20 K12).
+  final WikiPageSource? wikiPages;
 
   /// The host's last request could not reach the service: attaching is off
   /// with the reason in the tooltip (decision T6).
@@ -298,6 +305,10 @@ class CommentComposer extends StatefulWidget {
 class _CommentComposerState extends State<CommentComposer>
     with ComposerAttachments<CommentComposer> {
   final _controller = MentionController();
+
+  /// Owned here so the picker can give the focus back to the field after a
+  /// page is inserted (K12).
+  final _focus = FocusNode();
   bool _hasText = false;
 
   @override
@@ -330,6 +341,7 @@ class _CommentComposerState extends State<CommentComposer>
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -395,6 +407,7 @@ class _CommentComposerState extends State<CommentComposer>
                     child: MentionField(
                       controller: _controller,
                       source: widget.mentions,
+                      focusNode: _focus,
                       minLines: 1,
                       maxLines: 5,
                       textInputAction: TextInputAction.newline,
@@ -407,6 +420,13 @@ class _CommentComposerState extends State<CommentComposer>
                   ),
                   // Left of Send, so Send stays the rightmost, thumb-
                   // reachable control (DESIGN §6).
+                  if (widget.wikiPages != null)
+                    WikiPageButton(
+                      source: widget.wikiPages!,
+                      controller: _controller,
+                      focusNode: _focus,
+                      enabled: !_busy,
+                    ),
                   if (canAttach) attachButton(busy: _busy),
                   const SizedBox(width: Spacing.xs),
                   IconButton.filled(

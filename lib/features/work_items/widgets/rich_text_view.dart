@@ -8,6 +8,7 @@ import '../../shared/attachments/attachment_links.dart';
 import '../../shared/attachments/inline_attachments.dart';
 import '../../shared/mention/mention_markdown.dart';
 import '../../shared/mention/mention_style.dart';
+import '../../wiki/wiki_link_open.dart';
 
 /// Renders a work item long-text field or a comment body. HTML goes through
 /// `flutter_widget_from_html_core` with attachment images fetched with the
@@ -234,6 +235,9 @@ class _AuthedWidgetFactory extends WidgetFactory {
       await openInlineAttachment(host, full, attachments);
       return true;
     }
+    // A wiki URL pasted into a description or a comment opens the in-app
+    // reader (research/20 K5); everything else keeps going to the browser.
+    if (host.mounted && openWikiLink(host, url)) return true;
     return super.onTapUrl(url);
   }
 

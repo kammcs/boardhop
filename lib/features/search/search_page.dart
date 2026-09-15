@@ -18,6 +18,7 @@ import '../../theme/theme.dart';
 import '../pull_requests/widgets/pull_request_tile.dart';
 import '../repos/widgets/code_hit_list.dart';
 import '../shared/account_scope.dart';
+import 'widgets/wiki_hit_tile.dart';
 import 'widgets/work_item_hit_tile.dart';
 
 /// Where a search looks (decision D1): the project the page was opened
@@ -43,9 +44,8 @@ enum SearchKind {
   code('code', 'Code', Icons.code),
   pullRequests('pr', 'Pull requests', Icons.call_merge),
 
-  /// Reserved by W-A so `SearchRepository.searchWiki` has a kind to be
-  /// keyed and routed by; the section that runs it is built in W-D
-  /// (research/20 §4.2), and until then this kind draws nothing.
+  /// The fourth grouped section (research/20 K4): wiki pages of the
+  /// project, or of the whole organization in the All scope.
   wiki('wiki', 'Wiki', Icons.menu_book_outlined);
 
   const SearchKind(this.wire, this.label, this.icon);
@@ -193,8 +193,6 @@ class _SearchPageState extends State<SearchPage> {
   final _code = _Slice<CodeSearchResults>();
   final _pullRequests = _Slice<SearchResults<PullRequestSearchHit>>();
 
-  /// Reserved for the W-D wiki section (research/20 K4): the slice exists so
-  /// `SearchKind.wiki` has one, and nothing fills it yet.
   final _wiki = _Slice<SearchResults<WikiSearchHit>>();
 
   @override
@@ -253,6 +251,7 @@ class _SearchPageState extends State<SearchPage> {
         _workItems.reset();
         _code.reset();
         _pullRequests.reset();
+        _wiki.reset();
       });
       return;
     }
@@ -301,6 +300,7 @@ class _SearchPageState extends State<SearchPage> {
       _workItems.reset();
       _code.reset();
       _pullRequests.reset();
+      _wiki.reset();
       _facets = SearchFacets.empty;
     });
     _debounce?.cancel();
@@ -346,6 +346,7 @@ class _SearchPageState extends State<SearchPage> {
         SearchKind.workItems: _workItems,
         SearchKind.code: _code,
         SearchKind.pullRequests: _pullRequests,
+        SearchKind.wiki: _wiki,
       }.entries) {
         entry.value.error = null;
         entry.value.offline = false;
@@ -365,6 +366,7 @@ class _SearchPageState extends State<SearchPage> {
       if (_shows(SearchKind.workItems)) _runWorkItems(seq, term, force: force),
       if (_shows(SearchKind.code)) _runCode(seq, term, force: force),
       if (_shows(SearchKind.pullRequests)) _runPullRequests(seq, term),
+      if (_shows(SearchKind.wiki)) _runWiki(seq, term, force: force),
     ]);
   }
 
@@ -493,6 +495,48 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  /// `POST wikisearchresults`, cached copy first (research/20 K4). A 404
+  /// from the search host is the Code Search extension missing, which the
+  /// repository turns into [CodeSearchUnavailable] and its message says.
+  Future<void> _runWiki(int seq, String term, {bool force = false}) async {
+    final repository = _repository;
+    if (!force) {
+      final cached = await repository.cachedWiki(
+        widget.org,
+        project: _projectFilter,
+        text: term,
+      );
+      if (cached != null) {
+        _apply(seq, () {
+          _wiki.value = cached.value;
+          _wiki.cachedAt = cached.fetchedAt;
+        });
+      }
+    }
+    try {
+      final results = await repository.searchWiki(
+        widget.org,
+        project: _projectFilter,
+        text: term,
+      );
+      _apply(seq, () {
+        _wiki.value = results;
+        _wiki.cachedAt = null;
+        _wiki.offline = false;
+        _wiki.error = null;
+      });
+    } on AdoAuthException catch (e) {
+      _authRequired(e);
+    } on AdoNetworkException catch (e) {
+      _offline(seq, _wiki, e);
+    } on AdoException catch (e) {
+      // CodeSearchUnavailable carries its own message about the extension.
+      _apply(seq, () => _wiki.error = e.message);
+    } finally {
+      _apply(seq, () => _wiki.loading = false);
+    }
+  }
+
   void _offline(int seq, _Slice<Object?> slice, AdoNetworkException e) =>
       _apply(seq, () {
         if (slice.value == null) {
@@ -523,6 +567,8 @@ class _SearchPageState extends State<SearchPage> {
     } else if (kind == SearchKind.code) {
       final have = _code.value;
       if (have != null && have.hits.length < have.count) _more();
+    } else if (kind == SearchKind.wiki && (_wiki.value?.hasMore ?? false)) {
+      _more();
     }
   }
 
@@ -576,6 +622,24 @@ class _SearchPageState extends State<SearchPage> {
             infoCode: next.infoCode,
           );
         });
+      } else if (kind == SearchKind.wiki) {
+        final have = _wiki.value;
+        if (have == null) return;
+        final next = await repository.searchWiki(
+          widget.org,
+          project: _projectFilter,
+          text: _query,
+          skip: have.skip + have.items.length,
+        );
+        if (!_current(seq)) return;
+        setState(() {
+          _wiki.value = SearchResults<WikiSearchHit>(
+            items: [...have.items, ...next.items],
+            total: next.total,
+            facets: have.facets,
+            skip: have.skip,
+          );
+        });
       }
     } on AdoAuthException catch (e) {
       _authRequired(e);
@@ -584,6 +648,8 @@ class _SearchPageState extends State<SearchPage> {
         setState(() {
           if (kind == SearchKind.workItems) {
             _workItems.error = e.message;
+          } else if (kind == SearchKind.wiki) {
+            _wiki.error = e.message;
           } else {
             _code.error = e.message;
           }
@@ -626,6 +692,22 @@ class _SearchPageState extends State<SearchPage> {
     query: _query,
   );
 
+  /// Opens the page by its wiki id and page path. An org-wide hit carries
+  /// its own project GUID, so it opens in the project it lives in rather
+  /// than the one being searched from (K4).
+  void _openWiki(WikiSearchHit hit) => context.push(
+    Routes.wikiPage(
+      AccountScope.of(context),
+      widget.org,
+      hit.projectId.isNotEmpty
+          ? hit.projectId
+          : (hit.projectName.isEmpty ? widget.project : hit.projectName),
+      hit.wikiId,
+      path: hit.pagePath,
+      version: hit.version.isEmpty ? null : hit.version,
+    ),
+  );
+
   void _openPullRequest(PullRequestSearchHit hit) => context.push(
     Routes.pullRequest(
       AccountScope.of(context),
@@ -651,7 +733,7 @@ class _SearchPageState extends State<SearchPage> {
           onChanged: _onChanged,
           onSubmitted: (text) => _run(text),
           decoration: InputDecoration(
-            hintText: 'Search work items, code, pull requests',
+            hintText: 'Search work items, code, pull requests, wiki',
             hintMaxLines: 1,
             isDense: true,
             suffixIcon: _controller.text.isEmpty
@@ -735,7 +817,8 @@ class _SearchPageState extends State<SearchPage> {
         _pending ||
         _workItems.loading ||
         _code.loading ||
-        _pullRequests.loading;
+        _pullRequests.loading ||
+        _wiki.loading;
     // Every row of this list carries a key. The list's children come and go
     // — the progress bar at the top most of all — and a `ListView` whose
     // children have no keys reuses its elements by position, so one row
@@ -776,7 +859,7 @@ class _SearchPageState extends State<SearchPage> {
         Padding(
           padding: const EdgeInsets.all(Spacing.xl),
           child: Text(
-            'Search work items, code and pull requests in '
+            'Search work items, code, pull requests and wiki pages in '
             '${widget.project}. Switch to All to search every project.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -841,6 +924,7 @@ class _SearchPageState extends State<SearchPage> {
     final workItems = _workItems.value;
     final code = _code.value;
     final pullRequests = _pullRequests.value;
+    final wiki = _wiki.value;
     // Keyed by kind, not by position: see [_body].
     Widget keyed(SearchKind kind, Widget child) => KeyedSubtree(
       key: ValueKey('search-section-${kind.wire}'),
@@ -904,6 +988,26 @@ class _SearchPageState extends State<SearchPage> {
                 pr: hit.pullRequest,
                 showProject: _scope == SearchScope.org,
                 onTap: () => _openPullRequest(hit),
+              ),
+          ],
+        ),
+      ),
+      keyed(
+        SearchKind.wiki,
+        _section(
+          context,
+          kind: SearchKind.wiki,
+          slice: _wiki,
+          total: wiki?.total ?? 0,
+          empty: 'No wiki pages',
+          rows: [
+            for (final hit in orderWikiHits(
+              wiki?.items ?? const <WikiSearchHit>[],
+            ).take(SearchPage.groupedRows))
+              WikiHitTile(
+                hit: hit,
+                showProject: _scope == SearchScope.org,
+                onTap: () => _openWiki(hit),
               ),
           ],
         ),
@@ -1130,8 +1234,16 @@ class _SearchPageState extends State<SearchPage> {
             onTap: () => _openPullRequest(hit),
           ),
       ],
-      // W-D draws the wiki rows; nothing runs the query yet.
-      SearchKind.wiki => const <Widget>[],
+      SearchKind.wiki => [
+        for (final hit in orderWikiHits(
+          _wiki.value?.items ?? const <WikiSearchHit>[],
+        ))
+          WikiHitTile(
+            hit: hit,
+            showProject: _scope == SearchScope.org,
+            onTap: () => _openWiki(hit),
+          ),
+      ],
     };
     return [
       // Keyed like the grouped view, and for the same reason ([_body]):

@@ -289,7 +289,9 @@ class WikiMarkdown extends StatefulWidget {
         continue;
       }
       flush();
-      final text = match[2]!.trim().replaceAll(RegExp(r'\s*#+\s*$'), '');
+      final text = headingText(
+        match[2]!.trim().replaceAll(RegExp(r'\s*#+\s*$'), ''),
+      );
       current = WikiHeading(
         level: match[1]!.length,
         text: text,
@@ -299,6 +301,30 @@ class WikiMarkdown extends StatefulWidget {
     }
     flush();
     return sections;
+  }
+
+  /// A heading's own words, without the inline markdown that styles them.
+  ///
+  /// Both the contents row's label and the anchor the wiki gives a heading
+  /// come from the **rendered** text, not the source. A real page whose
+  /// heading reads `**_Optional step for after the meeting_**` listed the
+  /// asterisks and the underscores in the contents sheet and in an in-place
+  /// `[[_TOC_]]` (found on the iPhone, 2026-09-15).
+  ///
+  /// A link keeps its label; `**`, `*`, `~~` and backticks always go. An
+  /// underscore goes only at a word boundary, so `snake_case` in a heading
+  /// keeps its own.
+  static String headingText(String source) {
+    var text = source.replaceAllMapped(
+      RegExp(r'!?\[([^\]]*)\]\([^)]*\)'),
+      (m) => m[1] ?? '',
+    );
+    text = text.replaceAll(RegExp(r'\*\*|~~|\*|`'), '');
+    text = text.replaceAll(
+      RegExp(r'(?<![A-Za-z0-9])__?|__?(?![A-Za-z0-9])'),
+      '',
+    );
+    return text.trim();
   }
 
   /// ATX headings only. Setext (`===` under a line) is not used anywhere in

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../auth/auth_service.dart';
 import '../../core/http/ado_exceptions.dart';
 import '../../core/routes.dart';
 import '../../core/text/mention.dart';
+import '../../core/text/wiki_link.dart';
 import '../../core/util/format.dart';
 import '../../data/mention_recents.dart';
 import '../../data/models/work_item.dart';
@@ -28,6 +30,8 @@ import '../shared/anchor_highlight.dart';
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
 import '../shared/widgets/tab_count_badge.dart';
+import '../wiki/wiki_link_open.dart';
+import '../wiki/wiki_page_source.dart';
 import 'form/controls/attachments_section.dart';
 import 'form/controls/links_section.dart';
 import 'form/new_work_item_button.dart';
@@ -118,6 +122,15 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
   /// uploading a file picked into the Discussion composer (T3). Built once
   /// the bearer token is known.
   AttachmentSource? _attachments;
+
+  /// The composer's wiki-page picker (K12): the book button beside attach.
+  /// Null where no `WikiRepository` is in scope — a widget test that
+  /// provides only what it needs — and the button is then not drawn.
+  late final WikiPageSource? _wikiPages = WikiPageSource.maybeOf(
+    context,
+    org: widget.org,
+    project: widget.project,
+  );
 
   /// The same source as [_attachments], in the shape a Markdown or HTML
   /// body needs: images inside a comment are fetched and opened exactly the
@@ -696,6 +709,22 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
     '${Uri.encodeComponent(widget.project)}/work-items/${item.id}',
   );
 
+  /// A Wiki Page artifact link opens the in-app reader (K5). Its URI names
+  /// the project by GUID, which every wiki route takes; this item's own
+  /// project stands in for a URI that carried none.
+  void _openWikiRelation(WorkItemRelation relation) {
+    final link = WikiLink.parse(relation.url);
+    if (link == null) return;
+    pushWikiLink(context, link, org: widget.org, project: widget.project);
+  }
+
+  /// A plain hyperlink relation is somebody's URL: it goes to the browser.
+  void _openHyperlink(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null || !uri.hasScheme) return;
+    unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
+  }
+
   /// The item's own fields, the way the web's read view shows them: the
   /// type's form layout decides which groups appear and in which order
   /// (Kelly's report on #15303, whose custom fields were invisible).
@@ -774,6 +803,8 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
             linked: _linked,
             visuals: _visuals,
             onOpen: _openLinked,
+            onOpenWiki: _openWikiRelation,
+            onOpenUrl: _openHyperlink,
           ),
         ),
       if (attachments.isNotEmpty)
@@ -845,6 +876,7 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
                   busy: _writing,
                   mentions: _mentions,
                   attachments: _attachments,
+                  wikiPages: _wikiPages,
                   offline: _offline,
                   onAttachmentsDropped: (files) => _droppedAttachments = files,
                 ),
@@ -1208,6 +1240,8 @@ class _Links extends StatelessWidget {
     required this.linked,
     required this.visuals,
     required this.onOpen,
+    required this.onOpenWiki,
+    required this.onOpenUrl,
   });
 
   final List<WorkItemRelation> relations;
@@ -1219,13 +1253,78 @@ class _Links extends StatelessWidget {
   final WorkItemVisuals visuals;
   final ValueChanged<WorkItem> onOpen;
 
+  /// Opens a Wiki Page artifact link in the reader (research/20 K5).
+  final ValueChanged<WorkItemRelation> onOpenWiki;
+
+  /// Opens a plain hyperlink in the browser.
+  final ValueChanged<String> onOpenUrl;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+
+    /// A wiki page or a hyperlink: no work item behind it, so the row shows
+    /// what the link itself says and opens what it points at.
+    Widget external(String caption, WorkItemRelation relation, LinkKind kind) {
+      final wiki = wikiPageLinkLabel(relation);
+      final title = wiki?.title ?? hyperlinkLabel(relation);
+      final second = wiki?.path;
+      return InkWell(
+        onTap: wiki != null
+            ? () => onOpenWiki(relation)
+            : () => onOpenUrl(relation.url),
+        borderRadius: Radii.chip,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: DetailFactRow.labelWidthFor(context),
+                child: Text(
+                  caption,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Icon(kind.icon, size: 16, color: scheme.onSurfaceVariant),
+              const SizedBox(width: Spacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (second != null)
+                      Text(
+                        second,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     Widget row(String caption, WorkItemRelation relation) {
       final item = linked[relation.targetId];
-      final kind = LinkKind.of(relation.rel);
+      final kind = LinkKind.ofRelation(relation);
+      if (kind == LinkKind.wikiPage || relation.isHyperlink) {
+        return external(caption, relation, kind);
+      }
       return InkWell(
         onTap: item == null ? null : () => onOpen(item),
         borderRadius: Radii.chip,

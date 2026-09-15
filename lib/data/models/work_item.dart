@@ -208,6 +208,20 @@ class WorkItemRelation extends Equatable {
   /// Git artifact.
   bool get isWorkItemLink => targetId != null;
 
+  /// The `vstfs:` prefix of the artifact URI a Wiki Page relation carries
+  /// (research/20 §1, verified on #15545).
+  static const wikiPageArtifactPrefix = 'vstfs:///Wiki/WikiPage/';
+
+  /// An `ArtifactLink` pointing at a wiki page, which the Related tab shows
+  /// and opens in the reader (K5). Read only: nothing writes one.
+  bool get isWikiPageLink =>
+      rel == artifactLinkRel &&
+      url.toLowerCase().startsWith(wikiPageArtifactPrefix.toLowerCase());
+
+  /// A plain URL a person put on the item ("Hyperlink"), which opens in the
+  /// browser.
+  bool get isHyperlink => rel == hyperlinkRel;
+
   /// `attributes.name`: the file name of an attachment, and the label of a
   /// hyperlink or an artifact link.
   String? get name {
@@ -322,11 +336,13 @@ class WorkItem extends Equatable {
       if (r.isChild) r,
   ];
 
-  /// The links to other work items, in wire order: what the Links page
-  /// groups by kind (research/11 §4.3).
+  /// The links the Related tab shows, in wire order: other work items
+  /// (research/11 §4.3), Wiki Page artifact links and plain hyperlinks
+  /// (research/20 K5). Attachments and Azure DevOps's own Git and build
+  /// artifacts are not among them.
   List<WorkItemRelation> get linkRelations => [
     for (final r in relations)
-      if (r.isWorkItemLink) r,
+      if (r.isWorkItemLink || r.isWikiPageLink || r.isHyperlink) r,
   ];
 
   /// The `AttachedFile` relations, in wire order: the Attachments page.

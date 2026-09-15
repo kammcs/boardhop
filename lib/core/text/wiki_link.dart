@@ -200,16 +200,26 @@ class WikiLink extends Equatable {
     );
   }
 
-  /// The title behind an id-form slug: `-` back to a space and `%2D` back
-  /// to a hyphen, in that order, the same rule a git file name follows.
+  /// The title behind an id-form slug: `-` back to a space and every `%XX`
+  /// back to its character, the same rule a git file name follows
+  /// ([WikiSearchHit.decodeGitName], which this repeats so `wiki_link.dart`
+  /// stays free of the models).
   ///
   /// Best effort only. Dart's `Uri` normalises `%2D` to a plain hyphen
   /// (it is an unreserved character), so a title whose own text contains a
   /// hyphen reads back with a space there. That costs nothing: the id form
   /// carries the page id, which is what the page is read by — the slug is
   /// only something to show while it loads.
-  static String _titleFromSlug(String slug) =>
-      slug.replaceAll('-', ' ').replaceAll('%2D', '-').replaceAll('%2d', '-');
+  static String _titleFromSlug(String slug) {
+    final spaced = slug.replaceAll('-', ' ');
+    try {
+      return Uri.decodeComponent(spaced);
+    } on ArgumentError {
+      return spaced;
+    } on FormatException {
+      return spaced;
+    }
+  }
 
   /// `GBwikiMaster` → `wikiMaster`; a version without the branch prefix is
   /// taken as it is.

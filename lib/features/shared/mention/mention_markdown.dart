@@ -4,6 +4,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../core/text/mention.dart';
+import '../../wiki/wiki_link_open.dart';
 import '../attachments/attachment_links.dart';
 import '../attachments/inline_attachments.dart';
 import 'mention_style.dart';
@@ -69,6 +70,10 @@ class MentionMarkdown extends StatelessWidget {
             onOpen?.call(target.$1, target.$2);
             return;
           }
+          // A wiki page is referenced in a comment by its web URL — there
+          // is no mention syntax for one — and it opens in the in-app
+          // reader rather than the browser (research/20 K5).
+          if (openWikiLink(context, href)) return;
           // A file in a comment is an ordinary Markdown link, and a browser
           // could not authenticate it — it opens through the share sheet
           // instead (decision T9). Every other link stays as it was.

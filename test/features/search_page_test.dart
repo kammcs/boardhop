@@ -8,10 +8,12 @@ import 'package:boardhop/core/routes.dart';
 import 'package:boardhop/data/models/git_repository.dart';
 import 'package:boardhop/data/models/pull_request.dart';
 import 'package:boardhop/data/models/search.dart';
+import 'package:boardhop/data/models/wiki.dart';
 import 'package:boardhop/data/repositories/pull_request_repository.dart';
 import 'package:boardhop/data/repositories/search_repository.dart';
 import 'package:boardhop/data/search_recents.dart';
 import 'package:boardhop/features/search/search_page.dart';
+import 'package:boardhop/features/search/widgets/wiki_hit_tile.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +47,7 @@ class _FakeSearch extends SearchRepository {
   final workItemCalls = <_Call>[];
   final codeCalls = <_Call>[];
   final pullRequestCalls = <_Call>[];
+  final wikiCalls = <_Call>[];
 
   SearchResults<WorkItemSearchHit> Function(String text) workItems = (_) =>
       const SearchResults();
@@ -137,6 +140,40 @@ class _FakeSearch extends SearchRepository {
     int skip = 0,
   }) async => null;
 
+  SearchResults<WikiSearchHit> Function(String text) wiki = (_) =>
+      const SearchResults();
+  Object? wikiThrows;
+
+  @override
+  Future<SearchResults<WikiSearchHit>> searchWiki(
+    String org, {
+    String? project,
+    required String text,
+    int skip = 0,
+    int top = SearchRepository.pageSize,
+  }) async {
+    wikiCalls.add((
+      project: project,
+      text: text,
+      types: const [],
+      states: const [],
+      skip: skip,
+      order: SearchOrder.relevance,
+    ));
+    await _wait(text.trim());
+    final boom = wikiThrows;
+    if (boom != null) throw boom;
+    return wiki(text.trim());
+  }
+
+  @override
+  Future<CachedSearch<SearchResults<WikiSearchHit>>?> cachedWiki(
+    String org, {
+    String? project,
+    required String text,
+    int skip = 0,
+  }) async => null;
+
   @override
   Future<SearchResults<PullRequestSearchHit>> searchPullRequests(
     String org, {
@@ -219,6 +256,22 @@ CodeSearchHit codeHit(String name) => CodeSearchHit(
   contentMatches: 2,
 );
 
+WikiSearchHit wikiHit(
+  String path, {
+  String wiki = 'DevOps-Mobile-App.wiki',
+  String project = 'Scratch',
+  String field = 'content',
+  String fragment = 'the <highlighthit>board</highlighthit> renders',
+}) => WikiSearchHit(
+  fileName: path.split('/').last,
+  path: path,
+  wikiId: 'w-1',
+  wikiName: wiki,
+  projectName: project,
+  projectId: 'p-$project',
+  highlights: [SearchHighlight.parse(field, fragment)],
+);
+
 PullRequestSearchHit prHit(int id, String title) => PullRequestSearchHit(
   pullRequest: PullRequest.fromJson({
     'pullRequestId': id,
@@ -298,6 +351,14 @@ void main() {
         GoRoute(
           path: '/a/:account/orgs/:org/pull-requests/:id',
           builder: (_, state) => stub('pr ${state.pathParameters['id']}'),
+        ),
+        GoRoute(
+          path: '/a/:account/orgs/:org/projects/:project/wiki-page/:wiki',
+          builder: (_, state) => stub(
+            'wiki ${state.pathParameters['project']}'
+            '/${state.pathParameters['wiki']}'
+            '${state.uri.queryParameters['path']}',
+          ),
         ),
       ],
     );
@@ -808,6 +869,95 @@ void main() {
         closeTo((kToolbarHeight - 8) * SearchPage.titleScaleCap + 8, 0.001),
       );
       expect(await heightAt(3.1), await heightAt(2));
+    });
+  });
+
+  group('research/20 K4: the wiki section', () {
+    testWidgets('the fourth section lists hits, title matches first', (
+      tester,
+    ) async {
+      search.wiki = (_) => SearchResults<WikiSearchHit>(
+        items: [
+          wikiHit('/Boardhop/Links.md'),
+          wikiHit(
+            '/Boardhop/Board.md',
+            field: 'fileNames',
+            fragment: '<highlighthit>Board</highlighthit>',
+          ),
+        ],
+        total: 2,
+      );
+      await pump(tester, q: 'board');
+
+      expect(search.wikiCalls.map((c) => c.text), ['board']);
+      expect(search.wikiCalls.single.project, 'Scratch');
+      expect(find.text('Wiki · 2'), findsOneWidget);
+      // The fileNames hit is drawn above the content hit (K4).
+      final titles = tester
+          .widgetList<WikiHitTile>(find.byType(WikiHitTile))
+          .map((t) => t.hit.title)
+          .toList();
+      expect(titles, const ['Board', 'Links']);
+      expect(find.text('DevOps-Mobile-App.wiki'), findsNWidgets(2));
+    });
+
+    testWidgets('a hit opens the page by wiki id and page path', (
+      tester,
+    ) async {
+      search.wiki = (_) => SearchResults<WikiSearchHit>(
+        items: [wikiHit('/Boardhop/Deep-child.md')],
+        total: 1,
+      );
+      await pump(tester, q: 'board');
+
+      await tester.tap(find.text('Deep child'));
+      await tester.pumpAndSettle();
+      // The hit's own project GUID, so an All-projects hit opens where it
+      // lives; the path is the title form, not the git file path.
+      expect(
+        find.text('wiki p-Scratch/w-1/Boardhop/Deep child'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the All scope drops the project filter and names it on the '
+        'row', (tester) async {
+      search.wiki = (_) => SearchResults<WikiSearchHit>(
+        items: [wikiHit('/Home.md', project: 'CloudCover')],
+        total: 1,
+      );
+      await pump(tester, q: 'board', scope: SearchScope.org);
+
+      expect(search.wikiCalls.single.project, isNull);
+      expect(find.text('CloudCover · DevOps-Mobile-App.wiki'), findsOneWidget);
+    });
+
+    testWidgets('the See-all list pages as it is scrolled', (tester) async {
+      search.wiki = (text) => SearchResults<WikiSearchHit>(
+        items: [for (var i = 0; i < 50; i++) wikiHit('/Page $i.md')],
+        total: 120,
+      );
+      await pump(tester, q: 'board', kind: SearchKind.wiki);
+
+      expect(find.textContaining('120 results'), findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, -4000));
+      await tester.pumpAndSettle();
+      expect(search.wikiCalls.map((c) => c.skip), containsAll(const [0, 50]));
+      // Only the wiki was asked: a See-all list runs one kind.
+      expect(search.workItemCalls, isEmpty);
+    });
+
+    testWidgets('a missing Code Search extension shows its own message', (
+      tester,
+    ) async {
+      search.wikiThrows = const CodeSearchUnavailable(statusCode: 404);
+      await pump(tester, q: 'board');
+
+      expect(
+        find.textContaining('Code Search'),
+        findsWidgets,
+        reason: 'one extension indexes code, work items and wikis',
+      );
     });
   });
 }

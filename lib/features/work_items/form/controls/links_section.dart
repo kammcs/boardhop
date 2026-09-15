@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/text/wiki_link.dart';
+import '../../../../data/models/wiki.dart';
 import '../../../../data/models/work_item.dart';
 import '../../../../theme/theme.dart';
 import '../../widgets/work_item_visuals.dart';
@@ -54,6 +56,13 @@ enum LinkKind {
     'Duplicate of',
     Icons.copy_all_outlined,
   ),
+  wikiPage(
+    '',
+    'Wiki page',
+    Icons.menu_book_outlined,
+    plural: 'Wiki pages',
+    addable: false,
+  ),
   other('', 'Other', Icons.open_in_new, plural: 'Other');
 
   const LinkKind(
@@ -89,15 +98,25 @@ enum LinkKind {
 
   static LinkKind of(String rel) {
     for (final kind in values) {
-      if (kind != other && kind.rel == rel) return kind;
+      if (kind.rel.isNotEmpty && kind.rel == rel) return kind;
     }
     return other;
+  }
+
+  /// The kind a relation belongs to. Every work item link is read from its
+  /// `rel`; a Wiki Page artifact link and a plain hyperlink share their
+  /// `rel` with other artifacts, so they are told apart by their URL
+  /// (research/20 K5).
+  static LinkKind ofRelation(WorkItemRelation relation) {
+    if (relation.isWikiPageLink) return wikiPage;
+    if (relation.isHyperlink) return other;
+    return of(relation.rel);
   }
 
   /// The kinds the picker offers, in its own order.
   static List<LinkKind> get addableKinds => [
     for (final kind in values)
-      if (kind != other && kind.addable) kind,
+      if (kind.rel.isNotEmpty && kind.addable) kind,
   ];
 }
 
@@ -111,19 +130,50 @@ class LinkGroup {
 }
 
 /// Groups a work item's links by kind, in [LinkKind] order, keeping the
-/// wire order inside each group. Only links to other work items are
-/// listed: an attachment belongs on the Attachments page and a Git or
-/// build artifact is Azure DevOps's own (the "Development" group).
+/// wire order inside each group.
+///
+/// Three things are listed: links to other work items, Wiki Page artifact
+/// links and plain hyperlinks (research/20 K5). An attachment belongs on
+/// the Attachments page, and Azure DevOps's own Git and build artifacts are
+/// its "Development" group, which the app does not draw.
 List<LinkGroup> groupLinkRelations(Iterable<WorkItemRelation> relations) {
   final byKind = <LinkKind, List<WorkItemRelation>>{};
   for (final relation in relations) {
-    if (!relation.isWorkItemLink) continue;
-    byKind.putIfAbsent(LinkKind.of(relation.rel), () => []).add(relation);
+    if (!relation.isWorkItemLink &&
+        !relation.isWikiPageLink &&
+        !relation.isHyperlink) {
+      continue;
+    }
+    byKind.putIfAbsent(LinkKind.ofRelation(relation), () => []).add(relation);
   }
   return [
     for (final kind in LinkKind.values)
       if (byKind[kind] != null) LinkGroup(kind: kind, relations: byKind[kind]!),
   ];
+}
+
+/// The two lines a Wiki Page artifact link draws: the page's own title and
+/// the path it sits at inside the wiki. Null when the URI carries no page
+/// path (a link to a wiki root, which nothing writes).
+({String title, String path})? wikiPageLinkLabel(WorkItemRelation relation) {
+  if (!relation.isWikiPageLink) return null;
+  final path = WikiLink.parse(relation.url)?.path ?? '';
+  if (path.isEmpty || path == '/') return null;
+  final title = WikiPageNode.titleOf(path);
+  return (title: title.isEmpty ? path : title, path: path);
+}
+
+/// The one line a plain `Hyperlink` relation draws: its own label when the
+/// relation carries one, else the host and path of the URL. The scheme says
+/// nothing and costs a line's width on a phone.
+String hyperlinkLabel(WorkItemRelation relation) {
+  final name = relation.name;
+  if (name != null) return name;
+  final raw = relation.url.trim();
+  final uri = Uri.tryParse(raw);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return raw;
+  final tail = '${uri.host}${uri.path}';
+  return tail.isEmpty ? raw : tail;
 }
 
 /// What the Links page needs, kept apart from the repositories so the

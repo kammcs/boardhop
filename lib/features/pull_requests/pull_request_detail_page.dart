@@ -25,6 +25,7 @@ import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
 import '../shared/mention/mention_markdown.dart';
 import '../shared/mention/mention_source.dart';
+import '../wiki/wiki_page_source.dart';
 import '../shared/widgets/tab_count_badge.dart';
 import '../shared/mention/mention_sources.dart';
 import '../work_items/widgets/work_item_actions.dart' show CommentComposer;
@@ -129,6 +130,12 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   MentionSources? _sources;
   MentionSource? _mentions;
   Map<String, String> _mentionNames = const {};
+
+  /// The composers' wiki-page picker, built once the pull request has said
+  /// which project it belongs to (research/20 K12). Null hides the book
+  /// button, which is also what a widget test with no `WikiRepository`
+  /// gets.
+  WikiPageSource? _wikiPages;
 
   /// Images and files inside the description and the comments. A pull
   /// request page held no bearer token until now; every attachment URL is
@@ -324,6 +331,11 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final me = await sources.me(id: _me);
     if (!mounted || _mentions != null) return;
     setState(() {
+      _wikiPages ??= WikiPageSource.maybeOf(
+        context,
+        org: widget.org,
+        project: pr.projectName,
+      );
       _mentions = sources.source(
         participants: () async => MentionSources.pullRequestParticipants(
           pr: _pr ?? pr,
@@ -688,6 +700,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
           pr == null || !pr.isActive || _tabs.index != _commentsTab
           ? null
           : CommentComposer(
+              wikiPages: _wikiPages,
               onSubmit: _comment,
               busy: _acting,
               mentions: _mentions,
@@ -752,6 +765,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                           mentionNames: _mentionNames,
                           attachments: _attachments,
                           uploads: _uploads,
+                          wikiPages: _wikiPages,
                           offline: _offline,
                           onOpenMention: _openMention,
                           onReply: _reply,
@@ -1206,6 +1220,7 @@ class _Conversation extends StatelessWidget {
     this.mentionNames = const {},
     this.attachments,
     this.uploads,
+    this.wikiPages,
     this.offline = false,
     this.onOpenMention,
   });
@@ -1240,6 +1255,10 @@ class _Conversation extends StatelessWidget {
   /// reply is uploaded (research/17 §4).
   final InlineAttachments? attachments;
   final AttachmentSource? uploads;
+
+  /// The project's wikis, for the reply boxes' book button (research/20
+  /// K12).
+  final WikiPageSource? wikiPages;
   final bool offline;
   final void Function(MentionKind kind, String id)? onOpenMention;
 
@@ -1340,6 +1359,7 @@ class _Conversation extends StatelessWidget {
                                   mentionNames: mentionNames,
                                   attachments: attachments,
                                   uploads: uploads,
+                                  wikiPages: wikiPages,
                                   offline: offline,
                                   onOpenMention: onOpenMention,
                                   onReply: (text) => onReply(t, text),

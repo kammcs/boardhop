@@ -431,9 +431,8 @@ class WikiSearchHit extends Equatable {
   final List<SearchHighlight> highlights;
 
   /// The page path the reader opens, derived from the git file [path]:
-  /// `mappedPath` dropped for a code wiki, `.md` stripped, `-` back to a
-  /// space and `%2D` back to a hyphen — in that order, because a `%2D`
-  /// carries no hyphen of its own to lose.
+  /// `mappedPath` dropped for a code wiki, `.md` stripped, then the git
+  /// name decoded ([decodeGitName]).
   String get pagePath => pagePathOf(path, mappedPath: mappedPath);
 
   static String pagePathOf(String gitPath, {String mappedPath = '/'}) {
@@ -453,11 +452,42 @@ class WikiSearchHit extends Equatable {
       }
     }
     if (p.toLowerCase().endsWith('.md')) p = p.substring(0, p.length - 3);
-    return p.replaceAll('-', ' ').replaceAll('%2D', '-').replaceAll('%2d', '-');
+    return decodeGitName(p);
   }
+
+  /// A git file name back to the page title form: `-` is a space and every
+  /// `%XX` is the character the file name escaped — `%2D` a real hyphen,
+  /// `%3F` a question mark, and a multi-byte sequence its own character.
+  ///
+  /// Both rules in one pass, in that order, because a `%2D` carries no
+  /// hyphen of its own to lose. Handling only `%2D` was not enough: a real
+  /// wiki page titled "How to do a Hand-off Meeting?" came back from search
+  /// as `…Meeting%3F`, which is neither a title nor a path the service can
+  /// resolve — it 404'd in the reader (found on the iPhone, 2026-09-15).
+  static String decodeGitName(String value) {
+    final spaced = value.replaceAll('-', ' ');
+    try {
+      return Uri.decodeComponent(spaced);
+    } on ArgumentError {
+      return _legacy(spaced);
+    } on FormatException {
+      return _legacy(spaced);
+    }
+  }
+
+  /// A half-escaped name Dart will not decode: at least give back the
+  /// hyphens.
+  static String _legacy(String value) =>
+      value.replaceAll('%2D', '-').replaceAll('%2d', '-');
 
   /// The page title: the last segment of [pagePath].
   String get title => WikiPageNode.titleOf(pagePath);
+
+  /// True when the term matched the page's **file name**, which is the
+  /// title. K4 puts those hits above the content hits.
+  bool get isTitleHit => highlights.any(
+    (h) => h.fieldReferenceName.toLowerCase() == 'filenames' && h.hasHit,
+  );
 
   /// The one line a row shows under the title: a content match says more
   /// than the file name the title already shows.
@@ -490,6 +520,23 @@ class WikiSearchHit extends Equatable {
 
   @override
   List<Object?> get props => [wikiId, path, contentId, highlights];
+}
+
+/// Title hits first, then content hits (K4), each group keeping the
+/// relevance order the service answered in.
+///
+/// `List.sort` is not stable, so the original position is part of the
+/// comparison — without it two hits of the same kind could swap on every
+/// rebuild.
+List<WikiSearchHit> orderWikiHits(List<WikiSearchHit> hits) {
+  final indexed = [for (var i = 0; i < hits.length; i++) (at: i, hit: hits[i])];
+  indexed.sort((a, b) {
+    final byKind = (a.hit.isTitleHit ? 0 : 1).compareTo(
+      b.hit.isTitleHit ? 0 : 1,
+    );
+    return byKind != 0 ? byKind : a.at.compareTo(b.at);
+  });
+  return [for (final row in indexed) row.hit];
 }
 
 /// The last commit that touched a page, for the K9 footer line

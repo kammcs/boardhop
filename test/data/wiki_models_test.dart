@@ -440,4 +440,29 @@ void main() {
       expect(WikiPageChange.fromJson(const {}).isEmpty, isTrue);
     });
   });
+
+  group('a git file name back to a page path', () {
+    test('a percent escape other than %2D is decoded too', () {
+      // Found on a real wiki (2026-09-15): the page "How to do a Hand-off
+      // Meeting?" came back from search as `…Meeting%3F`, which showed as
+      // `%3F` in the row and 404'd when the reader asked for it.
+      expect(
+        WikiSearchHit.pagePathOf(
+          '/QA/QA-Best-Practices/HOM/How-to-do-a-Hand%2Doff-Meeting%3F.md',
+        ),
+        '/QA/QA Best Practices/HOM/How to do a Hand-off Meeting?',
+      );
+    });
+
+    test('a multi-byte escape decodes to its own character', () {
+      expect(WikiSearchHit.pagePathOf('/Caf%C3%A9-notes.md'), '/Café notes');
+    });
+
+    test('a half-escaped name keeps its hyphens rather than throwing', () {
+      expect(
+        WikiSearchHit.decodeGitName('Bad%ZZ-name%2Dhere'),
+        'Bad%ZZ name-here',
+      );
+    });
+  });
 }

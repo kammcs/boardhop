@@ -191,3 +191,81 @@ intercept wiki URLs before falling to the browser. `_bleedsUnderRail` and the do
 Editing (pages, attachments), Wiki Page relation writes from the Related tab, starring, whole-wiki
 download, mermaid/KaTeX/video rendering, markdown inside HTML blocks, `<iframe>` outside `::: video`,
 a typed `[[` trigger, code-wiki verification, view counts, page history beyond the last change.
+
+## 7. What landed (2026-09-15)
+
+Built in dispatcher mode over four phases the same day the plan was written.
+Read-only throughout: nothing in the app writes a wiki page, an attachment or a
+Wiki Page relation (§6 stands).
+
+**W-A — the data layer.** `lib/data/models/wiki.dart` (`Wiki`, `WikiPageNode`
+with `flatten`/`find`/`ancestorsOf`/`withIds`, `WikiPage`, `WikiSearchHit`,
+`WikiPageChange`), `lib/core/text/wiki_link.dart` (the two web forms, the
+artifact URI, wiki-relative href resolution, the anchor-id rule and the two
+URL builders — pure Dart, no Flutter),
+`lib/data/repositories/wiki_repository.dart` in `AccountDeps` (list, tree as
+`recursionLevel=full` joined to `pagesbatch` ids on `path`, cache-first page
+reads keyed by path with the ETag kept, attachment bytes through
+`RepoRepository.fileBytes`, `lastChange`), `SearchRepository.searchWiki` /
+`cachedWiki`, `WikiPrefs` (last wiki, last path, five recents) and the
+`Routes.wiki` / `Routes.wikiPage` pair. `WikiUnavailable` tells the wiki's own
+`TF400813` refusal apart from an expired token.
+
+**W-B — the pill, the tree, the reader, the routing.** `HomeView.wiki` as the
+third segment of the Home pill; `WikiTreePage` in the Home branch (title as the
+wiki picker, Recent strip, the in-place expandable tree, the empty states, and
+the K6 list+detail Row from the medium breakpoint); `WikiPagePage` outside the
+shell hosting `WikiPageView` (K9 chrome, cache-first with the "Updated N min
+ago" line, the K3 link routing, the footer from one commits call); the wiki
+picker sheet, the contents sheet and the source page; `/diagnostics/wiki` and
+the "Wiki API" check.
+
+**W-C — the markdown.** `wiki_syntaxes.dart`, `wiki_blocks.dart`,
+`wiki_builders.dart` and `lib/theme/wiki_style.dart`: front matter as a Tags
+row, `[[_TOC_]]` and `[[_TOSP_]]`, the `:::` fence family and ```` ```mermaid ````
+as labelled placeholder cards (K3), the K10 table builder, highlighted code
+with a copy button, the inline-HTML subset, authenticated images with the
+lightbox, heading keys for anchors, and `wiki_find.dart` for find-in-page (K4).
+
+**W-D — search, links, the picker, the Related tab.** `SearchKind.wiki` is a
+real fourth grouped section on the Search page in both scopes, title hits
+above content hits (`orderWikiHits`), each row drawn by `WikiHitTile` with the
+existing `SearchHighlightText`, a See-all page that pages, and a hit opening
+the reader by wiki id and page path in the hit's **own** project;
+`lib/features/wiki/wiki_link_open.dart` is the one place a wiki URL is turned
+into a push, wired into `MentionMarkdown.onTapLink` and `RichTextView`'s
+`_AuthedWidgetFactory.onTapUrl`, so every comment body and every HTML field
+opens a wiki link in the reader; `WikiPageSource` plus
+`widgets/wiki_page_picker_sheet.dart` give `CommentComposer`, `ThreadCard` and
+the diff `_ComposerView` a book button beside attach (null source, no button)
+that inserts `[Page title](url)` at the caret through
+`MentionController.insertPlain`; `groupLinkRelations` gained `LinkKind.wikiPage`
+for `vstfs:///Wiki/WikiPage/…` artifact links and puts `Hyperlink` relations in
+`other`, `WorkItem.linkRelations` lists both, and the Related badge counts them.
+
+**Proven on the scratch project** (research/walkthroughs/2026-09-15-wiki.md,
+iPhone 17 and iPad Pro 13", debug, light and dark, xxxL, portrait and
+landscape): the tree four levels deep with the non-conformant page greyed and
+the outside-`.order` page last; every construct on `/Boardhop/Constructs` and
+every relative form on `/Boardhop/Links`; `#15545`, `!8334` and `@<guid>`
+inside a page; #15545's Related tab showing the Wiki Page link and opening it;
+a comment on #15545 and a thread on PR 8334 posted from the app's composers,
+each carrying a wiki URL that opens the reader; the wiki section in both search
+scopes with a hit opening the page; find-in-page stepping 1 of 3 → 3 of 3; the
+Wiki API diagnostics check ACCEPTED.
+
+**Four device defects fixed in W-D**, two of which only a real wiki could show:
+a page whose git file name carries a percent escape other than `%2D` read as
+`…%3F` and **404'd in the reader** (`WikiSearchHit.decodeGitName` now decodes
+the rest of the escapes); a heading written as `**_text_**` listed its
+asterisks and underscores in the contents and gave the wrong anchor
+(`WikiMarkdown.headingText`); the picker dialog was a 1,032 pt empty box on the
+iPad; and the wiki section was built third rather than fourth.
+
+**Open:** code wikis are still unverified (none exists in puremedia), so the
+branch pill, the version on every read and the picker's `&wikiVersion=GB…` URL
+are test-only; a wiki URL from another organization opens under the current
+account and shows the service's refusal if it cannot be read; the picker reads
+the whole tree to filter titles, which no wiki larger than 134 pages has
+exercised; offline stays covered by widget tests; Android is untested on this
+Mac (its debug redirect URI is not on the app registration).

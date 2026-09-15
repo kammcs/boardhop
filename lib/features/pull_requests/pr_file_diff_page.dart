@@ -28,6 +28,7 @@ import '../work_items/form/controls/attachments_section.dart'
     show AttachmentSource;
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
+import '../wiki/wiki_page_source.dart';
 import 'diff/diff_model.dart';
 import 'diff/diff_view.dart';
 import 'diff/highlighter.dart';
@@ -78,6 +79,10 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   MentionSources? _sources;
   MentionSource? _mentions;
   Map<String, String> _mentionNames = const {};
+
+  /// The line composers' wiki-page picker (research/20 K12), built once the
+  /// pull request has named its project.
+  WikiPageSource? _wikiPages;
 
   /// Images and files the threads on this file carry. Every attachment URL
   /// is authenticated, so this page needs a bearer token of its own
@@ -139,6 +144,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     }
     if (!mounted || _mentions != null) return;
     setState(() {
+      _wikiPages ??= WikiPageSource.maybeOf(
+        context,
+        org: widget.org,
+        project: pr.projectName,
+      );
       _mentions = sources.source(
         participants: () async => MentionSources.pullRequestParticipants(
           pr: _pr ?? pr,
@@ -519,6 +529,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
                       mentionNames: _mentionNames,
                       attachments: _attachments,
                       uploads: _uploads,
+                      wikiPages: _wikiPages,
                       offline: _offline,
                       onOpenMention: _openMention,
                       onGutterTap: _pr?.isActive == true

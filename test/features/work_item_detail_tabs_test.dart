@@ -273,6 +273,40 @@ void main() {
     expect(find.textContaining('comment 1', findRichText: true), findsNothing);
   });
 
+  testWidgets('research/20 K5: a Wiki Page link and a hyperlink are on '
+      'Related and counted', (tester) async {
+    const wiki = WorkItemRelation(
+      rel: WorkItemRelation.artifactLinkRel,
+      url:
+          'vstfs:///Wiki/WikiPage/98720989-1111-2222-3333-444455556666%2F'
+          '2bd59283-17a5-4fd0-b964-cd9a4189f721%2FBoardhop%2FConstructs',
+      attributes: {'name': 'Wiki Page'},
+    );
+    const hyperlink = WorkItemRelation(
+      rel: WorkItemRelation.hyperlinkRel,
+      url: 'https://example.test/spec/v2',
+    );
+    const git = WorkItemRelation(
+      rel: WorkItemRelation.artifactLinkRel,
+      url: 'vstfs:///Git/PullRequestId/1/2/8334',
+    );
+    stubItem(itemWith(relations: [...links, file, wiki, hyperlink, git]));
+    await pump(tester);
+
+    // The two work item links, the wiki page and the hyperlink, plus the
+    // one file; the Git artifact link is Azure DevOps's own Development
+    // group and is not listed.
+    expect(badgeText(tester, 'Related'), '5');
+
+    await tester.tap(find.text('Related'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wiki page'), findsOneWidget);
+    expect(find.text('Constructs'), findsOneWidget);
+    expect(find.text('/Boardhop/Constructs'), findsOneWidget);
+    expect(find.text('example.test/spec/v2'), findsOneWidget);
+    expect(find.textContaining('8334'), findsNothing);
+  });
+
   testWidgets('a count of zero draws no badge at all', (tester) async {
     stubItem(itemWith(), comments: 0);
     await pump(tester);

@@ -540,6 +540,30 @@ more
       expect(sections[1].heading!.key, isNotNull);
     });
 
+    test('a heading keeps its words and loses its markup', () {
+      // A real page's heading read `**_Optional step for after the
+      // meeting_**`, and the asterisks and underscores showed in the
+      // contents sheet and in the in-place TOC (iPhone, 2026-09-15).
+      expect(
+        WikiMarkdown.headingText('**_Optional step for the meeting_**'),
+        'Optional step for the meeting',
+      );
+      expect(
+        WikiMarkdown.headingText('`code` and ~~gone~~ and *em*'),
+        'code and gone and em',
+      );
+      expect(
+        WikiMarkdown.headingText('See [the guide](https://example.test/g)'),
+        'See the guide',
+      );
+      // An underscore inside a word is the author's, not markup.
+      expect(WikiMarkdown.headingText('snake_case field'), 'snake_case field');
+
+      final sections = WikiMarkdown.split('# **_Optional step_**\n\nbody\n');
+      expect(sections.last.heading!.text, 'Optional step');
+      expect(sections.last.heading!.anchor, 'optional-step');
+    });
+
     test('the registry offers contents from two headings up', () {
       final headings = WikiHeadings();
       addTearDown(headings.dispose);

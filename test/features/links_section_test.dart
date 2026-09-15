@@ -111,7 +111,9 @@ void main() {
           'successor:1',
           'duplicate:1',
           'duplicateOf:1',
-          'other:1',
+          // The unknown work item link and the plain hyperlink share the
+          // Other bucket (research/20 K5).
+          'other:2',
         ],
       );
       expect(groups[1].relations.map((r) => r.targetId).toList(), const [
@@ -120,20 +122,55 @@ void main() {
       ]);
     });
 
-    test('attachments, hyperlinks and artifact links are not links', () {
+    test('attachments and Git artifact links are not links', () {
       final listed = [
         for (final g in groupLinkRelations(_relations)) ...g.relations,
       ];
-      expect(listed.length, 9);
+      // The eight work item links plus the hyperlink; the attachment and
+      // the pull request artifact link are somebody else's page.
+      expect(listed.length, 10);
       expect(listed.any((r) => r.isAttachment), isFalse);
-      expect(
-        listed.any((r) => r.rel == WorkItemRelation.hyperlinkRel),
-        isFalse,
+      expect(listed.any((r) => r.url.startsWith('vstfs:///Git/')), isFalse);
+      expect(listed.any((r) => r.isHyperlink), isTrue);
+    });
+
+    test('a Wiki Page artifact link is its own kind, and reads back', () {
+      const wiki = WorkItemRelation(
+        rel: WorkItemRelation.artifactLinkRel,
+        url:
+            'vstfs:///Wiki/WikiPage/'
+            '98720989-1111-2222-3333-444455556666%2F'
+            '2bd59283-17a5-4fd0-b964-cd9a4189f721%2FBoardhop%2FConstructs',
+        attributes: {'name': 'Wiki Page'},
       );
-      expect(
-        listed.any((r) => r.rel == WorkItemRelation.artifactLinkRel),
-        isFalse,
+      expect(wiki.isWikiPageLink, isTrue);
+      expect(LinkKind.ofRelation(wiki), LinkKind.wikiPage);
+      final groups = groupLinkRelations([wiki]);
+      expect(groups.single.kind, LinkKind.wikiPage);
+      final label = wikiPageLinkLabel(wiki);
+      expect(label?.title, 'Constructs');
+      expect(label?.path, '/Boardhop/Constructs');
+      // Never offered by the Add link picker: no relation writes (K5).
+      expect(LinkKind.addableKinds.contains(LinkKind.wikiPage), isFalse);
+    });
+
+    test('a hyperlink reads as its label, else host and path', () {
+      const bare = WorkItemRelation(
+        rel: WorkItemRelation.hyperlinkRel,
+        url: 'https://example.test/spec/v2',
       );
+      expect(hyperlinkLabel(bare), 'example.test/spec/v2');
+      expect(
+        hyperlinkLabel(
+          const WorkItemRelation(
+            rel: WorkItemRelation.hyperlinkRel,
+            url: 'https://example.test/spec/v2',
+            attributes: {'name': 'The spec'},
+          ),
+        ),
+        'The spec',
+      );
+      expect(bare.isWikiPageLink, isFalse);
     });
 
     test('an unknown rel lands in Other, and headings pluralize', () {
