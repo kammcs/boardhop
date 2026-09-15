@@ -247,6 +247,27 @@ class ActivityRepository {
     );
   }
 
+  /// How many cached items are newer than the seen timestamp, re-emitted
+  /// whenever the feed or the seen marker changes (the app bar's bell).
+  ///
+  /// Cache only: the bell never fetches. `ActivitySync` and the feed refresh
+  /// the cache, and drift's watch carries the new count here.
+  Stream<int> unread(String org) =>
+      _cache.watchAll([feedKey(org), seenKey(org)]).map((entries) {
+        final feed = entries[feedKey(org)]?.json;
+        if (feed is! List) return 0;
+        final seenJson = entries[seenKey(org)]?.json;
+        final seen = seenJson is Map
+            ? DateTime.tryParse(seenJson['at'] as String? ?? '')
+            : null;
+        var count = 0;
+        for (final m in feed.whereType<Map>()) {
+          final item = ActivityItem.fromJson(m.cast<String, dynamic>());
+          if (item.isNewSince(seen)) count++;
+        }
+        return count;
+      }).distinct();
+
   Future<DateTime?> lastSeen(String org) async {
     final cached = await _cache.get(seenKey(org));
     final json = cached?.json;

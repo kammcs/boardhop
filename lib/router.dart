@@ -22,6 +22,10 @@ import 'features/diagnostics/editor_probe_page.dart';
 import 'features/diagnostics/mention_probe_page.dart';
 import 'features/diagnostics/sprint_probe/sprint_probe_page.dart';
 import 'features/diagnostics/wiki_probe/wiki_probe_page.dart';
+import 'features/launch/launch_dependencies.dart';
+import 'features/launch/launch_redirect.dart';
+import 'features/launch/launch_resolver.dart';
+import 'features/launch/project_memory.dart';
 import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipeline_log_page.dart';
 import 'features/pipelines/pipeline_run_page.dart';
@@ -58,21 +62,17 @@ import 'core/config/app_config.dart';
 /// `/orgs` lists every signed-in account with its organizations; everything
 /// below an organization lives under `/a/{account}/orgs/{org}` so the pages
 /// act as that account (see `Routes`).
-GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
+GoRouter buildRouter(
+  AuthBloc auth,
+  AppDependencies deps, {
+  LaunchResolver? launch,
+}) {
+  final redirect = LaunchRedirect(launch ?? launchResolverFor(deps));
   return GoRouter(
     initialLocation: '/',
     refreshListenable: _StreamListenable(auth.stream),
-    redirect: (context, state) {
-      final s = auth.state;
-      final atSignIn = state.matchedLocation == '/sign-in';
-      final atSplash = state.matchedLocation == '/';
-      return switch (s) {
-        AuthUnknown() => atSplash ? null : '/',
-        AuthBusy() => null,
-        AuthSignedOut() => atSignIn ? null : '/sign-in',
-        AuthSignedIn() => (atSignIn || atSplash) ? '/orgs' : null,
-      };
-    },
+    redirect: (context, state) =>
+        launchRedirect(auth.state, state.matchedLocation, redirect),
     routes: [
       GoRoute(path: '/', builder: (_, _) => const SplashPage()),
       GoRoute(path: '/sign-in', builder: (_, _) => const SignInPage()),
@@ -119,7 +119,19 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
           final accountId = state.pathParameters['account']!;
           return MultiRepositoryProvider(
             providers: deps.forAccount(accountId).providers,
-            child: AccountScope(accountId: accountId, child: child),
+            child: AccountScope(
+              accountId: accountId,
+              // Entering a project route remembers it (research/21 §4).
+              // Here rather than in `ProjectShell` so the standalone
+              // routes over the shell count too; `ProjectMemory` ignores
+              // the organization-level routes, which carry no project.
+              child: ProjectMemory(
+                accountId: accountId,
+                org: state.pathParameters['org'],
+                project: state.pathParameters['project'],
+                child: child,
+              ),
+            ),
           );
         },
         routes: [
@@ -147,6 +159,9 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                       GoRoute(
                         path: ':project/home',
                         builder: (_, state) => ProjectHomePage(
+                          // Keyed by the project so switching projects in the picker
+                          // (research/21) rebuilds the page instead of reusing its state.
+                          key: ValueKey('projecthomepage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                         ),
@@ -205,6 +220,9 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                       GoRoute(
                         path: ':project/work-items',
                         builder: (_, state) => WorkItemsPage(
+                          // Keyed by the project so switching projects in the picker
+                          // (research/21) rebuilds the page instead of reusing its state.
+                          key: ValueKey('workitemspage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                           // A dashboard's query card opens its query here
@@ -305,6 +323,9 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                       GoRoute(
                         path: ':project/repos',
                         builder: (_, state) => ReposPage(
+                          // Keyed by the project so switching projects in the picker
+                          // (research/21) rebuilds the page instead of reusing its state.
+                          key: ValueKey('repospage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                         ),
@@ -471,6 +492,9 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                         // `?tab=approvals&approval={id}&run={runId}` from a
                         // pushed approval notification (research/14 §4.2).
                         builder: (_, state) => PipelinesPage(
+                          // Keyed by the project so switching projects in the picker
+                          // (research/21) rebuilds the page instead of reusing its state.
+                          key: ValueKey('pipelinespage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                           initialTab: state.uri.queryParameters['tab'],
@@ -613,6 +637,28 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
       ),
     ],
   );
+}
+
+/// Where a signed-in launch goes, split out of [buildRouter] so it can be
+/// tested without building the pages it names.
+///
+/// Signed in at the splash or the sign-in page, the launch resolves the
+/// remembered project (research/21 L8) instead of the old `/orgs` landing;
+/// a deep link straight into a project — or anywhere else — is left alone.
+FutureOr<String?> launchRedirect(
+  AuthState state,
+  String matchedLocation,
+  LaunchRedirect launch,
+) {
+  final atSignIn = matchedLocation == '/sign-in';
+  final atSplash = matchedLocation == '/';
+  return switch (state) {
+    AuthUnknown() => atSplash ? null : '/',
+    AuthBusy() => null,
+    AuthSignedOut() => atSignIn ? null : '/sign-in',
+    AuthSignedIn(:final accounts) =>
+      (atSignIn || atSplash) ? launch.routeFor(accounts) : null,
+  };
 }
 
 /// Placeholder project path for the tab shell's `initialLocation`s; see the

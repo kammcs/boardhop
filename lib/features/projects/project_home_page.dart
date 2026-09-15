@@ -18,6 +18,7 @@ import '../../data/repositories/pull_request_repository.dart';
 import '../../data/repositories/repo_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
+import '../activity/activity_bell.dart';
 import '../pipelines/pipelines_page.dart' show RunTile;
 import '../shared/account_scope.dart';
 import '../shared/reload_on_return.dart';
@@ -25,6 +26,7 @@ import '../search/search_page.dart';
 import '../shared/widgets/ado_tile.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import 'widgets/home_view_switch.dart';
+import 'widgets/project_picker_button.dart';
 
 /// Landing tab of a project (phase 4 of the repos plan): the project's
 /// tile and description, then what matters to the signed-in person in
@@ -226,12 +228,9 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.project, overflow: TextOverflow.ellipsis),
-        leading: IconButton(
-          tooltip: 'Projects',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        // L4: the project tile with a chevron, in place of the back arrow.
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [
           // Decision D3: the one way into search, from the project's
           // landing tab; the dock keeps its four tabs.
@@ -246,6 +245,8 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
               ),
             ),
           ),
+          // L5: the bell sits beside the magnifier, left of the pill.
+          ActivityBell(org: widget.org),
           // The pill stays rightmost so it never moves when an action
           // appears next to it (D5: Search stays on Summary only).
           HomeViewSwitch(

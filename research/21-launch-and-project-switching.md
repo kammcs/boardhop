@@ -1,7 +1,8 @@
 # 21 — Launch experience and project switching
 
-**Status:** planned with Kelly 2026-09-15 (interview below); build in dispatcher mode, two Opus
-phases in parallel, then acceptance on the Android emulators.
+**Status:** planned with Kelly 2026-09-15 (interview below); built the same day in dispatcher mode
+(two Opus phases in parallel, LA state/routing and LB picker/bell), accepted on the Android
+emulators (§6). Not yet on iOS.
 
 **Kelly's ask (verbatim intent):** "On root level project pages, we will remove the back arrow to
 project nav and replace it with a project picker that shows the logged in users with a log out
@@ -116,3 +117,29 @@ the four root pages, `lib/features/activity/`, `lib/data/repositories/activity_r
 5. Activity bell dot appears with unread items and clears after opening Activity.
 6. `/orgs` and the project list still open from the picker and from a deep link.
 7. Remembered project removed from the store by hand (or an account signed out) → fallback with the snackbar.
+
+## 6. Acceptance on Android (2026-09-15, Pixel 10 Pro and Pixel Tablet emulators, debug build)
+
+Passed: (1) cold start with an empty memory landed on CloudCover 2.0, the first alphabetical
+project, with no intermediate page; after switching to the scratch project, kill and relaunch landed
+there. (3) the tile ▾ opens the picker from all four tabs; rows switch and the current row is ticked;
+the sheet drags to full height; the tablet panel anchors under the tile. (5) the bell dot showed with
+5 unread and cleared after opening Activity. (7) a remembered project that does not exist (the
+preference edited by hand to "Gone Project"): the shell opened it (L8, no pre-check), the Home
+sections showed the service's TF200016 lines, and the snackbar "\"Gone Project\" is not available
+any more · Choose another project" appeared with the first frame; the action opens the picker. Both
+themes on the phone.
+
+Two defects found and fixed on the way: switching projects reused the root pages' state, so Home
+kept the previous project's body under the new header — the four root routes now key their page by
+org and project (`router.dart`); and the sheet drew two drag handles (the theme's and the content's
+own) — `showDragHandle: false`.
+
+Not exercised: (4) sign out with a second account and Add account (one account on the emulator; the
+code path waits for the bloc's next state and is unit-tested); (2) a fresh install's first sign-in
+(needs Kelly's credentials); (6) deep links into `/orgs` (the picker's Manage accounts row opens it).
+
+Observation for Kelly: with the tile, Search, the bell and the three-segment Home pill, the Home
+title truncates to "DevO…" at phone width, and the Work tab's two-line title likewise. The header
+below already names the project, so dropping the app-bar title text on Home at compact width is the
+obvious fix; decision left to Kelly.

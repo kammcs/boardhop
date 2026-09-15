@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'root_tab_stubs.dart';
+
 class _Repo extends Mock implements PipelineRepository {}
 
 class _AuthService extends Mock implements AuthService {}
@@ -94,7 +96,11 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       MultiRepositoryProvider(
-        providers: [RepositoryProvider<PipelineRepository>.value(value: repo)],
+        providers: [
+          // The tab's app bar carries the project picker and the bell.
+          ...rootChromeProviders(),
+          RepositoryProvider<PipelineRepository>.value(value: repo),
+        ],
         child: BlocProvider<AuthBloc>.value(
           value: auth,
           child: MaterialApp.router(

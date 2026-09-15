@@ -7,6 +7,8 @@ import '../../core/http/ado_exceptions.dart';
 import '../../data/models/work_item.dart';
 import '../../data/repositories/work_item_repository.dart';
 import '../../theme/theme.dart';
+import '../activity/activity_bell.dart';
+import '../projects/widgets/project_picker_button.dart';
 import '../shared/account_scope.dart';
 import 'form/new_work_item_button.dart';
 import 'widgets/query_picker.dart';
@@ -258,13 +260,12 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
             ),
           ],
         ),
-        leading: IconButton(
-          tooltip: 'Projects',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        // L4: the project tile with a chevron, in place of the back arrow.
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [
+          // L5: the bell sits left of the tab's own actions.
+          ActivityBell(org: widget.org),
           NewWorkItemButton(
             org: widget.org,
             project: widget.project,

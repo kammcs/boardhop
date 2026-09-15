@@ -54,7 +54,8 @@ class _OrgPickerPageState extends State<OrgPickerPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Organizations'),
+          // Reached from the picker's "Manage accounts" row (research/21 L3).
+          title: const Text('Accounts'),
           actions: [
             IconButton(
               tooltip: 'Add account',

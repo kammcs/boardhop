@@ -12,6 +12,7 @@ import 'data/activity_sync.dart';
 import 'data/avatar_store.dart';
 import 'data/db/app_database.dart';
 import 'data/db/json_cache.dart';
+import 'data/last_project.dart';
 import 'data/mention_recents.dart';
 import 'data/repositories/account_repository.dart';
 import 'data/repositories/activity_repository.dart';
@@ -32,6 +33,8 @@ import 'data/repositories/wiki_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/search_recents.dart';
 import 'data/write_queue.dart';
+import 'features/launch/launch_dependencies.dart';
+import 'features/launch/launch_resolver.dart';
 import 'features/notifications/push_coordinator.dart';
 import 'features/notifications/push_registrar.dart';
 import 'features/notifications/push_service.dart';
@@ -261,7 +264,12 @@ class _BoardhopAppState extends State<BoardhopApp> {
     // the account.
     onAccountSigningOut: (id) => _push.signOut(id),
   )..add(const AuthStarted());
-  late final _router = buildRouter(_authBloc, widget.deps);
+
+  /// Where a cold start lands (research/21): the remembered project, or
+  /// the first one the accounts offer. Built here so the router's redirect
+  /// and the picker share one instance, memory and pending notice alike.
+  late final LaunchResolver _launch = launchResolverFor(widget.deps);
+  late final _router = buildRouter(_authBloc, widget.deps, launch: _launch);
   late final PushCoordinator _push = PushCoordinator(
     push: widget.deps.push,
     notifications: widget.deps.notifications,
@@ -348,6 +356,8 @@ class _BoardhopAppState extends State<BoardhopApp> {
         RepositoryProvider.value(value: deps.db),
         RepositoryProvider.value(value: deps.notifications),
         RepositoryProvider.value(value: deps.push),
+        RepositoryProvider<LaunchResolver>.value(value: _launch),
+        RepositoryProvider<LastProjectStore>.value(value: _launch.store),
       ],
       child: BlocProvider.value(
         value: _authBloc,

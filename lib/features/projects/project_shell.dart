@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/display_cutout.dart';
+import '../../data/models/project.dart';
+import '../../data/repositories/project_repository.dart';
 import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
+import '../launch/launch_hooks.dart';
+import '../launch/launch_resolver.dart';
 import '../shared/pending_writes_banner.dart';
 import '../shared/unsaved_work.dart';
 import '../shared/account_scope.dart';
@@ -46,12 +52,88 @@ class _ProjectShellState extends State<ProjectShell>
   /// glass rail can hug the other edge; read again after every rotation.
   CutoutSide _cutout = CutoutSide.unknown;
 
+  /// Watches the organization's cached project list so a project that has
+  /// gone (research/21 L7) can offer a way out instead of an empty page.
+  StreamSubscription<List<Project>>? _projects;
+  bool _offeredAnother = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _drain();
+      _showLaunchNotice();
+    });
+    _watchProjects();
     _readCutout();
+  }
+
+  /// The launch settled for something other than the remembered project
+  /// (research/21 L7); the shell is the first thing it built, so it is
+  /// where the one line is said. Taken, not read: shown once.
+  void _showLaunchNotice() {
+    if (!mounted) return;
+    final fallback = _read<LaunchResolver>()?.notice.take();
+    if (fallback == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "Your last project isn't available any more; "
+          'opened ${fallback.project}.',
+        ),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  /// The remembered project is opened without verifying it (L8), so a
+  /// project that was deleted or lost shows up here: the organization's
+  /// project list is cached and does not name it. An empty list is a cold
+  /// cache, not an answer, so it says nothing.
+  void _watchProjects() {
+    final repo = _read<ProjectRepository>();
+    if (repo == null) return;
+    _projects = repo.watch(org).listen((projects) {
+      if (!mounted || _offeredAnother || projects.isEmpty) return;
+      if (projects.any((p) => p.name == project)) return;
+      _offeredAnother = true;
+      _offerAnotherProject();
+    }, onError: (Object _) {});
+  }
+
+  void _offerAnotherProject() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"$project" is not available any more.'),
+        // The picker belongs to the other launch phase; with nothing
+        // registered (a test, a build without it) the line still shows,
+        // just without the way out.
+        action: LaunchHooks.canChooseProject
+            ? SnackBarAction(
+                label: 'Choose another project',
+                onPressed: () {
+                  if (mounted) LaunchHooks.chooseAnotherProject(context);
+                },
+              )
+            : null,
+        duration: const Duration(seconds: 8),
+        // Flutter 3.47 keeps a snackbar with an action open until it is
+        // dismissed, which also blocks every later snackbar.
+        persist: false,
+      ),
+    );
+  }
+
+  /// Providers the shell can do without: a widget test that builds it on
+  /// its own has neither the launch notice nor the account's repositories.
+  T? _read<T extends Object>() {
+    try {
+      return context.read<T>();
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -68,6 +150,7 @@ class _ProjectShellState extends State<ProjectShell>
 
   @override
   void dispose() {
+    _projects?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

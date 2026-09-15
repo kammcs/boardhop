@@ -47,6 +47,28 @@ class JsonCache {
         );
   }
 
+  /// The entries among [keys] that exist, keyed the way the caller named
+  /// them, re-emitting whenever any of them is written or removed.
+  ///
+  /// One drift query rather than one per key, so a widget that needs two
+  /// related entries (a feed and its seen marker) gets them in step.
+  Stream<Map<String, CachedJson>> watchAll(List<String> keys) {
+    final db = _db;
+    if (db == null) return Stream.value(const {});
+    final byFullKey = {for (final key in keys) _k(key): key};
+    return (db.select(
+      db.cacheEntries,
+    )..where((t) => t.key.isIn(byFullKey.keys.toList()))).watch().map((rows) {
+      final out = <String, CachedJson>{};
+      for (final row in rows) {
+        final key = byFullKey[row.key];
+        if (key == null) continue;
+        out[key] = (json: jsonDecode(row.json), fetchedAt: row.fetchedAt);
+      }
+      return out;
+    });
+  }
+
   Future<void> remove(String key) async {
     final db = _db;
     if (db == null) return;

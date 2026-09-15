@@ -10,6 +10,8 @@ import '../../core/util/format.dart';
 import '../../data/models/pipeline.dart';
 import '../../data/repositories/pipeline_repository.dart';
 import '../../theme/theme.dart';
+import '../activity/activity_bell.dart';
+import '../projects/widgets/project_picker_button.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import '../shared/account_scope.dart';
 import '../shared/anchor_highlight.dart';
@@ -398,13 +400,14 @@ class _PipelinesPageState extends State<PipelinesPage> {
               ),
             ],
           ),
-          leading: IconButton(
-            tooltip: 'Projects',
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () =>
-                context.go('${orgRoute(context, widget.org)}/projects'),
+          // L4: the project tile with a chevron, in place of the back arrow.
+          leadingWidth: ProjectPickerButton.leadingWidth,
+          leading: ProjectPickerButton(
+            org: widget.org,
+            project: widget.project,
           ),
-          actions: [],
+          // L5: the bell sits left of the tab's own actions.
+          actions: [ActivityBell(org: widget.org)],
           bottom: TabBar(
             tabs: [
               const Tab(text: 'Runs'),

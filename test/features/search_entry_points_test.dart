@@ -6,6 +6,7 @@ import 'package:boardhop/data/models/git_repository.dart';
 import 'package:boardhop/data/models/project.dart';
 import 'package:boardhop/data/models/pull_request.dart';
 import 'package:boardhop/data/models/work_item.dart';
+import 'package:boardhop/data/repositories/activity_repository.dart';
 import 'package:boardhop/data/repositories/pipeline_repository.dart';
 import 'package:boardhop/data/repositories/project_repository.dart';
 import 'package:boardhop/data/repositories/pull_request_repository.dart';
@@ -20,6 +21,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+
+import 'root_tab_stubs.dart';
 
 class _AuthService extends Mock implements AuthService {}
 
@@ -124,6 +127,8 @@ void main() {
       await tester.pumpWidget(
         MultiRepositoryProvider(
           providers: [
+            // The tab's app bar carries the project picker and the bell.
+            ...rootChromeProviders(),
             RepositoryProvider<WorkItemRepository>.value(value: workItems),
           ],
           child: BlocProvider<AuthBloc>.value(
@@ -233,6 +238,8 @@ void main() {
             RepositoryProvider<PullRequestRepository>.value(value: prs),
             RepositoryProvider<WorkItemRepository>.value(value: workItems),
             RepositoryProvider<PipelineRepository>.value(value: pipelines),
+            // The app bar's Activity bell (research/21 L5).
+            RepositoryProvider<ActivityRepository>.value(value: stubActivity()),
           ],
           child: BlocProvider<AuthBloc>.value(
             value: auth,
