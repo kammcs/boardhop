@@ -75,6 +75,7 @@ over an `ExcludeSemantics` chart plus the day-by-day numbers as a list).
 | S10 | **People:** an app-bar person filter with Everyone, Me, and members with task counts. No group-by-people layout. |
 | S11 | **Admin:** no sprint creation or date editing in v1. The picker lists current, future, past; undated sprints are shown greyed "Dates not set". |
 | S12 | **An ended sprint** the service still calls current opens as current; the header says "Ended N days ago"; the burndown covers its dates. No day count when dates are missing. |
+| S13 | **The Taskboard tab carries no header and no chart** (Kelly, after seeing it on real data: the tiles and sparkline made the board harder to see). The sprint header stays on Backlog and Burndown; on tablets the grid takes the full width, with no supporting pane beside it. |
 
 ## 4. Design
 
