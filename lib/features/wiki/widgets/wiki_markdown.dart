@@ -3,13 +3,19 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:super_sliver_list/super_sliver_list.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/text/mention.dart';
 import '../../../core/text/wiki_link.dart';
 import '../../../data/models/wiki.dart';
+import '../../../theme/theme.dart';
 import '../../shared/mention/mention_markdown.dart';
-import '../../shared/mention/mention_style.dart';
+import 'wiki_blocks.dart';
+import 'wiki_builders.dart';
+import 'wiki_find.dart';
+import 'wiki_syntaxes.dart';
 
 /// One heading of a page, with the key the reader scrolls to it by.
 ///
@@ -88,23 +94,62 @@ class WikiSection {
   final WikiHeading? heading;
 }
 
+/// The handle the reader keeps on a body it cannot reach with a
+/// `GlobalKey`.
+///
+/// On a short page every heading is built, so `Scrollable.ensureVisible` on
+/// its key is enough and this does nothing. On a long one the body is a
+/// `SuperListView` and the heading four screens down has not been built at
+/// all: the only way there is the list's own `jumpToItem`, which is what
+/// this exposes (W-C item 11).
+class WikiBodyController {
+  _WikiMarkdownState? _state;
+
+  /// True while the body on screen is the lazy one.
+  bool get isLazy => _state?._lazy ?? false;
+
+  /// Scrolls to the heading [anchor] names. False when this body does not
+  /// have it, so the caller can fall back to its own `ensureVisible`.
+  bool jumpToAnchor(String anchor) {
+    final state = _state;
+    if (state == null || !state._lazy) return false;
+    return state._jumpToAnchor(anchor);
+  }
+
+  /// Scrolls to one of [WikiMarkdown.split]'s sections, for the find bar.
+  bool jumpToSection(int section) {
+    final state = _state;
+    if (state == null || !state._lazy) return false;
+    return state._jumpToSection(section);
+  }
+
+  void _attach(_WikiMarkdownState state) => _state = state;
+
+  void _detach(_WikiMarkdownState state) {
+    if (identical(_state, state)) _state = null;
+  }
+}
+
 /// The wiki's markdown body.
 ///
-/// **This is the seam W-C replaces.** Everything the reader needs from a
-/// rendered page is already expressed here — the resolved links, the
-/// attachment images, the mention routing and the heading registry — so
-/// W-C's job is to change what happens *inside* this widget (the wiki's
-/// `[[_TOC_]]`, `:::` fences, tables, HTML subset and placeholder cards,
-/// research/20 K3/K10) without touching a caller.
+/// W-C fills the seam W-B left: the page's front matter, `[[_TOC_]]` and
+/// `[[_TOSP_]]`, the `:::` fence family and the mermaid/math fences as
+/// placeholder cards (K3), highlighted and copyable code, the wrapping and
+/// panning table (K10), a small inline-HTML subset with HTML blocks through
+/// `HtmlWidget`, sized attachment images, GUID mentions and find-in-page.
 ///
-/// Two rules are settled and must survive that rewrite:
+/// Three rules are settled and survive every rewrite:
 ///
 /// * the body is **never** `MarkdownBody(selectable: true)` — the W-A timing
 ///   spike measured it at about 7x the whole-document layout — so selection
 ///   comes from one [SelectionArea] around a plain body;
 /// * headings are split into [WikiSection]s so each one carries a
 ///   `GlobalKey`, which is what `#anchor` links and the contents sheet
-///   scroll to. A heading inside a fenced code block is not a heading.
+///   scroll to. A heading inside a fenced code block is not a heading;
+/// * every syntax list, builder map and style sheet is built **per body**.
+///   `flutter_markdown_plus` appends block-builder keys to one global list
+///   and `markdown` keeps its syntaxes in a set, so a shared `const` list is
+///   how a construct ends up parsed twice.
 class WikiMarkdown extends StatefulWidget {
   const WikiMarkdown({
     super.key,
@@ -112,13 +157,20 @@ class WikiMarkdown extends StatefulWidget {
     required this.wiki,
     required this.pagePath,
     this.headings,
+    this.subPages = const [],
     this.onOpenPage,
     this.onOpenAnchor,
     this.onOpenAttachment,
     this.onOpenMention,
+    this.onOpenOnWeb,
+    this.onOpenQuery,
     this.attachmentUri,
     this.headers = const {},
     this.names = const {},
+    this.find,
+    this.bodyController,
+    this.lazyLeading = const [],
+    this.lazyTrailing = const [],
   });
 
   /// The raw markdown of the page.
@@ -136,6 +188,9 @@ class WikiMarkdown extends StatefulWidget {
   /// and an anchor link has something to scroll to.
   final WikiHeadings? headings;
 
+  /// The page's child pages, which is what `[[_TOSP_]]` draws.
+  final List<WikiPageNode> subPages;
+
   /// Another page of this wiki, with the anchor the link carried.
   final void Function(String path, {String? anchor})? onOpenPage;
 
@@ -149,6 +204,12 @@ class WikiMarkdown extends StatefulWidget {
   /// app already has routes for (research/20 §4.2).
   final void Function(MentionKind kind, String id)? onOpenMention;
 
+  /// This page on the web — every placeholder card offers it (K3).
+  final VoidCallback? onOpenOnWeb;
+
+  /// A `::: query-table {guid}`, opened in the Work items page (K3).
+  final void Function(String queryId)? onOpenQuery;
+
   /// The authenticated URL an attachment image is fetched from. There is no
   /// wiki route for attachments: they are files in the wiki's git
   /// repository (research/20 §1), so the page has to supply this.
@@ -160,6 +221,38 @@ class WikiMarkdown extends StatefulWidget {
 
   /// Lower-cased identity GUID → display name, for `@<guid>`.
   final Map<String, String> names;
+
+  /// Find-in-page (K4). Null leaves the body unhighlighted.
+  final WikiFindController? find;
+
+  /// The handle the reader uses to reach a section of the **lazy** body.
+  final WikiBodyController? bodyController;
+
+  /// Rows the lazy body puts above the page (the reader's header), so a long
+  /// page keeps one scroll view rather than a pinned header over a list.
+  /// Ignored on a short page, which the reader scrolls itself.
+  final List<Widget> lazyLeading;
+
+  /// Rows the lazy body puts below the page (the reader's footer).
+  final List<Widget> lazyTrailing;
+
+  /// Above this many characters the body stops being one `MarkdownBody` and
+  /// becomes a lazily built list of sections.
+  ///
+  /// The W-A spike measured the first frame of a `SelectionArea` body at
+  /// about 8.7 ms per KB and super-linear beyond that, so ~100 KB is where a
+  /// page stops opening instantly (`wiki_markdown_perf_test.dart`).
+  static const lazyThreshold = 100 * 1024;
+
+  /// Above this, nothing is rendered until the reader asks: a megabyte of
+  /// markdown is a data dump, and even the lazy body has to parse every
+  /// section to split it.
+  static const refuseThreshold = 1024 * 1024;
+
+  static bool isLazy(String content) =>
+      content.length > lazyThreshold && content.length <= refuseThreshold;
+
+  static bool isTooLong(String content) => content.length > refuseThreshold;
 
   /// The page split at its headings, fences respected.
   ///
@@ -221,37 +314,124 @@ class WikiMarkdown extends StatefulWidget {
 
 class _WikiMarkdownState extends State<WikiMarkdown> {
   late List<WikiSection> _sections;
+  WikiFrontMatter? _matter;
+  String _body = '';
+
+  final _listController = ListController();
+  final _scroll = ScrollController();
+
+  /// Set once the reader has answered the "Load anyway" card.
+  bool _loadAnyway = false;
+
+  /// The find pass the sections on screen were parsed for.
+  int _findPass = -1;
+
+  bool get _lazy => !_loadAnyway && WikiMarkdown.isLazy(_body);
+
+  bool get _tooLong => !_loadAnyway && WikiMarkdown.isTooLong(_body);
 
   @override
   void initState() {
     super.initState();
     _resplit();
+    widget.bodyController?._attach(this);
+    widget.find?.addListener(_onFind);
   }
 
   @override
   void didUpdateWidget(WikiMarkdown old) {
     super.didUpdateWidget(old);
+    if (old.bodyController != widget.bodyController) {
+      old.bodyController?._detach(this);
+      widget.bodyController?._attach(this);
+    }
+    if (old.find != widget.find) {
+      old.find?.removeListener(_onFind);
+      widget.find?.addListener(_onFind);
+    }
     if (old.content != widget.content || old.headings != widget.headings) {
+      _loadAnyway = false;
       _resplit();
     }
   }
 
+  @override
+  void dispose() {
+    widget.find?.removeListener(_onFind);
+    widget.bodyController?._detach(this);
+    _listController.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
   void _resplit() {
-    _sections = WikiMarkdown.split(widget.content);
+    final (matter, body) = WikiFrontMatter.split(widget.content);
+    _matter = matter;
+    _body = WikiPreprocess.run(body);
+    _sections = WikiMarkdown.split(_body);
     widget.headings?.reset([
       for (final s in _sections)
         if (s.heading != null) s.heading!,
     ]);
+    _publishFindCounts();
   }
+
+  // ----------------------------------------------------------------- find
+
+  void _onFind() {
+    if (mounted) setState(() {});
+  }
+
+  /// The lazy body cannot count what it has not built, so its hit count is
+  /// scanned off the source instead (K4). The short body counts the runs it
+  /// actually drew, which is exact.
+  void _publishFindCounts() {
+    final find = widget.find;
+    if (find == null) return;
+    if (_lazy) {
+      find.useSectionCounts([
+        for (final section in _sections)
+          wikiCountMatches(section.markdown, find.term),
+      ]);
+    } else {
+      find.useDrawnHits();
+    }
+  }
+
+  bool _jumpToAnchor(String anchor) {
+    for (var i = 0; i < _sections.length; i++) {
+      final heading = _sections[i].heading;
+      if (heading == null) continue;
+      if (WikiLink.anchorMatches(heading.anchor, anchor)) {
+        return _jumpToSection(i);
+      }
+    }
+    return false;
+  }
+
+  bool _jumpToSection(int section) {
+    if (!_lazy || section < 0 || section >= _sections.length) return false;
+    _listController.jumpToItem(
+      index: _leadingCount + section,
+      scrollController: _scroll,
+      alignment: 0.05,
+    );
+    return true;
+  }
+
+  /// The rows the lazy list puts before the first section.
+  int get _leadingCount =>
+      widget.lazyLeading.length + (_matter == null ? 0 : 1);
 
   // ------------------------------------------------------------ link taps
 
-  void _onTapLink(String? href) {
-    if (href == null || href.isEmpty) return;
+  /// True when the reader took [href] itself; false sends it on.
+  bool _onTapLink(String? href) {
+    if (href == null || href.isEmpty) return false;
     final mention = MentionHref.parse(href);
     if (mention != null) {
       widget.onOpenMention?.call(mention.$1, mention.$2);
-      return;
+      return true;
     }
     final relative = WikiLink.resolve(href, pagePath: widget.pagePath);
     if (relative != null) {
@@ -263,7 +443,7 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
         case WikiHrefKind.attachment:
           widget.onOpenAttachment?.call(relative.path);
       }
-      return;
+      return true;
     }
     // An absolute URL. A web link into *this* wiki is a page of this wiki,
     // so it opens in the reader rather than the browser (K5).
@@ -272,13 +452,15 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
       final path = link.path;
       if (path != null && path.isNotEmpty) {
         widget.onOpenPage?.call(path, anchor: link.anchor);
-        return;
+        return true;
       }
     }
     final uri = Uri.tryParse(href);
     if (uri != null && uri.hasScheme) {
       unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
+      return true;
     }
+    return false;
   }
 
   /// A parsed wiki URL naming the wiki on screen — by GUID or by name, both
@@ -292,25 +474,37 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
   // --------------------------------------------------------------- images
 
   Widget _image(Uri uri, String? title, String? alt) {
-    final href = uri.toString();
+    final (href, maxWidth, maxHeight) = _sized(uri);
     final resolved = WikiLink.resolve(href, pagePath: widget.pagePath);
     final build = widget.attachmentUri;
+    final constraints = BoxConstraints(
+      maxWidth: maxWidth ?? double.infinity,
+      maxHeight: maxHeight == null
+          ? _imageMaxHeight
+          : (maxHeight < _imageMaxHeight ? maxHeight : _imageMaxHeight),
+    );
     if (resolved == null || !resolved.isAttachment || build == null) {
-      return Image.network(
-        href,
-        fit: BoxFit.scaleDown,
-        semanticLabel: alt,
-        errorBuilder: (context, error, stack) => _brokenImage(context, alt),
+      return ConstrainedBox(
+        constraints: constraints,
+        child: Image.network(
+          href,
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          semanticLabel: alt,
+          errorBuilder: (context, error, stack) => _brokenImage(context, alt),
+        ),
       );
     }
     final url = build(resolved.path).toString();
     final image = ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: _imageMaxHeight),
+      constraints: constraints,
       child: Image(
         image: CachedNetworkImageProvider(url, headers: widget.headers),
         fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
         semanticLabel: alt,
-        errorBuilder: (context, error, stack) => _brokenImage(context, alt),
+        errorBuilder: (context, error, stack) =>
+            _brokenImage(context, alt ?? _fileName(resolved.path)),
       ),
     );
     final open = widget.onOpenAttachment;
@@ -322,60 +516,262 @@ class _WikiMarkdownState extends State<WikiMarkdown> {
     );
   }
 
+  /// Splits the `=WxH` size [WikiPreprocess] folded into the query back off
+  /// the source, and reads it as a **maximum** rather than a size: a wiki
+  /// author's `=1200x800` means "as big as it goes", and honouring it
+  /// literally would push the page sideways on a phone.
+  (String, double?, double?) _sized(Uri uri) {
+    final params = Map<String, String>.of(uri.queryParameters);
+    final width = double.tryParse(
+      params.remove(WikiImageSize.widthParam) ?? '',
+    );
+    final height = double.tryParse(
+      params.remove(WikiImageSize.heightParam) ?? '',
+    );
+    if (width == null && height == null) return (uri.toString(), null, null);
+    final stripped = uri.replace(
+      queryParameters: params.isEmpty ? null : params,
+    );
+    // `Uri.replace` with no parameters still leaves a bare `?`.
+    var href = stripped.toString();
+    if (params.isEmpty && href.endsWith('?')) {
+      href = href.substring(0, href.length - 1);
+    }
+    return (href, width, height);
+  }
+
+  static String _fileName(String path) {
+    final at = path.lastIndexOf('/');
+    return at < 0 ? path : path.substring(at + 1);
+  }
+
   /// An image in a page is not a gallery: a tall screenshot would push the
   /// rest of the page off the screen. The viewer shows it full size.
   static const _imageMaxHeight = 360.0;
 
+  /// An image that could not be fetched: the glyph and what it was of.
+  ///
+  /// Sized against the box it is given, because an author's `=16x16` badge
+  /// leaves 16 dp and the icon and its label do not fit in it — the row
+  /// overflowed with the red stripes on the first sized image that failed.
   Widget _brokenImage(BuildContext context, String? alt) {
     final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.broken_image_outlined,
-          size: 20,
-          color: theme.colorScheme.error,
-        ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            (alt ?? '').trim().isEmpty ? 'Image' : alt!.trim(),
-            style: theme.textTheme.bodySmall?.copyWith(
+    final label = (alt ?? '').trim().isEmpty ? 'Image' : alt!.trim();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        if (width < 96) {
+          return Icon(
+            Icons.broken_image_outlined,
+            size: width.isFinite && width < 20 ? width : 20,
+            color: theme.colorScheme.error,
+            semanticLabel: label,
+          );
+        }
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.broken_image_outlined,
+              size: 20,
               color: theme.colorScheme.error,
             ),
+            const SizedBox(width: Spacing.xs),
+            Flexible(
+              child: Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------- build
+
+  WikiMarkdownConfig _config() => WikiMarkdownConfig(
+    cell: _cell,
+    tocHeadings: [
+      for (final section in _sections)
+        if (section.heading != null)
+          (
+            level: section.heading!.level,
+            text: section.heading!.text,
+            anchor: section.heading!.anchor,
           ),
-        ),
-      ],
+    ],
+    subPages: widget.subPages,
+    onOpenAnchor: widget.onOpenAnchor,
+    onOpenPage: (path) => widget.onOpenPage?.call(path),
+    onOpenOnWeb: widget.onOpenOnWeb,
+    onOpenQuery: widget.onOpenQuery,
+    onOpenUrl: (uri) =>
+        unawaited(launchUrl(uri, mode: LaunchMode.externalApplication)),
+    imageUrl: widget.attachmentUri == null
+        ? null
+        : (src) {
+            final resolved = WikiLink.resolve(src, pagePath: widget.pagePath);
+            if (resolved == null || !resolved.isAttachment) return src;
+            return widget.attachmentUri!(resolved.path).toString();
+          },
+    headers: widget.headers,
+    onTapHref: _onTapLink,
+    find: widget.find,
+  );
+
+  /// One table cell: the same body, minus the block constructs a cell cannot
+  /// hold. Inline only, so a cell stays a line of text with its links,
+  /// mentions, code and `<br>` intact.
+  Widget _cell(BuildContext context, String markdown, TextAlign align) {
+    if (markdown.trim().isEmpty) return const SizedBox.shrink();
+    return MarkdownBody(
+      data: markdown,
+      selectable: false,
+      shrinkWrap: true,
+      fitContent: true,
+      styleSheet: wikiStyleSheet(context).copyWith(
+        textAlign: switch (align) {
+          TextAlign.center => WrapAlignment.center,
+          TextAlign.right => WrapAlignment.end,
+          _ => WrapAlignment.start,
+        },
+        pPadding: EdgeInsets.zero,
+      ),
+      extensionSet: md.ExtensionSet.gitHubWeb,
+      inlineSyntaxes: wikiInlineSyntaxes(findTerm: widget.find?.term),
+      builders: wikiBuilders(_config()),
+      imageBuilder: _image,
+      onTapLink: (text, href, title) => _onTapLink(href),
+    );
+  }
+
+  Widget _section(BuildContext context, WikiSection section) {
+    final pass = widget.find?.pass ?? 0;
+    return MarkdownBody(
+      // `MarkdownBody` re-parses on its data or its style sheet, never on
+      // its syntaxes, so a new find term needs a new element to take.
+      key: ValueKey('wiki-section-$pass'),
+      data: section.markdown,
+      selectable: false,
+      styleSheet: wikiStyleSheet(context),
+      // Heading ids, `:rocket:`, footnotes and strikethrough all come from
+      // here; the wiki's own extensions are the block and inline syntaxes
+      // beside it.
+      extensionSet: md.ExtensionSet.gitHubWeb,
+      blockSyntaxes: wikiBlockSyntaxes(),
+      inlineSyntaxes: wikiInlineSyntaxes(findTerm: widget.find?.term),
+      builders: wikiBuilders(_config()),
+      imageBuilder: _image,
+      onTapLink: (text, href, title) => _onTapLink(href),
+    );
+  }
+
+  Widget _loadAnywayCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(Spacing.lg),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: Radii.card,
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('This page is very large', style: theme.textTheme.titleSmall),
+          const SizedBox(height: Spacing.xs),
+          Text(
+            '${(_body.length / 1024).round()} KB of markdown. Rendering it '
+            'may take a while on this device.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Spacing.sm),
+          FilledButton(
+            onPressed: () => setState(() => _loadAnyway = true),
+            child: const Text('Load anyway'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_tooLong) return _loadAnywayCard(context);
+    final find = widget.find;
+    // A new pass means the sections are re-keyed and will re-register their
+    // hits; every other rebuild must leave the keys of the last pass alone,
+    // or the up/down buttons lose the page. `settle` is scheduled only for a
+    // real pass, so its own notification cannot start another one.
+    if (find != null && _findPass != find.pass) {
+      _findPass = find.pass;
+      _publishFindCounts();
+      find.beginPass();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) find.settle();
+      });
+    }
+
     // One SelectionArea around plain bodies: `selectable: true` builds a
     // `SelectableText.rich` per block and measured ~7x slower (W-A spike).
     return SelectionArea(
       child: MentionScope(
         names: widget.names,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final section in _sections)
-              KeyedSubtree(
-                key: section.heading?.key,
-                child: MarkdownBody(
-                  data: section.markdown,
-                  selectable: false,
-                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context))
-                      .copyWith(a: mentionTextStyle(context)),
-                  inlineSyntaxes: [MentionSyntax()],
-                  builders: {MentionSyntax.personTag: MentionPersonBuilder()},
-                  imageBuilder: _image,
-                  onTapLink: (text, href, title) => _onTapLink(href),
-                ),
-              ),
-          ],
-        ),
+        child: _lazy ? _lazyBody(context) : _eagerBody(context),
       ),
+    );
+  }
+
+  Widget _eagerBody(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (_matter != null) WikiFrontMatterView(matter: _matter!),
+      for (final section in _sections)
+        KeyedSubtree(
+          key: section.heading?.key,
+          child: _section(context, section),
+        ),
+    ],
+  );
+
+  /// The long-page body: one row per section, built as it comes into view,
+  /// with the reader's header and footer as rows of the same list so the
+  /// page keeps a single scroll (W-C item 11).
+  Widget _lazyBody(BuildContext context) {
+    final leading = widget.lazyLeading.length;
+    final matter = _matter == null ? 0 : 1;
+    final count =
+        leading + matter + _sections.length + widget.lazyTrailing.length;
+    return SuperListView.builder(
+      controller: _scroll,
+      listController: _listController,
+      itemCount: count,
+      padding: EdgeInsets.only(bottom: scrollEndPadding(context).bottom),
+      itemBuilder: (context, index) {
+        if (index < leading) return widget.lazyLeading[index];
+        if (matter == 1 && index == leading) {
+          return WikiFrontMatterView(matter: _matter!);
+        }
+        final at = index - leading - matter;
+        if (at < _sections.length) {
+          final section = _sections[at];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+            child: KeyedSubtree(
+              key: section.heading?.key,
+              child: _section(context, section),
+            ),
+          );
+        }
+        return widget.lazyTrailing[at - _sections.length];
+      },
     );
   }
 }

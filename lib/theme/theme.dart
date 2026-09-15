@@ -6,3 +6,4 @@ export 'boardhop_theme.dart';
 export 'layout.dart';
 export 'theme_controller.dart';
 export 'tokens.dart';
+export 'wiki_style.dart';

@@ -5,6 +5,7 @@ import 'package:boardhop/data/models/wiki.dart';
 import 'package:boardhop/data/repositories/wiki_repository.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/features/shared/mention/mention_markdown.dart';
+import 'package:boardhop/features/wiki/widgets/wiki_find.dart';
 import 'package:boardhop/features/wiki/widgets/wiki_markdown.dart';
 import 'package:boardhop/features/wiki/widgets/wiki_page_view.dart';
 import 'package:boardhop/features/wiki/widgets/wiki_source_page.dart';
@@ -199,6 +200,64 @@ More.
     final body = tester.widget<MarkdownBody>(find.byType(MarkdownBody).first);
     body.onTapLink!('text', href, '');
   }
+
+  group('find in page', () {
+    testWidgets('the bar opens in the app bar, counts and closes', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      expect(find.byType(WikiFindBar), findsNothing);
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pumpAndSettle();
+
+      // In the app bar's own bottom, which the keyboard can never cover —
+      // the reader is a page over the shell and a bottom-anchored bar would
+      // have to spend `viewInsets` itself (K4).
+      expect(find.byType(WikiFindBar), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(WikiFindBar),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.enterText(find.byType(TextField), 'table');
+      // The field is debounced, and the count is only known once the body
+      // has rebuilt with the new syntax.
+      await tester.pump(
+        WikiFindBar.debounce + const Duration(milliseconds: 50),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 of 2'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Next match'));
+      await tester.pumpAndSettle();
+      expect(find.text('2 of 2'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Close find'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WikiFindBar), findsNothing);
+    });
+
+    testWidgets('a term nobody matches says so rather than going quiet', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      await tester.tap(find.byIcon(Icons.search));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'nothinghere');
+      await tester.pump(
+        WikiFindBar.debounce + const Duration(milliseconds: 50),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No matches'), findsOneWidget);
+    });
+  });
 
   group('chrome', () {
     testWidgets('the title, the parent path and the footer', (tester) async {

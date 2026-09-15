@@ -58,7 +58,7 @@ class _WikiProbePageState extends State<WikiProbePage> {
     final rows = visibleWikiRows(WikiProbeData.tree, _expanded);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wiki probe (W-B)'),
+        title: const Text('Wiki probe'),
         actions: [
           IconButton(
             tooltip: 'Wiki picker',
@@ -141,6 +141,9 @@ class _WikiProbePageState extends State<WikiProbePage> {
                   onOpenAnchor: (anchor) => _say('Anchor: #$anchor'),
                   onOpenAttachment: (path) => _say('Attachment: $path'),
                   onOpenMention: (kind, id) => _say('${kind.name} $id'),
+                  onOpenOnWeb: () => _say('Open on web'),
+                  onOpenQuery: (id) => _say('Query: $id'),
+                  subPages: WikiProbeData.subPages,
                   names: WikiProbeData.names,
                 ),
               ),
@@ -225,6 +228,12 @@ abstract final class WikiProbeData {
 
   static const names = {'11111111-2222-3333-4444-555555555555': 'Ada Example'};
 
+  /// What `[[_TOSP_]]` draws on the probe page.
+  static const subPages = [
+    WikiPageNode(path: '/Boardhop/Links/Deep child', id: 242),
+    WikiPageNode(path: '/Boardhop/Links/Re-Order', id: 244),
+  ];
+
   /// The scratch wiki's own shape (research/20 §1): four levels deep, a
   /// non-conformant page that cannot be opened, and a page outside `.order`
   /// sorted last.
@@ -272,23 +281,58 @@ abstract final class WikiProbeData {
     ],
   );
 
-  /// Every construct the reader has to survive in W-B, plus the ones W-C
-  /// takes over. Invented text.
-  static const markdown = '''
+  /// Every construct the reader has to draw (W-C item 13): the front
+  /// matter, both placeholders in each form, the table extremes, the HTML
+  /// subset, the code block with its copy button and the attachment sizes.
+  /// Invented text; nothing here is client data and nothing here touches
+  /// Azure DevOps.
+  static final markdown =
+      '''
+---
+title: Probe page
+tags:
+- boardhop
+- probe
+owner: Nobody
+---
+[[_TOC_]]
+
 # Probe page
 
 A paragraph with a [relative link](/Boardhop/Constructs), a
 [sibling](./Re-Order), a [parent](../Constructs), an [anchor](#second-heading)
 and an [external link](https://example.com). References: #15545 and !8334, and
-a mention @<11111111-2222-3333-4444-555555555555>.
+a mention @<11111111-2222-3333-4444-555555555555>. Ship it :rocket: and an
+escaped \\#ff0000 stays text.
+
+Inline HTML: <u>underlined</u>, <sup>up</sup>, <sub>down</sub>,
+<del>struck</del>, <ins>inserted</ins>, <small>small</small>,
+<font color="red">a colour tag keeps its text</font> and a
+<span style="font-weight:bold">span</span> does too.
+
+Inline math \$E = mc^2\$ next to a price of \$5 and \$7, which is not math.
 
 ![An attachment](/.attachments/probe.png)
 
+![A sized attachment](/.attachments/probe.png =24x24)
+
+## Child pages
+
+[[_TOSP_]]
+
 ## Second heading
 
-| Column | Another |
-|---|---|
-| a value | another value |
+| Column | Another | Break |
+|---|:---:|---:|
+| a value | another value | one<br/>two |
+| #15545 | `code` | [a link](/Boardhop) |
+
+### A wide table
+
+| One | Two | Three | Four | Five | Six | Seven |
+|---|---|---|---|---|---|---|
+| a rather long cell that has to wrap rather than stretch the column | b | c | d | e | f | g |
+| 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 
 - [ ] a task
 - [x] a done task
@@ -297,7 +341,49 @@ a mention @<11111111-2222-3333-4444-555555555555>.
 // A heading inside a fence is not a heading:
 // # not a heading
 void main() => print('hello');
+final items = <int>[for (var i = 0; i < 10; i++) i];
 ```
+
+### A long code block
+
+```yaml
+${List.generate(40, (i) => 'key$i: value number $i').join('\n')}
+```
+
+## Placeholders
+
+::: mermaid
+graph LR
+  A[Phone] --> B[Relay]
+:::
+
+```mermaid
+sequenceDiagram
+  App->>ADO: GET pages
+```
+
+\$\$
+\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}
+\$\$
+
+::: video
+<iframe width="560" src="https://example.com/embed/probe"></iframe>
+:::
+
+::: query-table 11111111-2222-3333-4444-555555555555
+:::
+
+## HTML block
+
+<div style="border:1px solid #ccc; padding:8px">
+<b>bold html</b><br>
+<img src="/.attachments/probe.png" width="32" alt="html img">
+</div>
+
+<details>
+<summary>Collapsed section</summary>
+Hidden text inside details.
+</details>
 
 ### Third heading
 
@@ -305,6 +391,8 @@ void main() => print('hello');
 
 #### Fourth heading, not in the contents sheet
 
-Text after it.
+Text after it. A footnote[^1].
+
+[^1]: The footnote's text.
 ''';
 }

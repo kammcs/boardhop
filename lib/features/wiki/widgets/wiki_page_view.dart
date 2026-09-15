@@ -14,13 +14,16 @@ import '../../../core/routes.dart';
 import '../../../core/text/mention.dart';
 import '../../../core/text/wiki_link.dart';
 import '../../../data/models/wiki.dart';
+import '../../../data/repositories/people_repository.dart';
 import '../../../data/repositories/wiki_repository.dart';
 import '../../../theme/theme.dart';
 import '../../shared/account_scope.dart';
 import '../../shared/attachments/inline_attachment_source.dart';
+import '../../shared/mention/mention_sources.dart';
 import '../../work_items/form/controls/attachments_section.dart';
 import '../wiki_prefs.dart';
 import 'toc_sheet.dart';
+import 'wiki_find.dart';
 import 'wiki_markdown.dart';
 import 'wiki_source_page.dart';
 import 'wiki_tree_view.dart';
@@ -83,10 +86,25 @@ final _dayMonthYear = DateFormat('d MMM y');
 class _WikiPageViewState extends State<WikiPageView> {
   final _headings = WikiHeadings();
   final _scroll = ScrollController();
+  final _find = WikiFindController();
+  final _body = WikiBodyController();
+
+  /// Lower-cased identity GUID → display name for the `@<guid>` runs on
+  /// this page, resolved once per page (research/16 M9).
+  Map<String, String> _names = const {};
 
   WikiPage? _page;
   WikiPageChange? _change;
   List<WikiPageNode> _ancestors = const [];
+
+  /// The page's child pages from the cached tree, for `[[_TOSP_]]`.
+  ///
+  /// The page GET answers `subPages` only when it was asked for a recursion
+  /// level, and the reader asks for content: `/Boardhop` drew "This page has
+  /// no child pages" on the iPhone with four of them in the tree beside it.
+  /// The tree is always read before a page is opened from it, so its node is
+  /// the honest answer.
+  List<WikiPageNode> _subPages = const [];
   Map<String, String> _headers = const {};
 
   bool _loading = false;
@@ -102,6 +120,7 @@ class _WikiPageViewState extends State<WikiPageView> {
   void initState() {
     super.initState();
     _pendingAnchor = widget.anchor;
+    _find.addListener(_onFind);
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_load()));
   }
 
@@ -122,6 +141,7 @@ class _WikiPageViewState extends State<WikiPageView> {
       _page = null;
       _change = null;
       _ancestors = const [];
+      _subPages = const [];
       _shownAt = null;
       _offline = false;
       _error = null;
@@ -135,6 +155,7 @@ class _WikiPageViewState extends State<WikiPageView> {
   void dispose() {
     _headings.dispose();
     _scroll.dispose();
+    _find.dispose();
     super.dispose();
   }
 
@@ -227,6 +248,7 @@ class _WikiPageViewState extends State<WikiPageView> {
   Future<void> _loadSide(WikiPage page) async {
     await _loadAncestors(page.path);
     await _loadHeaders();
+    unawaited(_loadNames(page));
     if (!mounted) return;
     try {
       final change = await _repo.lastChange(
@@ -254,7 +276,10 @@ class _WikiPageViewState extends State<WikiPageView> {
       version: _version,
     );
     if (tree == null || !mounted) return;
-    setState(() => _ancestors = tree.ancestorsOf(path));
+    setState(() {
+      _ancestors = tree.ancestorsOf(path);
+      _subPages = tree.find(path)?.subPages ?? const [];
+    });
   }
 
   Future<void> _loadHeaders() async {
@@ -269,6 +294,55 @@ class _WikiPageViewState extends State<WikiPageView> {
       // Without a token the images draw as broken, which is the honest
       // result; nothing else on the page depends on it.
     }
+  }
+
+  /// The display name behind every `@<guid>` on the page, in one batched
+  /// identities read (W-C item 9).
+  ///
+  /// Supplied to the body **once**, after the fact: `MarkdownBody` builds its
+  /// children in `didChangeDependencies` and would never redraw a name that
+  /// arrived from the network, which is why `MentionScope` exists — a new map
+  /// re-parses the body exactly once, and a GUID nobody answers for keeps
+  /// reading `@someone` (M9).
+  Future<void> _loadNames(WikiPage page) async {
+    if (!page.content.contains('@<')) return;
+    try {
+      final names = await MentionSources.namesFor(
+        context.read<PeopleRepository>(),
+        widget.org,
+        [page.content],
+      );
+      if (mounted && names.isNotEmpty) setState(() => _names = names);
+    } on AdoException {
+      // A name is cosmetic; the page is already on screen without it.
+    }
+  }
+
+  void _onFind() {
+    if (!mounted) return;
+    setState(() {});
+    _scrollToHit();
+  }
+
+  /// Puts the find bar's current hit on screen: the run itself when the
+  /// body drew it, the section it is in on the lazy body (K4).
+  void _scrollToHit() {
+    if (_find.term.isEmpty || _find.total == 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _find.target;
+      final section = target.section;
+      if (section != null && _body.jumpToSection(section)) return;
+      final context = target.key?.currentContext;
+      if (context == null) return;
+      unawaited(
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 220),
+          alignment: 0.3,
+        ),
+      );
+    });
   }
 
   /// K1 and K11: the page just read is the one a cold open restores and the
@@ -337,6 +411,12 @@ class _WikiPageViewState extends State<WikiPageView> {
   }
 
   Future<void> _scrollTo(String anchor) async {
+    // The lazy body has not built the heading four screens down, so there is
+    // no context to reach: the list jumps to its section instead.
+    if (_body.jumpToAnchor(anchor)) {
+      _pendingAnchor = null;
+      return;
+    }
     final heading = _headings.find(anchor);
     final target = heading?.key.currentContext;
     if (target == null) {
@@ -471,7 +551,13 @@ class _WikiPageViewState extends State<WikiPageView> {
               ),
         titleSpacing: widget.embedded ? Spacing.lg : 0,
         title: Text(_title, overflow: TextOverflow.ellipsis),
+        bottom: _find.isOpen ? WikiFindBar(controller: _find) : null,
         actions: [
+          IconButton(
+            tooltip: 'Find on this page',
+            icon: const Icon(Icons.search),
+            onPressed: _page == null ? null : _find.open,
+          ),
           ListenableBuilder(
             listenable: _headings,
             builder: (context, _) => _headings.hasContents
@@ -524,35 +610,60 @@ class _WikiPageViewState extends State<WikiPageView> {
         bottom: false,
         child: RefreshIndicator(
           onRefresh: () => _load(refresh: true),
-          child: ContentColumn(
-            child: ListView(
-              controller: _scroll,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.only(
-                bottom: scrollEndPadding(context).bottom + Spacing.xl,
-              ),
-              children: [
-                if (_loading && _page == null) const LinearProgressIndicator(),
-                WikiCacheLine(shownAt: _shownAt, offline: _offline),
-                if (_unavailable != null)
-                  WikiNotice(
-                    message: _unavailable!,
-                    icon: Icons.lock_outline,
-                    tone: WikiNoticeTone.quiet,
-                  ),
-                if (_error != null)
-                  WikiNotice(
-                    message: _error!,
-                    onDismiss: () => setState(() => _error = null),
-                  ),
-                _header(theme),
-                if (_page != null) _body(),
-                if (_page != null) _footer(theme),
-              ],
-            ),
-          ),
+          child: ContentColumn(child: _scrollBody(theme)),
         ),
       ),
+    );
+  }
+
+  /// Everything above the markdown: the progress line, the cache line, the
+  /// notices and the title block.
+  List<Widget> _leading(ThemeData theme) => [
+    if (_loading && _page == null) const LinearProgressIndicator(),
+    WikiCacheLine(shownAt: _shownAt, offline: _offline),
+    if (_unavailable != null)
+      WikiNotice(
+        message: _unavailable!,
+        icon: Icons.lock_outline,
+        tone: WikiNoticeTone.quiet,
+      ),
+    if (_error != null)
+      WikiNotice(
+        message: _error!,
+        onDismiss: () => setState(() => _error = null),
+      ),
+    _header(theme),
+  ];
+
+  /// A short page is a `ListView` of blocks, which is what a reader scrolls.
+  ///
+  /// A long one hands the whole viewport to [WikiMarkdown], whose own
+  /// `SuperListView` builds a section at a time and can jump to one exactly
+  /// (W-C item 11); the header and the footer ride as rows of that same
+  /// list, so the page still has a single scroll and one pull-to-refresh.
+  Widget _scrollBody(ThemeData theme) {
+    final page = _page;
+    if (page != null && WikiMarkdown.isLazy(page.content)) {
+      return _markdown(
+        lazyLeading: _leading(theme),
+        lazyTrailing: [_footer(theme)],
+      );
+    }
+    return ListView(
+      controller: _scroll,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(
+        bottom: scrollEndPadding(context).bottom + Spacing.xl,
+      ),
+      children: [
+        ..._leading(theme),
+        if (page != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+            child: _markdown(),
+          ),
+        if (page != null) _footer(theme),
+      ],
     );
   }
 
@@ -603,22 +714,44 @@ class _WikiPageViewState extends State<WikiPageView> {
     );
   }
 
-  Widget _body() {
+  Widget _markdown({
+    List<Widget> lazyLeading = const [],
+    List<Widget> lazyTrailing = const [],
+  }) {
     final page = _page!;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
-      child: WikiMarkdown(
-        content: page.content,
-        wiki: widget.wiki,
-        pagePath: _path,
-        headings: _headings,
-        onOpenPage: _openPage,
-        onOpenAnchor: (anchor) => unawaited(_scrollTo(anchor)),
-        onOpenAttachment: (path) => unawaited(_openAttachment(path)),
-        onOpenMention: _openMention,
-        attachmentUri: (path) =>
-            _repo.attachmentUri(widget.org, widget.project, widget.wiki, path),
-        headers: _headers,
+    return WikiMarkdown(
+      content: page.content,
+      wiki: widget.wiki,
+      pagePath: _path,
+      headings: _headings,
+      subPages: page.subPages.isNotEmpty ? page.subPages : _subPages,
+      onOpenPage: _openPage,
+      onOpenAnchor: (anchor) => unawaited(_scrollTo(anchor)),
+      onOpenAttachment: (path) => unawaited(_openAttachment(path)),
+      onOpenMention: _openMention,
+      onOpenOnWeb: () => unawaited(_openOnWeb()),
+      onOpenQuery: _openQuery,
+      attachmentUri: (path) =>
+          _repo.attachmentUri(widget.org, widget.project, widget.wiki, path),
+      headers: _headers,
+      names: _names,
+      find: _find,
+      bodyController: _body,
+      lazyLeading: lazyLeading,
+      lazyTrailing: lazyTrailing,
+    );
+  }
+
+  /// A `::: query-table {guid}` card's Open in Boardhop: the saved query in
+  /// the Work items page, which is where the app already shows one (K3).
+  void _openQuery(String queryId) {
+    context.push(
+      Routes.workItems(
+        AccountScope.of(context),
+        widget.org,
+        widget.project,
+        query: queryId,
+        queryName: 'Wiki query',
       ),
     );
   }
