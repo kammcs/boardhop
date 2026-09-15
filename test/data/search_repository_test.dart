@@ -60,6 +60,41 @@ class _FakeAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// The scratch wiki's answer to "Boardhop" (spike w37 §8).
+Map<String, dynamic> wikiResponse() => {
+  'count': 1,
+  'infoCode': 0,
+  'results': [
+    {
+      'fileName': 'Boardhop.md',
+      'path': '/Boardhop.md',
+      'collection': {'name': 'puremedia'},
+      'project': {
+        'id': '98720989-0195-48cb-ae2e-0e58ec1bb9a9',
+        'name': 'DevOps Mobile App',
+      },
+      'wiki': {
+        'name': 'DevOps-Mobile-App.wiki',
+        'id': '2bd59283-17a5-4fd0-b964-cd9a4189f721',
+        'mappedPath': '/',
+        'version': 'wikiMaster',
+      },
+      'contentId': 'cfb72c3bac53fad93c24ef5408a5276183a911bf',
+      'hits': [
+        {
+          'fieldReferenceName': 'content',
+          'highlights': ['<highlighthit>Boardhop</highlighthit> wiki spike'],
+        },
+      ],
+    },
+  ],
+  'facets': {
+    'Project': [
+      {'name': 'DevOps Mobile App', 'resultCount': 1},
+    ],
+  },
+};
+
 Map<String, dynamic> codeResponse() => {
   'count': 1,
   'infoCode': 0,
@@ -126,6 +161,7 @@ void main() {
     adapter = _FakeAdapter()
       ..answers['workitemsearchresults'] = searchResponse()
       ..answers['codesearchresults'] = codeResponse()
+      ..answers['wikisearchresults'] = wikiResponse()
       ..answers['pullrequests'] = prList();
     db = AppDatabase(NativeDatabase.memory());
     final client = AdoClient(
@@ -395,6 +431,99 @@ void main() {
     });
   });
 
+  group('wiki search (research/20 K4)', () {
+    test('posts to the org, with the project as a body filter', () async {
+      final results = await repository.searchWiki(
+        org,
+        project: project,
+        text: 'boardhop',
+      );
+
+      expect(adapter.last.uri.host, 'almsearch.dev.azure.com');
+      expect(
+        adapter.last.uri.path,
+        '/contoso/_apis/search/wikisearchresults',
+        reason: 'the project travels in the body, like every other kind',
+      );
+      expect(adapter.last.uri.queryParameters['api-version'], '7.1');
+      expect(adapter.lastBody['searchText'], 'boardhop');
+      expect(adapter.lastBody[r'$skip'], 0);
+      expect(adapter.lastBody[r'$top'], SearchRepository.pageSize);
+      expect(adapter.lastBody['includeFacets'], isTrue);
+      expect(adapter.lastBody['filters'], {
+        'Project': ['Scratch'],
+      });
+
+      expect(results.total, 1);
+      final hit = results.items.single;
+      expect(hit.fileName, 'Boardhop.md');
+      expect(hit.wikiName, 'DevOps-Mobile-App.wiki');
+      // The service answers the git file path; the reader opens the page.
+      expect(hit.pagePath, '/Boardhop');
+      expect(hit.highlight!.plain, contains('wiki spike'));
+      expect(results.facets.projects.single.name, 'DevOps Mobile App');
+    });
+
+    test('the All scope sends no project filter', () async {
+      await repository.searchWiki(org, text: 'boardhop');
+
+      expect(adapter.lastBody['filters'], isEmpty);
+    });
+
+    test('paging passes skip and top', () async {
+      await repository.searchWiki(org, text: 'boardhop', skip: 50, top: 25);
+
+      expect(adapter.lastBody[r'$skip'], 50);
+      expect(adapter.lastBody[r'$top'], 25);
+    });
+
+    test('is cached under its own kind, per scope and page', () async {
+      await repository.searchWiki(org, project: project, text: 'boardhop');
+
+      final cached = await repository.cachedWiki(
+        org,
+        project: project,
+        text: 'boardhop',
+      );
+      expect(cached!.value.items.single.pagePath, '/Boardhop');
+      expect(
+        await repository.cachedWiki(org, text: 'boardhop'),
+        isNull,
+        reason: 'org scope is its own entry',
+      );
+      expect(
+        await repository.cachedWiki(
+          org,
+          project: project,
+          text: 'boardhop',
+          skip: 50,
+        ),
+        isNull,
+      );
+      expect(
+        await repository.cachedKeys(),
+        contains('search:wiki:contoso:Scratch:relevance:0:||:boardhop'),
+      );
+    });
+
+    test('404 means the search extension is missing', () async {
+      adapter.status = 404;
+
+      await expectLater(
+        repository.searchWiki(org, project: project, text: 'boardhop'),
+        throwsA(isA<CodeSearchUnavailable>()),
+      );
+    });
+
+    test('shorter than the minimum sends nothing', () async {
+      final results = await repository.searchWiki(org, text: 'bo');
+
+      expect(adapter.requests, isEmpty);
+      expect(results.total, 0);
+      expect(results.items, isEmpty);
+    });
+  });
+
   group('pull request matching', () {
     test('title matches come before branch, then author', () async {
       final results = await repository.searchPullRequests(org, text: 'ada');
@@ -513,6 +642,15 @@ void main() {
           text: 'todo',
         ),
         'search:code:contoso:*:relevance:0:||:todo',
+      );
+      expect(
+        SearchRepository.cacheKey(
+          kind: SearchRepository.wikiKind,
+          org: org,
+          project: project,
+          text: 'Boardhop',
+        ),
+        'search:wiki:contoso:Scratch:relevance:0:||:boardhop',
       );
     });
   });

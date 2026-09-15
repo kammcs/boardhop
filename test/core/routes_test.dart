@@ -11,6 +11,75 @@ void main() {
     );
   });
 
+  group('the Wiki view (research/20 §4.3)', () {
+    const account = 'u1';
+    const org = 'puremedia';
+    const project = 'DevOps Mobile App';
+    const base = '/a/u1/orgs/puremedia/projects/DevOps%20Mobile%20App';
+    const wikiId = '2bd59283-17a5-4fd0-b964-cd9a4189f721';
+
+    test('the plain route is the default wiki, the default page', () {
+      expect(Routes.wiki(account, org, project), '$base/wiki');
+    });
+
+    test('a named wiki and path ride in the query', () {
+      expect(
+        Routes.wiki(account, org, project, wiki: wikiId),
+        '$base/wiki?wiki=$wikiId',
+      );
+      expect(
+        Routes.wiki(
+          account,
+          org,
+          project,
+          wiki: wikiId,
+          path: '/Boardhop/Links/Deep child',
+        ),
+        '$base/wiki?wiki=$wikiId&path=%2FBoardhop%2FLinks%2FDeep+child',
+      );
+    });
+
+    test('the reader names its wiki in the path, outside the shell', () {
+      expect(
+        Routes.wikiPage(account, org, project, wikiId),
+        '$base/wiki-page/$wikiId',
+      );
+      expect(
+        Routes.wikiPage(
+          account,
+          org,
+          project,
+          'DevOps-Mobile-App.wiki',
+          path: '/Boardhop/Constructs',
+        ),
+        '$base/wiki-page/DevOps-Mobile-App.wiki'
+        '?path=%2FBoardhop%2FConstructs',
+      );
+    });
+
+    test('a page can be named by id, with a branch and an anchor', () {
+      expect(
+        Routes.wikiPage(
+          account,
+          org,
+          project,
+          wikiId,
+          id: '238',
+          version: 'wikiMaster',
+          anchor: 'task-list',
+        ),
+        '$base/wiki-page/$wikiId?id=238&version=wikiMaster&anchor=task-list',
+      );
+    });
+
+    test('a wiki name with a space is encoded in the path', () {
+      expect(
+        Routes.wikiPage(account, org, project, 'My Docs.wiki'),
+        '$base/wiki-page/My%20Docs.wiki',
+      );
+    });
+  });
+
   group('the Work tab\'s three views (research/18 S1)', () {
     const account = 'u1';
     const org = 'puremedia';
@@ -216,5 +285,4 @@ void main() {
       );
     });
   });
-
 }

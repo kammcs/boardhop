@@ -6,6 +6,7 @@ import '../db/json_cache.dart';
 import '../models/git_repository.dart';
 import '../models/pull_request.dart';
 import '../models/search.dart';
+import '../models/wiki.dart';
 import 'pull_request_repository.dart';
 
 /// A search answer with when it was read, for the "showing the cached copy"
@@ -60,6 +61,7 @@ class SearchRepository {
 
   static const workItemKind = 'wi';
   static const codeKind = 'code';
+  static const wikiKind = 'wiki';
 
   /// The eviction index: the cached search keys, oldest first. Not itself a
   /// tracked entry.
@@ -243,6 +245,76 @@ class SearchRepository {
       skip: skip,
     ),
     CodeSearchResults.fromJson,
+  );
+
+  // ------------------------------------------------------------------ wiki
+
+  /// `POST search/wikisearchresults`, org-wide when [project] is null
+  /// (research/20 K4).
+  ///
+  /// The same body as [searchCode] — the two share the `almsearch` host and
+  /// its `filters.Project` shape (spike s62 §E) — but facets are asked for,
+  /// because the answer carries a `Wiki` facet the section uses to say
+  /// which wiki a hit came from. The service answers the **git file path**
+  /// of each hit; `WikiSearchHit.pagePath` is what the reader opens.
+  Future<SearchResults<WikiSearchHit>> searchWiki(
+    String org, {
+    String? project,
+    required String text,
+    int skip = 0,
+    int top = pageSize,
+  }) async {
+    if (!isSearchable(text)) return const SearchResults<WikiSearchHit>();
+    final Map<String, dynamic> json;
+    try {
+      json = await _client.send(
+        method: 'POST',
+        host: AdoHost.search,
+        org: org,
+        path: '_apis/search/wikisearchresults',
+        apiVersion: apiVersion,
+        body: {
+          'searchText': text.trim(),
+          r'$skip': skip,
+          r'$top': top,
+          'includeFacets': true,
+          'filters': {
+            if (project != null) 'Project': [project],
+          },
+        },
+      );
+    } on AdoNotFoundException catch (e) {
+      // One extension indexes code, work items and wikis: a 404 from the
+      // search host means it is not installed, not that nothing matched.
+      throw CodeSearchUnavailable(statusCode: e.statusCode, url: e.url);
+    }
+    await _store(
+      cacheKey(
+        kind: wikiKind,
+        org: org,
+        project: project,
+        text: text,
+        skip: skip,
+      ),
+      json,
+    );
+    return SearchResults.fromJson(json, WikiSearchHit.fromJson, skip: skip);
+  }
+
+  Future<CachedSearch<SearchResults<WikiSearchHit>>?> cachedWiki(
+    String org, {
+    String? project,
+    required String text,
+    int skip = 0,
+  }) => _cached(
+    cacheKey(
+      kind: wikiKind,
+      org: org,
+      project: project,
+      text: text,
+      skip: skip,
+    ),
+    (json) => SearchResults.fromJson(json, WikiSearchHit.fromJson, skip: skip),
   );
 
   // ---------------------------------------------------------- pull requests

@@ -11,6 +11,7 @@ import '../../core/routes.dart';
 import '../../core/util/format.dart';
 import '../../data/models/git_repository.dart';
 import '../../data/models/search.dart';
+import '../../data/models/wiki.dart';
 import '../../data/repositories/search_repository.dart';
 import '../../data/search_recents.dart';
 import '../../theme/theme.dart';
@@ -34,12 +35,18 @@ enum SearchScope {
       value == org.wire ? org : project;
 }
 
-/// The three kinds v1 searches (decision D2). `wire` is the route's `kind`
-/// parameter; unset means the grouped view of all three.
+/// The kinds the page searches (decision D2, plus wiki from research/20
+/// K4). `wire` is the route's `kind` parameter; unset means the grouped
+/// view.
 enum SearchKind {
   workItems('wi', 'Work items', Icons.assignment_outlined),
   code('code', 'Code', Icons.code),
-  pullRequests('pr', 'Pull requests', Icons.call_merge);
+  pullRequests('pr', 'Pull requests', Icons.call_merge),
+
+  /// Reserved by W-A so `SearchRepository.searchWiki` has a kind to be
+  /// keyed and routed by; the section that runs it is built in W-D
+  /// (research/20 §4.2), and until then this kind draws nothing.
+  wiki('wiki', 'Wiki', Icons.menu_book_outlined);
 
   const SearchKind(this.wire, this.label, this.icon);
 
@@ -185,6 +192,10 @@ class _SearchPageState extends State<SearchPage> {
   final _workItems = _Slice<SearchResults<WorkItemSearchHit>>();
   final _code = _Slice<CodeSearchResults>();
   final _pullRequests = _Slice<SearchResults<PullRequestSearchHit>>();
+
+  /// Reserved for the W-D wiki section (research/20 K4): the slice exists so
+  /// `SearchKind.wiki` has one, and nothing fills it yet.
+  final _wiki = _Slice<SearchResults<WikiSearchHit>>();
 
   @override
   void initState() {
@@ -1086,11 +1097,13 @@ class _SearchPageState extends State<SearchPage> {
       SearchKind.workItems => _workItems as _Slice<Object?>,
       SearchKind.code => _code as _Slice<Object?>,
       SearchKind.pullRequests => _pullRequests as _Slice<Object?>,
+      SearchKind.wiki => _wiki as _Slice<Object?>,
     };
     final total = switch (kind) {
       SearchKind.workItems => _workItems.value?.total ?? 0,
       SearchKind.code => _code.value?.count ?? 0,
       SearchKind.pullRequests => _pullRequests.value?.total ?? 0,
+      SearchKind.wiki => _wiki.value?.total ?? 0,
     };
     final rows = switch (kind) {
       SearchKind.workItems => [
@@ -1117,6 +1130,8 @@ class _SearchPageState extends State<SearchPage> {
             onTap: () => _openPullRequest(hit),
           ),
       ],
+      // W-D draws the wiki rows; nothing runs the query yet.
+      SearchKind.wiki => const <Widget>[],
     };
     return [
       // Keyed like the grouped view, and for the same reason ([_body]):

@@ -36,6 +36,46 @@ abstract final class Routes {
     'dashboard': dashboard,
   });
 
+  /// The Wiki view, the Home tab's third segment (research/20 §4.3).
+  ///
+  /// [wiki] is a wiki id or name and is **left out for the default** — the
+  /// one last opened, or the project wiki — and [path] for the page the
+  /// tree is expanded along, so the plain route is the plain view, the rule
+  /// [dashboards] and [sprint] already follow.
+  static String wiki(
+    String accountId,
+    String org,
+    String project, {
+    String? wiki,
+    String? path,
+  }) => _withQuery('${Routes.project(accountId, org, project)}/wiki', {
+    'wiki': wiki,
+    'path': path,
+  });
+
+  /// One wiki page as a page of its own, outside the project tab shell.
+  ///
+  /// Outside the shell like [workItemStandalone], and for the same reason:
+  /// the reader pushes another reader on a wiki link, and two pages with
+  /// one shell key is an assert. The wiki is a path segment because a page
+  /// without one cannot be read at all; [path] (title form) or [id]
+  /// identifies the page, [version] the branch of a code wiki (K8) and
+  /// [anchor] a heading to scroll to.
+  static String wikiPage(
+    String accountId,
+    String org,
+    String project,
+    String wiki, {
+    String? path,
+    String? id,
+    String? version,
+    String? anchor,
+  }) => _withQuery(
+    '${Routes.project(accountId, org, project)}'
+    '/wiki-page/${Uri.encodeComponent(wiki)}',
+    {'path': path, 'id': id, 'version': version, 'anchor': anchor},
+  );
+
   /// The Work tab's three views, so the view switch and the pages stop
   /// concatenating route strings by hand (research/18 §4.3).
   ///

@@ -165,6 +165,37 @@ class AnalyticsUnavailable extends AdoForbiddenException {
       );
 }
 
+/// The wiki resource refused this sign-in (`401 TF400813`).
+///
+/// The Dashboard API taught this lesson on 2026-09-15 (NEXT-STEPS 26): a
+/// resource can answer `401 InvalidIdentityException: TF400813` to a token
+/// every other resource in the same session accepts, because the
+/// registration lacks that resource's scope. Raising sign-in there puts the
+/// person in a loop — the sheet opens, they sign in, the same call refuses
+/// again.
+///
+/// So a *wiki* refusal is its own type, a subtype of [AdoForbiddenException]
+/// and deliberately **not** of [AdoAuthException], and the page shows it
+/// inline. Every other 401 on the wiki routes still raises sign-in.
+class WikiUnavailable extends AdoForbiddenException {
+  const WikiUnavailable({super.statusCode, super.typeKey, super.url})
+    : super(
+        'This sign-in cannot read this project\u2019s wiki. A project or '
+        'organization administrator can check that the Wiki is enabled and '
+        'that you have access to it.',
+      );
+
+  /// True for the refusal above: a 401 the wiki routes answer with
+  /// `TF400813` / `InvalidIdentityException`, rather than an expired token.
+  static bool refuses(AdoException e) {
+    if (e.statusCode != 401) return false;
+    final key = e.typeKey ?? '';
+    return e.message.contains('TF400813') ||
+        key.contains('InvalidIdentity') ||
+        e.message.contains('InvalidIdentity');
+  }
+}
+
 /// Any other non-success status.
 class AdoServerException extends AdoException {
   const AdoServerException(

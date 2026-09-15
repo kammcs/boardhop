@@ -15,6 +15,8 @@ import '../../core/routes.dart';
 import '../../data/models/sprint.dart';
 import '../../data/repositories/analytics_repository.dart';
 import '../../data/repositories/dashboard_repository.dart';
+import '../../data/repositories/repo_repository.dart';
+import '../../data/repositories/wiki_repository.dart';
 import '../../theme/theme.dart';
 import '../dashboards/widgets/registry.dart';
 import '../notifications/push_service.dart';
@@ -104,6 +106,12 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
           // cards show the D14 notice instead of content.
           _Check('Dashboard API: dashboards in $org/$project'),
           _Check('Analytics widget sets: work by state for $org/$project'),
+          // The W-A gate (research/20 §1, "Unverified"). `vso.wiki` is on
+          // the registration and consented, but the app's Entra token had
+          // never been tried against `_apis/wiki` — only the spike PAT had.
+          // A refusal here is the TF400813 shape the Dashboard API showed
+          // on 2026-09-15, and `WikiUnavailable` is what the page draws.
+          _Check('Wiki API: wikis and tree in $org/$project'),
         ]);
     });
 
@@ -296,7 +304,13 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             'first "${first.name}" carries no groupId, so its widgets '
             'cannot be read';
       }
-      final full = await repo.get(org, project, teamId, first.id, refresh: true);
+      final full = await repo.get(
+        org,
+        project,
+        teamId,
+        first.id,
+        refresh: true,
+      );
       final drawn = [
         for (final w in full.widgets)
           if (w.isEnabled && DashboardRegistry.renders(w)) w,
@@ -330,6 +344,31 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       return 'token ACCEPTED by analytics.dev.azure.com for WorkItems; '
           '${rows.length} state groups ($total items) '
           'in ${sw.elapsedMilliseconds} ms';
+    });
+
+    await step(13, () async {
+      final repo = WikiRepository(client, RepoRepository(client));
+      final sw = Stopwatch()..start();
+      final wikis = await repo.wikis(org, project, refresh: true);
+      final listed = sw.elapsedMilliseconds;
+      if (wikis.isEmpty) {
+        return 'token ACCEPTED by the wiki API; '
+            '$project has no wiki ($listed ms)';
+      }
+      final wiki = wikis.first;
+      final tree = await repo.tree(
+        org,
+        project,
+        wiki.id,
+        version: wiki.version,
+        refresh: true,
+      );
+      final pages = tree.flatten().where((n) => !n.isRoot).toList();
+      final withIds = pages.where((n) => n.id != null).length;
+      return 'token ACCEPTED by the wiki API; ${wikis.length} wikis in '
+          '$listed ms; "${wiki.name}" (${wiki.type.name}, branch '
+          '${wiki.version}) has ${pages.length} pages, $withIds with ids '
+          'from pagesbatch, in ${sw.elapsedMilliseconds} ms total';
     });
 
     if (mounted) setState(() => _running = false);
