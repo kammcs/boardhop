@@ -429,6 +429,11 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/dashboard'),
           ),
           IconButton(
+            tooltip: 'Wiki probe (W-B)',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () => context.push('/diagnostics/wiki'),
+          ),
+          IconButton(
             tooltip: 'Copy report',
             icon: const Icon(Icons.copy),
             onPressed: _checks.isEmpty

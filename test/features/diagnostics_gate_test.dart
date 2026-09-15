@@ -39,7 +39,11 @@ void main() {
     addTearDown(auth.close);
     final router = buildRouter(auth, _Deps());
     addTearDown(router.dispose);
-    for (final path in ['/diagnostics', '/diagnostics/diff']) {
+    for (final path in [
+      '/diagnostics',
+      '/diagnostics/diff',
+      '/diagnostics/wiki',
+    ]) {
       expect(
         router.configuration.findMatch(Uri.parse(path)).isError,
         isFalse,

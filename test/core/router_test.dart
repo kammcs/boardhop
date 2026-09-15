@@ -68,6 +68,21 @@ void main() {
       reason: 'the Dashboards view keeps the project shell and its dock',
     );
 
+    // The Wiki view is the Home tab's third (research/20 §4.3): the same
+    // branch as Summary and Dashboards, with the wiki and the page in the
+    // query so the plain route stays the plain view.
+    final wiki = router.configuration.findMatch(
+      Uri.parse('$project/wiki?wiki=abc-123&path=%2FBoardhop%2FLinks'),
+    );
+    expect(wiki.isError, isFalse);
+    expect(wiki.uri.queryParameters['wiki'], 'abc-123');
+    expect(wiki.uri.queryParameters['path'], '/Boardhop/Links');
+    expect(
+      wiki.matches.any((m) => m.route is ShellRouteBase),
+      isTrue,
+      reason: 'the Wiki view keeps the project shell and its dock',
+    );
+
     // A dashboard's query card opens the Work items view on that query.
     final query = router.configuration.findMatch(
       Uri.parse('$project/work-items?query=q-1&queryName=Open+bugs'),
@@ -115,6 +130,31 @@ void main() {
     expect(hasTabShell(standalone.matches), isFalse);
     expect(standalone.pathParameters['id'], '15545');
     expect(standalone.pathParameters['project'], 'DevOps Mobile App');
+
+    // The wiki reader is outside the shell for the same reason: it pushes
+    // another reader on a wiki link (research/20 §4.3).
+    final reader = router.configuration.findMatch(
+      Uri.parse(
+        Routes.wikiPage(
+          'u1',
+          'puremedia',
+          'DevOps Mobile App',
+          '2bd59283-17a5-4fd0-b964-cd9a4189f721',
+          path: '/Boardhop/Links/Deep child',
+          version: 'wikiMaster',
+          anchor: 'task-list',
+        ),
+      ),
+    );
+    expect(reader.isError, isFalse);
+    expect(hasTabShell(reader.matches), isFalse);
+    expect(
+      reader.pathParameters['wiki'],
+      '2bd59283-17a5-4fd0-b964-cd9a4189f721',
+    );
+    expect(reader.uri.queryParameters['path'], '/Boardhop/Links/Deep child');
+    expect(reader.uri.queryParameters['version'], 'wikiMaster');
+    expect(reader.uri.queryParameters['anchor'], 'task-list');
   });
 
   // research/14 §4.2: a pushed pointer's anchor rides along as a query

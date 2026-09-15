@@ -21,6 +21,7 @@ import 'features/diagnostics/board_probe/board_probe_page.dart';
 import 'features/diagnostics/editor_probe_page.dart';
 import 'features/diagnostics/mention_probe_page.dart';
 import 'features/diagnostics/sprint_probe/sprint_probe_page.dart';
+import 'features/diagnostics/wiki_probe/wiki_probe_page.dart';
 import 'features/orgs/org_picker_page.dart';
 import 'features/pipelines/pipeline_log_page.dart';
 import 'features/pipelines/pipeline_run_page.dart';
@@ -47,6 +48,8 @@ import 'features/sprints/sprint_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
 import 'features/shared/splash_page.dart';
+import 'features/wiki/wiki_page_page.dart';
+import 'features/wiki/wiki_tree_page.dart';
 import 'features/work_items/form/work_item_form_page.dart';
 import 'features/work_items/work_item_detail_page.dart';
 import 'features/work_items/work_items_page.dart';
@@ -105,6 +108,10 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
           path: '/diagnostics/dashboard',
           builder: (_, _) => const DashboardProbePage(),
         ),
+        GoRoute(
+          path: '/diagnostics/wiki',
+          builder: (_, _) => const WikiProbePage(),
+        ),
       ],
       GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),
       ShellRoute(
@@ -155,6 +162,21 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                           dashboardId: state.uri.queryParameters['dashboard'],
+                        ),
+                      ),
+                      // The Wiki view is the Home tab's third segment
+                      // (research/20 §4.3), so it lives in the Home branch
+                      // beside Summary and Dashboards and keeps the shell's
+                      // dock. `wiki` unset means the one last opened, or
+                      // the project wiki; `path` is the tree's expansion
+                      // and, on a tablet, the pane's page (K6).
+                      GoRoute(
+                        path: ':project/wiki',
+                        builder: (_, state) => WikiTreePage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                          wikiIdOrName: state.uri.queryParameters['wiki'],
+                          path: state.uri.queryParameters['path'],
                         ),
                       ),
                       // Search lives in the Home branch, which is where it
@@ -509,6 +531,21 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                   initial: state.extra is ChartFocusArgs
                       ? state.extra! as ChartFocusArgs
                       : null,
+                ),
+              ),
+              // One wiki page, over the shell like the chart focus view and
+              // for the same reason: the reader pushes another reader on a
+              // wiki link, and two pages with one shell key is an assert.
+              GoRoute(
+                path: ':project/wiki-page/:wiki',
+                builder: (_, state) => WikiPagePage(
+                  org: state.pathParameters['org']!,
+                  project: state.pathParameters['project']!,
+                  wikiIdOrName: state.pathParameters['wiki']!,
+                  path: state.uri.queryParameters['path'],
+                  id: int.tryParse(state.uri.queryParameters['id'] ?? ''),
+                  version: state.uri.queryParameters['version'],
+                  anchor: state.uri.queryParameters['anchor'],
                 ),
               ),
               GoRoute(

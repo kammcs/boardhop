@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-/// The Home tab's pill (research/19 D5, D8, D13): two segments now, Wiki
-/// later, icons only on a phone, and it navigates rather than calling back.
+/// The Home tab's pill (research/19 D5, D8, D13; research/20 §4.2): three
+/// segments, icons only on a phone, and it navigates rather than calling
+/// back.
 void main() {
   const org = 'o';
   const project = 'p';
@@ -53,6 +54,13 @@ void main() {
             return const Scaffold(body: Text('dashboards page'));
           },
         ),
+        GoRoute(
+          path: '/a/:account/orgs/:org/projects/:project/wiki',
+          builder: (context, state) {
+            location = state.uri.toString();
+            return const Scaffold(body: Text('wiki page'));
+          },
+        ),
       ],
     );
     addTearDown(router.dispose);
@@ -62,13 +70,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('both segments are there, icons only on a phone', (tester) async {
+  testWidgets('all three segments are there, icons only on a phone', (
+    tester,
+  ) async {
     await pump(tester);
 
     expect(find.byIcon(Icons.summarize_outlined), findsOneWidget);
     expect(find.byIcon(Icons.dashboard_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.menu_book_outlined), findsOneWidget);
     expect(find.text('Summary'), findsNothing);
     expect(find.text('Dashboards'), findsNothing);
+    expect(find.text('Wiki'), findsNothing);
   });
 
   testWidgets('a tablet gets the labels too', (tester) async {
@@ -76,6 +88,7 @@ void main() {
 
     expect(find.text('Summary'), findsOneWidget);
     expect(find.text('Dashboards'), findsOneWidget);
+    expect(find.text('Wiki'), findsOneWidget);
   });
 
   testWidgets('picking Dashboards goes to the plain dashboards route', (
@@ -112,5 +125,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(location, '/a/u1/orgs/$org/projects/$project/home');
+  });
+
+  testWidgets('picking Wiki goes to the plain wiki route', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    await tester.pumpAndSettle();
+
+    // No `?wiki=` and no `?path=`: the plain route is the plain view, and
+    // the tree page opens the wiki last remembered (K1).
+    expect(location, '/a/u1/orgs/$org/projects/$project/wiki');
+    expect(find.text('wiki page'), findsOneWidget);
+  });
+
+  testWidgets('from Wiki the other segments still navigate', (tester) async {
+    await pump(tester, current: HomeView.wiki);
+
+    await tester.tap(find.byIcon(Icons.dashboard_outlined));
+    await tester.pumpAndSettle();
+
+    expect(location, '/a/u1/orgs/$org/projects/$project/dashboards');
   });
 }
