@@ -402,38 +402,55 @@ class WikiRepository {
     String org,
     String project,
     Wiki wiki,
-    String path,
-  ) => _repos.fileBytes(
+    String path, {
+    String? version,
+  }) => _repos.fileBytes(
     org,
     project,
     wiki.repositoryId,
-    ref: wiki.version,
+    ref: version == null || version.isEmpty ? wiki.version : version,
     path: repositoryPath(wiki, path),
   );
 
   /// The same file as a URL, for `CachedNetworkImageProvider(url, headers)`
   /// so an image in a page goes through the disk cache (K7).
-  Uri attachmentUri(String org, String project, Wiki wiki, String path) =>
-      AdoClient.buildUri(
-        host: AdoHost.core,
-        org: org,
-        project: project,
-        path: '_apis/git/repositories/${wiki.repositoryId}/items',
-        apiVersion: apiVersion,
-        query: {
-          'path': repositoryPath(wiki, path),
-          r'$format': 'octetStream',
-          'download': 'false',
-          ...GitVersion.query(wiki.version),
-        },
-      );
+  ///
+  /// [version] is the branch the page is being read at, which is **not**
+  /// always the wiki's first: a code wiki is published per branch and the
+  /// reader can be on any of them (K8), and its attachments live on that
+  /// branch too.
+  Uri attachmentUri(
+    String org,
+    String project,
+    Wiki wiki,
+    String path, {
+    String? version,
+  }) => AdoClient.buildUri(
+    host: AdoHost.core,
+    org: org,
+    project: project,
+    path: '_apis/git/repositories/${wiki.repositoryId}/items',
+    apiVersion: apiVersion,
+    query: {
+      'path': repositoryPath(wiki, path),
+      r'$format': 'octetStream',
+      'download': 'false',
+      ...GitVersion.query(
+        version == null || version.isEmpty ? wiki.version : version,
+      ),
+    },
+  );
 
   /// A wiki path as a path in the wiki's repository.
   ///
   /// A project wiki is published from the repository root, so the two are
   /// the same. A **code wiki** is published from [Wiki.mappedPath], and a
-  /// page's `/…` is relative to that folder, so the folder is prefixed
-  /// (K8 — unverified: no code wiki exists in puremedia).
+  /// page's `/…` is relative to that folder, so the folder is prefixed.
+  ///
+  /// Verified by spike w38 on the scratch code wiki (`mappedPath: /docs`):
+  /// `git/items?path=/docs/.attachments/w38.png` answers the bytes and the
+  /// root form `/.attachments/w38.png` is a 404, so the prefix is not
+  /// optional (K8).
   static String repositoryPath(Wiki wiki, String path) {
     var p = path.trim();
     if (!p.startsWith('/')) p = '/$p';

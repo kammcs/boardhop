@@ -71,9 +71,17 @@ class _WikiPagePageState extends State<WikiPagePage> {
       return;
     }
     try {
-      final wikis = await repo.wikis(widget.org, widget.project);
+      var wikis = await repo.wikis(widget.org, widget.project);
+      var found = _match(wikis);
+      // The list is kept for a day, so a wiki published since — a code wiki
+      // a search hit or a pasted link points at — is not in it yet. A link
+      // to a wiki the cached list does not name is worth one fresh read
+      // before it is declared gone (found on the iPhone, spike w38).
+      if (found == null) {
+        wikis = await repo.wikis(widget.org, widget.project, refresh: true);
+        found = _match(wikis);
+      }
       if (!mounted) return;
-      final found = _match(wikis);
       setState(() {
         _wiki = found;
         _loading = false;

@@ -122,5 +122,10 @@ class WikiPickerSheet extends StatelessWidget {
 
 /// The second line a wiki is described by, in the picker and under the tree
 /// page's title: "Project wiki", or "Code wiki · branch" (K8).
-String wikiSubtitle(Wiki wiki) =>
-    wiki.isProjectWiki ? 'Project wiki' : 'Code wiki · ${wiki.version}';
+///
+/// [version] is the branch being read, which the tree page passes so the
+/// line follows the branch pill instead of always naming the first
+/// published version.
+String wikiSubtitle(Wiki wiki, {String? version}) => wiki.isProjectWiki
+    ? 'Project wiki'
+    : 'Code wiki · ${version == null || version.isEmpty ? wiki.version : version}';

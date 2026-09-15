@@ -381,6 +381,24 @@ class WikiLink extends Equatable {
         '/${Uri.encodeComponent(wikiIdOrName)}$query';
   }
 
+  /// [url] with `wikiVersion=GB{branch}` on it, unless it already carries a
+  /// version or there is no branch to name.
+  ///
+  /// The service's own `remoteUrl` for a **code wiki** page carries no
+  /// version — spike w38 read `…/_wiki/wikis/{wikiId}?pagePath=%2FHome`
+  /// back for a wiki published from two branches — so Open on web and Copy
+  /// link would send a reader on the second branch to the first one. Every
+  /// URL the app hands out for a code wiki goes through here (K8).
+  static String withVersion(String url, String? version) {
+    if (version == null || version.isEmpty || url.isEmpty) return url;
+    final hash = url.indexOf('#');
+    final head = hash < 0 ? url : url.substring(0, hash);
+    final tail = hash < 0 ? '' : url.substring(hash);
+    if (head.toLowerCase().contains('wikiversion=')) return url;
+    final separator = head.contains('?') ? '&' : '?';
+    return '$head${separator}wikiVersion=GB${Uri.encodeComponent(version)}$tail';
+  }
+
   /// The `ArtifactLink` URI a work item's Wiki Page relation carries. Read
   /// only in v1: nothing in the app writes one (research/20 §6).
   static String artifactUri(String projectId, String wikiId, String path) {

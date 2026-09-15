@@ -443,13 +443,24 @@ class _WikiPageViewState extends State<WikiPageView> {
   Future<void> _openAttachment(String path) async {
     final wiki = widget.wiki;
     final url = _repo
-        .attachmentUri(widget.org, widget.project, wiki, path)
+        .attachmentUri(
+          widget.org,
+          widget.project,
+          wiki,
+          path,
+          version: _version,
+        )
         .toString();
     await _loadHeaders();
     if (!mounted) return;
     final source = AttachmentSource(
-      bytes: (_) =>
-          _repo.attachmentBytes(widget.org, widget.project, wiki, path),
+      bytes: (_) => _repo.attachmentBytes(
+        widget.org,
+        widget.project,
+        wiki,
+        path,
+        version: _version,
+      ),
       headers: _headers,
     );
     final message = await openAttachment(
@@ -474,11 +485,21 @@ class _WikiPageViewState extends State<WikiPageView> {
     await _scrollTo(picked.anchor);
   }
 
+  /// The branch a URL handed to the web has to name: a code wiki's, and
+  /// nothing for a project wiki, which has one (K8).
+  String? get _webVersion => widget.wiki.isProjectWiki ? null : _version;
+
   /// The URL the page is at on the web: its own `remoteUrl` where the
   /// service gave one, else the path form built from what is known.
+  ///
+  /// A code wiki's `remoteUrl` carries **no** `wikiVersion` (spike w38), so
+  /// the branch is put back on it; without that, Open on web from the
+  /// second branch lands on the first one.
   String get _webUrl {
     final remote = _page?.remoteUrl;
-    if (remote != null && remote.isNotEmpty) return remote;
+    if (remote != null && remote.isNotEmpty) {
+      return WikiLink.withVersion(remote, _webVersion);
+    }
     return WikiLink.pageUrl(
       widget.org,
       widget.project,
@@ -494,12 +515,9 @@ class _WikiPageViewState extends State<WikiPageView> {
   String get _copyUrl {
     final id = _page?.id ?? widget.id;
     if (id == null) return _webUrl;
-    return WikiLink.webUrl(
-      widget.org,
-      widget.project,
-      widget.wiki.name,
-      id,
-      _title,
+    return WikiLink.withVersion(
+      WikiLink.webUrl(widget.org, widget.project, widget.wiki.name, id, _title),
+      _webVersion,
     );
   }
 
@@ -731,8 +749,13 @@ class _WikiPageViewState extends State<WikiPageView> {
       onOpenMention: _openMention,
       onOpenOnWeb: () => unawaited(_openOnWeb()),
       onOpenQuery: _openQuery,
-      attachmentUri: (path) =>
-          _repo.attachmentUri(widget.org, widget.project, widget.wiki, path),
+      attachmentUri: (path) => _repo.attachmentUri(
+        widget.org,
+        widget.project,
+        widget.wiki,
+        path,
+        version: _version,
+      ),
       headers: _headers,
       names: _names,
       find: _find,

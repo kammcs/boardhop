@@ -128,8 +128,15 @@ More.
         date: DateTime.utc(2026, 9, 15, 12),
       ),
     );
-    when(() => wikis.attachmentUri(org, project, any(), any()))
-        .thenReturn(Uri.parse('https://dev.azure.com/items?path=x'));
+    when(
+      () => wikis.attachmentUri(
+        org,
+        project,
+        any(),
+        any(),
+        version: any(named: 'version'),
+      ),
+    ).thenReturn(Uri.parse('https://dev.azure.com/items?path=x'));
   });
 
   setUpAll(() => registerFallbackValue(wiki));
@@ -139,6 +146,8 @@ More.
     bool embedded = false,
     void Function(String path, {String? anchor})? onOpenPage,
     Size size = phone,
+    Wiki reading = wiki,
+    String? version,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 3;
@@ -155,8 +164,9 @@ More.
             child: WikiPageView(
               org: org,
               project: project,
-              wiki: wiki,
+              wiki: reading,
               path: path,
+              version: version,
               embedded: embedded,
               onOpenPage: onOpenPage,
             ),
@@ -356,6 +366,58 @@ More.
 
       expect(find.byType(WikiSourcePage), findsOneWidget);
       expect(find.textContaining('## Tables'), findsOneWidget);
+    });
+
+    testWidgets('a code wiki URL carries the branch it is being read at', (
+      tester,
+    ) async {
+      // Spike w38: the service's remoteUrl for a code wiki page names no
+      // version at all, so every URL the app hands out has to add it — or a
+      // reader on the second branch opens the first one on the web.
+      const code = Wiki(
+        id: 'w-code',
+        name: 'Boardhop docs',
+        type: WikiType.codeWiki,
+        repositoryId: 'repo-1',
+        mappedPath: '/docs',
+        versions: ['wiki-docs', 'wiki-docs-v2'],
+      );
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await pump(tester, reading: code, version: 'wiki-docs-v2');
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy link'));
+      await tester.pumpAndSettle();
+
+      expect(copied, contains('wikiVersion=GBwiki-docs-v2'));
+      // And the page itself was read at that branch, not the wiki's first.
+      verify(
+        () => wikis.page(
+          org,
+          project,
+          'w-code',
+          path: path,
+          id: null,
+          version: 'wiki-docs-v2',
+          refresh: any(named: 'refresh'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
     });
 
     testWidgets('the overflow offers Open on web', (tester) async {

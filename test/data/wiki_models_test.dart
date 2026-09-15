@@ -397,6 +397,38 @@ void main() {
       expect(hit.title, 'Setup guide');
     });
 
+    test('the code wiki hit spike w38 read back', () {
+      // Verbatim from the scratch code wiki "Boardhop docs", published from
+      // /docs on branch wiki-docs (research/20 §1): only the default
+      // version is indexed, the path is the git file path under mappedPath,
+      // and the branch keeps its hyphens.
+      final hit = WikiSearchHit.fromJson(const {
+        'fileName': 'Guide.md',
+        'path': '/docs/Guide.md',
+        'project': {'id': projectId, 'name': 'DevOps Mobile App'},
+        'wiki': {
+          'name': 'Boardhop docs',
+          'id': 'w-code',
+          'mappedPath': '/docs',
+          'version': 'wiki-docs',
+        },
+        'contentId': '32aeb452f2701006ec6b4a3ff2c56cce109cfed9',
+        'hits': [
+          {
+            'fieldReferenceName': 'content',
+            'highlights': ['<highlighthit>quaggleboard</highlighthit>'],
+          },
+        ],
+      });
+
+      expect(hit.pagePath, '/Guide');
+      expect(hit.title, 'Guide');
+      expect(hit.mappedPath, '/docs');
+      // A branch name is not a git file name: its hyphens stay hyphens.
+      expect(hit.version, 'wiki-docs');
+      expect(hit.isTitleHit, isFalse);
+    });
+
     test('round-trips through JSON, which is how a search is cached', () {
       final hit = WikiSearchHit.fromJson(hitJson());
 

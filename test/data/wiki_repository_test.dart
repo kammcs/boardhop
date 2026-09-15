@@ -566,7 +566,7 @@ void main() {
       expect(called.queryParameters['versionDescriptor.version'], 'wikiMaster');
     });
 
-    test('a code wiki prefixes its mappedPath (K8, unverified)', () {
+    test('a code wiki prefixes its mappedPath (K8, verified by w38)', () {
       final code = Wiki.fromJson(const {
         'id': 'c1',
         'name': 'docs.wiki',
@@ -597,6 +597,42 @@ void main() {
             .attachmentUri(org, project, code, '.attachments/x.png')
             .queryParameters['path'],
         '/docs/.attachments/x.png',
+      );
+    });
+
+    test('an attachment is read at the branch being read, not the first', () {
+      // Spike w38: the scratch code wiki is published from `wiki-docs` and
+      // `wiki-docs-v2`, and `/docs/.attachments/w38.png` is a file on each
+      // of them. Reading page content on the second branch while its images
+      // came off the first is the bug this pins.
+      final code = Wiki.fromJson(const {
+        'id': 'c1',
+        'name': 'Boardhop docs',
+        'type': 'codeWiki',
+        'repositoryId': 'repo-1',
+        'mappedPath': '/docs',
+        'versions': [
+          {'version': 'wiki-docs'},
+          {'version': 'wiki-docs-v2'},
+        ],
+      });
+
+      final uri = repository.attachmentUri(
+        org,
+        project,
+        code,
+        '/.attachments/w38.png',
+        version: 'wiki-docs-v2',
+      );
+
+      expect(uri.queryParameters['path'], '/docs/.attachments/w38.png');
+      expect(uri.queryParameters['versionDescriptor.version'], 'wiki-docs-v2');
+      // Without one, the wiki's first published version still answers.
+      expect(
+        repository
+            .attachmentUri(org, project, code, '/.attachments/w38.png')
+            .queryParameters['versionDescriptor.version'],
+        'wiki-docs',
       );
     });
   });

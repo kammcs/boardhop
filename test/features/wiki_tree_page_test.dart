@@ -167,8 +167,15 @@ void main() {
         version: any(named: 'version'),
       ),
     ).thenAnswer((_) async => null);
-    when(() => wikis.attachmentUri(org, project, any(), any()))
-        .thenReturn(Uri.parse('https://dev.azure.com/items'));
+    when(
+      () => wikis.attachmentUri(
+        org,
+        project,
+        any(),
+        any(),
+        version: any(named: 'version'),
+      ),
+    ).thenReturn(Uri.parse('https://dev.azure.com/items'));
   });
 
   Future<void> pump(
@@ -290,7 +297,79 @@ void main() {
       await pump(tester, query: '?wiki=$codeWikiId');
 
       expect(find.text('docs-wiki'), findsOneWidget);
+      expect(find.text('main'), findsOneWidget);
+    });
+  });
+
+  group('the branch pill (K8)', () {
+    setUp(() {
+      // A remembered path, so K1's first visit does not push the reader
+      // over the tree and hide the app bar under test.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'flutter.wiki_last_path:$org/$project/$codeWikiId': '/Boardhop',
+        'flutter.wiki_last_path:$org/$project/$wikiId': '/Boardhop',
+      });
+      when(() => wikis.wikis(org, project, refresh: any(named: 'refresh')))
+          .thenAnswer((_) async => const [projectWiki, codeWiki]);
+    });
+
+    testWidgets('a phone shows the icon alone and keeps the wiki name', (
+      tester,
+    ) async {
+      await pump(tester, query: '?wiki=$codeWikiId');
+
+      // Beside the title the chip's label pushed the name out of the bar
+      // altogether on the iPhone (spike w38), so on a phone the branch is
+      // an icon action and the subtitle names it.
+      expect(find.byKey(const Key('wikiBranchPill')), findsOneWidget);
+      expect(find.text('docs-wiki'), findsOneWidget);
+      // The branch alone: "Code wiki · main" ellipsises to "Code wiki · m…"
+      // in the title column a phone leaves.
+      expect(find.text('main'), findsOneWidget);
+      expect(find.widgetWithText(Chip, 'main'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a tablet keeps the icon and the subtitle, no overflow', (
+      tester,
+    ) async {
+      await pump(tester, size: tablet, query: '?wiki=$codeWikiId');
+
+      // At the medium breakpoint the view switch carries its own labels and
+      // leaves the title about 50 dp: a labelled chip overflows the bar.
+      expect(find.byKey(const Key('wikiBranchPill')), findsOneWidget);
       expect(find.text('Code wiki · main'), findsOneWidget);
+      expect(find.widgetWithText(Chip, 'main'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('picking a branch re-reads the tree at that version', (
+      tester,
+    ) async {
+      await pump(tester, query: '?wiki=$codeWikiId');
+
+      await tester.tap(find.byKey(const Key('wikiBranchPill')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('release').last);
+      await tester.pumpAndSettle();
+
+      verify(
+        () => wikis.tree(
+          org,
+          project,
+          codeWikiId,
+          version: 'release',
+          refresh: any(named: 'refresh'),
+        ),
+      ).called(greaterThanOrEqualTo(1));
+      expect(find.text('release'), findsOneWidget);
+    });
+
+    testWidgets('a project wiki has no branch pill', (tester) async {
+      await pump(tester);
+
+      expect(find.byKey(const Key('wikiBranchPill')), findsNothing);
+      expect(find.text('Project wiki'), findsOneWidget);
     });
   });
 

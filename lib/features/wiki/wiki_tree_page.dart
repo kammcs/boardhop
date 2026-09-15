@@ -378,7 +378,17 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
     final wiki = _wiki;
     final several = _wikis.length > 1;
     final title = wiki?.name ?? 'Wiki';
-    final subtitle = wiki == null ? widget.project : wikiSubtitle(wiki);
+    // The branch shown is the one being read, not the wiki's first: the
+    // pill switches it (K8). On a phone the title column is barely 120 dp
+    // wide, where "Code wiki · wiki-docs-v2" ellipsises away exactly the
+    // half that matters, so a code wiki's line there is the branch alone.
+    final subtitle = wiki == null
+        ? widget.project
+        : compact && !wiki.isProjectWiki
+        ? (_version ?? wiki.version)
+        : wikiSubtitle(wiki, version: _version);
+    final branches =
+        wiki != null && !wiki.isProjectWiki && wiki.versions.length > 1;
     final titleRow = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -437,8 +447,6 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
                     )
                   : titleRow,
             ),
-            if (wiki != null && !wiki.isProjectWiki && wiki.versions.length > 1)
-              _branchPill(theme, wiki),
           ],
         ),
         leadingWidth: compact ? 44 : null,
@@ -453,6 +461,15 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
         // No compact action: the three-segment pill leaves about 84 dp on a
         // phone (research/20 §4.2).
         actions: [
+          // The branch switcher is an icon action to the left of the view
+          // switch. It was a labelled chip beside the title, which on the
+          // iPhone squeezed the wiki's name down to one letter and, on the
+          // longer of the two branch names, off the bar entirely (spike
+          // w38); at the medium breakpoint the three-segment view switch
+          // carries its own labels and leaves the title barely 50 dp, so a
+          // chip overflows there too. The branch is named in the subtitle
+          // on every width instead.
+          if (branches) _branchPill(theme, wiki),
           HomeViewSwitch(
             org: widget.org,
             project: widget.project,
@@ -511,31 +528,32 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
     );
   }
 
-  Widget _branchPill(ThemeData theme, Wiki wiki) => Padding(
-    padding: const EdgeInsets.only(left: Spacing.sm),
-    child: PopupMenuButton<String>(
+  /// The branch switcher (K8): an icon action, with the branch it is on
+  /// named in the app bar's subtitle rather than on a second label the bar
+  /// has no room for.
+  Widget _branchPill(ThemeData theme, Wiki wiki) {
+    final current = _version ?? wiki.version;
+    return PopupMenuButton<String>(
+      key: const Key('wikiBranchPill'),
       tooltip: 'Branch',
       onSelected: _pickVersion,
       itemBuilder: (context) => [
         for (final version in wiki.versions)
           PopupMenuItem(
             value: version,
-            child: ListTile(
-              leading: const Icon(Icons.alt_route),
-              title: Text(version),
-              trailing: version == (_version ?? wiki.version)
-                  ? const Icon(Icons.check)
-                  : null,
+            child: Row(
+              children: [
+                const Icon(Icons.alt_route, size: 18),
+                const SizedBox(width: Spacing.sm),
+                Expanded(child: Text(version, overflow: TextOverflow.ellipsis)),
+                if (version == current) const Icon(Icons.check, size: 18),
+              ],
             ),
           ),
       ],
-      child: Chip(
-        avatar: const Icon(Icons.alt_route, size: 16),
-        label: Text(_version ?? wiki.version),
-        visualDensity: VisualDensity.compact,
-      ),
-    ),
-  );
+      icon: const Icon(Icons.alt_route),
+    );
+  }
 
   Widget _scroller(ThemeData theme) {
     final rows = visibleWikiRows(_tree, _expanded);

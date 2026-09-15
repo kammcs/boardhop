@@ -363,6 +363,40 @@ void main() {
       );
     });
 
+    test('withVersion puts the branch on a code wiki remoteUrl', () {
+      // Spike w38: the service's own remoteUrl for a code wiki page is
+      // `…/_wiki/wikis/{id}?pagePath=%2FHome` — no wikiVersion at all, on
+      // a wiki published from two branches.
+      const remote =
+          'https://dev.azure.com/puremedia/$projectId/_wiki/wikis/$wikiId'
+          '?pagePath=%2FHome';
+      expect(
+        WikiLink.withVersion(remote, 'wiki-docs-v2'),
+        '$remote&wikiVersion=GBwiki-docs-v2',
+      );
+      expect(
+        WikiLink.parse(WikiLink.withVersion(remote, 'wiki-docs-v2'))!.version,
+        'wiki-docs-v2',
+      );
+      // Nothing to add, or one already there: the URL is untouched.
+      expect(WikiLink.withVersion(remote, null), remote);
+      expect(WikiLink.withVersion(remote, ''), remote);
+      expect(
+        WikiLink.withVersion('$remote&wikiVersion=GBmain', 'other'),
+        '$remote&wikiVersion=GBmain',
+      );
+      // The id form has no query of its own, and an anchor stays last.
+      final id = WikiLink.webUrl(org, 'Proj', wikiName, 252, 'Home');
+      expect(
+        WikiLink.withVersion(id, 'wiki-docs'),
+        '$id?wikiVersion=GBwiki-docs',
+      );
+      expect(
+        WikiLink.withVersion('$id#anchor-target', 'wiki-docs'),
+        '$id?wikiVersion=GBwiki-docs#anchor-target',
+      );
+    });
+
     test('artifactUri matches what the work item relation carries', () {
       expect(
         WikiLink.artifactUri(projectId, wikiId, '/Boardhop/Constructs'),

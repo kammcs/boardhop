@@ -16,7 +16,36 @@ phase by Kelly's decision. Decisions here; state in NEXT-STEPS item 27.
   (a repo folder published per branch, up to 10). The project wiki's `repositoryId == id`; its repo
   is hidden from `git/repositories` but every `git/repositories/{wikiRepoId}` route works. puremedia
   has one client project wiki (134 pages, depth 5, 168 attachments, 40 `.order` files, 0
-  non-conformant pages) and, since w37, the scratch `DevOps-Mobile-App.wiki`.
+  non-conformant pages), the scratch `DevOps-Mobile-App.wiki` (w37) and the scratch code wiki
+  "Boardhop docs" (w38).
+- **Code wikis (verified 2026-09-15, spike w38).** `POST wikis` with `{type: "codeWiki", name,
+  projectId, repositoryId, mappedPath: "/docs", version: {version: "wiki-docs"}}` → **201** (the
+  leading slash on `mappedPath` is accepted as documented; no retry was needed). A second branch is
+  added by `PATCH wikis/{id}` with **`{versions: [{version: "wiki-docs"}, {version:
+  "wiki-docs-v2"}]}`** — the full list, not a delta — → 200. `repositoryId` is the ordinary
+  repository, `mappedPath` comes back exactly as sent, and the wiki resolves by name (`Boardhop
+  docs`, space and all) as well as by GUID. Facts that matter to a reader:
+  - **`path` is mapped-path-relative, `gitItemPath` is not.** The tree root is `path: "/",
+    gitItemPath: "/docs"`, and a page is `path: "/Guide", gitItemPath: "/docs/Guide.md"`. Reading
+    `pages?path=/docs/Home` is a 404 `WikiPageNotFoundException`.
+  - **Page ids are per version.** The same three pages are 250/251/252 on `wiki-docs` and
+    253/254/255 on `wiki-docs-v2`, from `pagesbatch` with the version. A `pages/{id}` read ignores
+    any `versionDescriptor` it is given and answers the id's own version, so an id is only ever
+    valid with the tree it came from; a path plus a version is the safe pair.
+  - **`remoteUrl` carries no `wikiVersion`** even on a two-branch code wiki
+    (`…/_wiki/wikis/{wikiId}?pagePath=%2FHome`), so the app adds `&wikiVersion=GB{branch}` itself
+    (`WikiLink.withVersion`).
+  - **Attachments live under `mappedPath`:** `git/items?path=/docs/.attachments/w38.png` answers
+    the bytes; the root form `/.attachments/x.png` is a 404. Same for `commits` history
+    (`searchCriteria.itemPath=/docs/Home.md`). Both the relative `![](.attachments/x.png)` and the
+    root `![](/.attachments/x.png)` in markdown mean that one file.
+  - `.order` works the same (`Home`, `Guide`; a page in no `.order` sorts at `int32.max`), a bad
+    version is the same 500 `GitUnresolvableToCommitException`, and a read with **no** version at
+    all answers the first published one.
+  - **Search indexes only the default version**: one hit for a word on both branches, with
+    `path: "/docs/Guide.md"`, `wiki.mappedPath: "/docs"`, `wiki.version: "wiki-docs"` (plain, no
+    `GB` prefix) and `contentId` equal to that page's ETag. The index lagged the push by a few
+    minutes.
 - **Tree:** `pages?path=/&recursionLevel=full` returns the whole tree in one call (0.07 TSTU for
   134 pages) with `path` (title form, spaces kept), `gitItemPath` (file form: space→`-`,
   hyphen→`%2D`), `order`, `isParentPage`, `isNonConformant`, `subPages[]` **and no `id`**. Ids come
@@ -59,9 +88,16 @@ phase by Kelly's decision. Decisions here; state in NEXT-STEPS item 27.
   `/Boardhop/Links/Re-Order` 244, `/Boardhop/Links/Deep child/Level 4` 246, `/Boardhop/Pushed page`
   248 (non-conformant), `/Boardhop/Pushed tidy` 249 (outside `.order`); attachment
   `/.attachments/boardhop-w37-b64.png`; #15545 carries the Wiki Page link to Constructs.
-- **Unverified:** what the web itself writes for a Wiki Page link (no client item has one); code
-  wikis end to end (none exist); the app's Entra token against `_apis/wiki` and wiki search
-  (expected fine, `vso.wiki` is consented; the diagnostics check settles it).
+- **Scratch code wiki (quotable):** wiki `800545f6-18c2-4d4f-b464-668250e450f9` "Boardhop docs" in
+  the scratch repository `4c06881a-4e20-49c8-88c4-a21323fe04b5`, `mappedPath /docs`, branches
+  `wiki-docs` and `wiki-docs-v2`; pages `/Home` (250/252 — `[[_TOSP_]]`, `#15545`, both image
+  forms, a relative `./Guide`), `/Guide` (front matter, `[[_TOC_]]`, a `<br/>` table, a dart
+  fence, `../Home`), `/Guide/Deep` (`/Home` absolute link and an anchor); attachment
+  `/docs/.attachments/w38.png`; `wiki-docs-v2` differs only by a "Version 2" line on Home. The
+  word **quaggleboard** appears nowhere else in the organization.
+- **Unverified:** what the web itself writes for a Wiki Page link (no client item has one); the
+  app's Entra token against `_apis/wiki` and wiki search (expected fine, `vso.wiki` is consented;
+  the diagnostics check settles it).
 
 ## 2. Best practice (survey)
 
@@ -92,7 +128,7 @@ were weighed and rejected.
 | K5 | **Links from elsewhere:** tapped wiki URLs in comments and HTML fields open the in-app reader (both web URL forms, name or guid segments); the Related tab shows Wiki Page artifact links and plain hyperlinks; the comment composers gain a wiki-page picker that inserts `[Page title](url)` at the caret. No relation writes. |
 | K6 | **Tablet:** from the medium breakpoint the tree stays in a leading pane with the page beside it (work items list+detail pattern); phones push the page over the shell. |
 | K7 | **Offline:** cache as you read (tree, pages, images on disk); whole-wiki download later. |
-| K8 | **Code wikis:** listed in the picker, same reader, a branch switcher beside the title, every read passes the version; recorded as unverified until a code wiki exists. |
+| K8 | **Code wikis:** listed in the picker, same reader, a branch switcher in the app bar, every read passes the version. Proven end to end on the scratch code wiki (spike w38, 2026-09-15); the switcher moved from beside the title to an icon action because the chip crowded the title off the bar. |
 | K9 | **Page chrome:** title and parent path; a contents button opening a headings sheet when the page has two or more headings (in-place `[[_TOC_]]` renders too); overflow with Open on web, Copy link, Show source; a footer line "Last changed by A on date · Edit on the web" from one commits call. No edit affordance. |
 | K10 | **Tables:** a custom table builder — columns capped at about 80 % of the viewport so cells wrap, wider tables pan sideways, header row shaded. |
 | K11 | **Recents only** (five per wiki, on the device); no starring in v1. |
@@ -190,7 +226,8 @@ intercept wiki URLs before falling to the browser. `_bleedsUnderRail` and the do
 
 Editing (pages, attachments), Wiki Page relation writes from the Related tab, starring, whole-wiki
 download, mermaid/KaTeX/video rendering, markdown inside HTML blocks, `<iframe>` outside `::: video`,
-a typed `[[` trigger, code-wiki verification, view counts, page history beyond the last change.
+a typed `[[` trigger, view counts, page history beyond the last change, remembering a code wiki's
+branch across launches.
 
 ## 7. What landed (2026-09-15)
 
@@ -262,10 +299,50 @@ asterisks and underscores in the contents and gave the wrong anchor
 (`WikiMarkdown.headingText`); the picker dialog was a 1,032 pt empty box on the
 iPad; and the wiki section was built third rather than fourth.
 
-**Open:** code wikis are still unverified (none exists in puremedia), so the
-branch pill, the version on every read and the picker's `&wikiVersion=GB…` URL
-are test-only; a wiki URL from another organization opens under the current
-account and shows the service's refusal if it cannot be read; the picker reads
-the whole tree to filter titles, which no wiki larger than 134 pages has
-exercised; offline stays covered by widget tests; Android is untested on this
-Mac (its debug redirect URI is not on the app registration).
+## 8. Code wikis, closed (2026-09-15)
+
+Spike `w38_code_wiki.py` published one in the scratch project — a `docs/`
+folder pushed on `wiki-docs` and `wiki-docs-v2`, then `POST wikis` with
+`type: codeWiki` and `PATCH wikis/{id}` with the full `versions` list — and
+§1 now carries what the service answered. **Proven on the iPhone 17 and the
+iPad Pro 13" (debug):** the picker lists the project wiki and "Boardhop
+docs"; the branch action offers both branches and switching re-reads the
+tree; the tree is Home, Guide, Guide/Deep in `.order` order; Home renders
+the `[[_TOSP_]]` line, `#15545`, and **both** image forms off
+`/docs/.attachments/w38.png`; `./Guide`, `../Home` and `/Home` all resolve;
+Guide's `[[_TOC_]]`, `<br/>` table and dart fence draw; `wiki-docs-v2` shows
+its "Version 2" line; Copy link reads back
+`…/_wiki/wikis/Boardhop%20docs/250/Guide?wikiVersion=GBwiki-docs`; and the
+Search page's wiki section finds **quaggleboard** and opens the code-wiki
+page. The iPad shows the K6 tree+page layout for the code wiki with no
+overflow.
+
+**Four defects fixed**, three of which only a real code wiki could show:
+
+1. **Attachments were read at the wiki's first branch**, not the one on
+   screen — `attachmentUri`/`attachmentBytes` ignored the selected version.
+   They take one now.
+2. **Open on web and Copy link carried no branch.** The service's own
+   `remoteUrl` for a code wiki names no version at all, so a reader on the
+   second branch opened the first one; `WikiLink.withVersion` puts
+   `wikiVersion=GB…` on every URL the app hands out for a code wiki.
+3. **A search hit for the new code wiki said "This wiki is not in … any
+   more".** `WikiPagePage` matched against a wiki list up to a day old;
+   it now asks for a fresh list once before declaring a wiki gone.
+4. **The branch chip crowded the wiki's name off the app bar** — the title
+   read "B…" on the iPhone and vanished entirely on the longer branch name.
+   The switcher is an icon action left of the view switch on every width
+   (a labelled chip overflows at the medium breakpoint too, where the view
+   switch carries its own labels), and the app bar's subtitle names the
+   branch: "Code wiki · wiki-docs-v2", or the branch alone on a phone.
+
+**Open:** the branch is not remembered across launches (a cold start opens
+the wiki's first published version); only the default version is searchable,
+so a page that exists on one branch alone cannot be found by search; the web
+page behind Open on web was not rendered (the simulator's Safari has no
+Azure DevOps session, so it stopped at the Microsoft sign-in). A wiki URL
+from another organization opens under the current account and shows the
+service's refusal if it cannot be read; the picker reads the whole tree to
+filter titles, which no wiki larger than 134 pages has exercised; offline
+stays covered by widget tests; Android is untested on this Mac (its debug
+redirect URI is not on the app registration).
