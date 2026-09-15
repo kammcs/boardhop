@@ -67,7 +67,7 @@ over an `ExcludeSemantics` chart plus the day-by-day numbers as a list).
 | S2 | **Tabs inside the page: Backlog, Taskboard, Burndown** (a counted tab strip like the PR page). Backlog = the sprint's requirement rows ordered by rank with task counts and rollups; Taskboard = tasks in state columns; Burndown = the chart page. Opens on Taskboard when the sprint has task-type items, else Backlog; the last tab is remembered per project. |
 | S3 | **Writes:** move a task between columns (drag and a tap-to-move sheet: a state patch, plus the column call when the state maps to several columns); set Remaining Work (stepper, 0 clears) and assign to me from the card sheet; add a task under a story (the New card row, parented, in the sprint); move an item into or out of the sprint from the Backlog tab (an iteration-path patch). |
 | S4 | **Phone taskboard:** one `KanbanBoard` with tasks in state columns; a chip strip picks All \| Unparented (first, only when non-empty) \| one story; cards carry the parent id as the badge when unfiltered. The drag code is reused unchanged. |
-| S5 | **Tablet taskboard:** a real rows × columns grid (`TaskboardGrid`): one vertical scroller, sticky column headers with count and remaining sum, full-width collapsible row headers (title, id, state, rollup, task count, +), cells as tall as the tallest, horizontal scroll only as overflow. Burndown and capacity in a supporting pane at expanded width. |
+| S5 | **Tablet taskboard:** a real rows × columns grid (`TaskboardGrid`): one vertical scroller, sticky column headers with count and remaining sum, full-width collapsible row headers (title, id, state, rollup, task count, +), cells as tall as the tallest, horizontal scroll only as overflow. ~~Burndown and capacity in a supporting pane at expanded width.~~ **Superseded by S13: no pane, the grid takes the viewport.** |
 | S6 | **Burndown:** Analytics items-remaining by day with story points as a second series; a text verdict and a sparkline in the sprint header, the full chart (ideal line dashed, non-working days banded) on the Burndown tab; `fl_chart` pinned, behind one widget. The text summary ships regardless; the chart is built only after the on-device token check passes, and if the host refuses the app's token the tab says so. |
 | S7 | **Capacity:** read-only, shown only when the team filled it for that sprint (a strip on the Backlog tab, the pane on tablets). Never edited. |
 | S8 | **Team:** the project's default team; the sprint picker sheet names the team and offers a switch when the project has more than one. No app-bar control. |
@@ -75,7 +75,7 @@ over an `ExcludeSemantics` chart plus the day-by-day numbers as a list).
 | S10 | **People:** an app-bar person filter with Everyone, Me, and members with task counts. No group-by-people layout. |
 | S11 | **Admin:** no sprint creation or date editing in v1. The picker lists current, future, past; undated sprints are shown greyed "Dates not set". |
 | S12 | **An ended sprint** the service still calls current opens as current; the header says "Ended N days ago"; the burndown covers its dates. No day count when dates are missing. |
-| S13 | **The Taskboard tab carries no header and no chart** (Kelly, after seeing it on real data: the tiles and sparkline made the board harder to see). The sprint header stays on Backlog and Burndown; on tablets the grid takes the full width, with no supporting pane beside it. |
+| S13 | **The Taskboard tab carries no header and no chart** (Kelly, after seeing it on real data: the tiles and sparkline made the board harder to see). The sprint header stays on Backlog and Burndown; on tablets the grid takes the full width and height, with no supporting pane beside it. The capacity strip stays on the Backlog tab and the full chart with its facts on the Burndown tab, so nothing is lost — it moves. |
 
 ## 4. Design
 
@@ -104,7 +104,7 @@ person filter, sprint picker (sheet grouped Current / Future / Past, team name, 
 `WorkViewSwitch(sprint)`; `CountedTabBar` Backlog | Taskboard | Burndown), `SprintHeader` (stat tiles
 remaining / done / scope, sparkline, verdict), `SprintBacklogTab` (rows: type tile, id, title, state,
 rollup, task count, tap → work item; overflow: Move to another sprint; capacity strip when present),
-`SprintTaskboardTab` (phone: chip strip + `KanbanBoard`; tablet: `TaskboardGrid` + supporting pane),
+`SprintTaskboardTab` (phone: chip strip + `KanbanBoard`; tablet: `TaskboardGrid` alone, S13),
 `TaskboardGrid` (new, shares the drag session pieces with `KanbanBoard` via an extracted helper),
 `TaskCardSheet` (Move to … per column, Remaining Work stepper, Assign to me, Open), `SprintBurndownChart`
 (fl_chart behind one widget; `Semantics` label; sparkline and full modes), `SprintPickerSheet`.
@@ -119,12 +119,29 @@ icon; `Routes.workItems`/`board` helpers so the switch stops concatenating strin
 ## 5. Acceptance
 1. Scratch project: the Sprint view opens on Iteration 1 (current), Taskboard tab, derived columns To Do / In Progress / Verify / Done (the scratch board is customized) with the 11 tasks under their stories and the unparented row first; the picker lists Iteration 2 as future; switching keeps the tab.
 2. Drag a task To Do → In Progress: state patch, column follows; the sheet does the same by tap; a column that shares a state (Verify) uses the column call; Remaining Work stepper writes and clears; assign to me; New task under a story lands in the sprint with the parent link; Move to another sprint from the Backlog tab.
-3. CloudCover 2.0 (read-only): opens on Backlog (5 task items, 143 rows), rows ordered by rank with rollups; Taskboard shows the 5; person filter Me; the ended sprint reads "Ended N days ago".
+3. CloudCover 2.0 (read-only): its current sprint has moved on since this was written — **133 requirement rows and 16 task-type items** — so it opens on the **Taskboard** (S2 firing on the data, not a defect); rows ordered by rank with rollups; person filter Me (0 for Kelly there); the ended sprint reads "Ended N days ago".
 4. Burndown: the diagnostics probe confirms the Entra token against Analytics; the chart draws for CloudCover's sprint with the dashed ideal line; the scratch sprint (no history) shows the verdict only; the tab explains when Analytics refuses.
 5. Offline: airplane on the simulator is not possible; widget tests cover the cached snapshot first and a queued move; the board opens from cache after the fix.
-6. iPad: grid with sticky headers, collapsible rows, the supporting pane; dark; xxxL (cards wrap, chip strip id-only); phone landscape.
+6. iPad: grid with sticky headers and collapsible rows taking the whole pane (S13 removed the supporting pane); dark; xxxL (cards wrap, chip strip id-only); phone landscape.
 
 ## 6. Out of v1
 Group by people; capacity editing; sprint creation and dates; sprint goal (no API); reordering tasks
 within a cell on the phone (sheet only); moving stories between sprints by drag; multi-team probes
 (every project here has one team).
+
+## 7. What landed (2026-09-15)
+
+P-A: `lib/data/models/sprint.dart`, `SprintRepository` (derived columns, one-call rows, cached
+snapshot, moves and reorders, Remaining Work, iteration moves, teams), `AnalyticsRepository`
+(`AdoHost.analytics`, `AnalyticsUnavailable`), `BoardRepository`/`BoardsPage` cache-first (S9).
+P-B: `DragSession` extracted from `KanbanBoard`, `TaskboardGrid`, `TaskCardSheet`,
+`SprintBurndownChart` (fl_chart 1.2.0), `SprintHeader`, `SprintPickerSheet`, `PersonFilterMenu`,
+`StoryChipStrip`, burndown colour tokens, a diagnostics probe. P-C: `Routes.sprint/workItems/board`,
+the `':project/sprint'` route, `WorkView.sprint`, `SprintPage` with the three tabs, the shared
+`runMoveChoreography`, the `WorkItemCard` xxxL fix. P-D: acceptance on the iPhone 17 and iPad Pro
+13" simulators, the team switch finished (spike s56: every puremedia project has one team), the phone
+title, the sparkline band, S13, and four device defects fixed (units in the header and column headers
+after Remaining Work is cleared, a stale iteration in the route after a team switch). §5 items pass
+except the device-impossible three (a real drag, airplane-mode offline, the Analytics-refused
+sentence), which widget tests cover. Report: `research/walkthroughs/2026-09-15-sprints.md`.
+

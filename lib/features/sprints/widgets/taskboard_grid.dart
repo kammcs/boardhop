@@ -303,17 +303,17 @@ class _TaskboardGridState extends State<TaskboardGrid>
 
   String? _columnSubtitle(int c) {
     var sum = 0.0;
-    var any = false;
     for (final row in _cells) {
       for (final task in row[c]) {
-        final v = task.field<num>(kRemainingWorkField)?.toDouble();
-        if (v != null) {
-          sum += v;
-          any = true;
-        }
+        sum += task.field<num>(kRemainingWorkField)?.toDouble() ?? 0;
       }
     }
-    return any ? '${formatRemaining(sum)} remaining' : null;
+    // `any` is not enough: a task whose Remaining Work was cleared holds a
+    // real 0, and `formatRemaining(0)` is the empty string — which left the
+    // column header reading " remaining" with no number (iPhone check,
+    // P-D).
+    final text = formatRemaining(sum);
+    return text.isEmpty ? null : '$text remaining';
   }
 
   Widget _row(int r, double viewport, double padRight, EdgeInsets inset) {

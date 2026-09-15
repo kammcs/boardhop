@@ -78,6 +78,10 @@ class _SprintPageState extends State<SprintPage>
 
   String? _teamId;
   String? _teamName;
+
+  /// The project's teams, for the picker's switch row (S8). Read off the
+  /// critical path and empty until it answers; the row is hidden below two.
+  List<SprintTeamRef> _teams = const [];
   SprintIterations _iterations = const SprintIterations();
   String? _iterationId;
   SprintSnapshot? _snapshot;
@@ -273,6 +277,7 @@ class _SprintPageState extends State<SprintPage>
         }
       });
       unawaited(_loadCapacity());
+      unawaited(_loadTeams());
       // The chart is never on the taskboard's critical path (research/18
       // S6): it is asked for after the first frame the sprint is on.
       WidgetsBinding.instance.addPostFrameCallback(
@@ -312,6 +317,22 @@ class _SprintPageState extends State<SprintPage>
     _settingDefault = true;
     _tabs.index = snapshot.tasks.isNotEmpty ? _taskboardTab : _backlogTab;
     _settingDefault = false;
+  }
+
+  /// The picker's team switch (S8). Never on the critical path: the list
+  /// is only needed when the sheet opens, it is cached a day, and a project
+  /// the account cannot enumerate teams on simply shows no switch.
+  Future<void> _loadTeams() async {
+    if (_teams.isNotEmpty || !mounted) return;
+    try {
+      final teams = await context.read<SprintRepository>().teams(
+        widget.org,
+        widget.project,
+      );
+      if (mounted && teams.isNotEmpty) setState(() => _teams = teams);
+    } on AdoException {
+      // No switch rather than an error: the sprint itself is fine.
+    }
   }
 
   Future<void> _loadCapacity() async {
@@ -513,9 +534,14 @@ class _SprintPageState extends State<SprintPage>
       snapshot.columns,
       explicitColumns: snapshot.explicitColumns,
     );
-    if (totals.remaining != null) {
+    // `> 0`, not `!= null`: clearing Remaining Work writes a real 0 (the
+    // service refuses null), so one cleared task left the header of a
+    // 14-task sprint reading "Remaining 0 h" for good (iPhone check, P-D).
+    // Zero hours is the same answer as no hours — count the items.
+    final hours = totals.remaining;
+    if (hours != null && hours > 0) {
       return (
-        remaining: totals.remaining,
+        remaining: hours,
         done: totals.done,
         total: tasks.length,
         unit: 'h',
@@ -540,14 +566,18 @@ class _SprintPageState extends State<SprintPage>
       scopeChange: days.length < 2
           ? null
           : (days.last.scope - days.first.scope).toDouble(),
-      // The header's sparkline is items even when the rollup is in hours:
-      // Analytics counts work items, never Remaining Work (research/18 §1).
-      days: totals.unit == 'items' ? days : const [],
+      // The sparkline is items even when the rollup is in hours — Analytics
+      // counts work items, never Remaining Work (research/18 §1) — so the
+      // series goes in whole and `seriesUnit` keeps the two apart. Dropping
+      // it when the unit was hours made one task with 2 h on it hide four
+      // days of burndown behind "No burndown data" (iPhone check, P-D).
+      days: days,
       ideal: burndownIdealLine(days, finish: iteration?.finishDate),
       start: iteration?.startDate,
       finish: iteration?.finishDate,
       isEnded: iteration?.isEnded() ?? false,
       unit: totals.unit,
+      seriesUnit: 'items',
     );
   }
 
@@ -1003,11 +1033,13 @@ class _SprintPageState extends State<SprintPage>
   }
 
   Future<void> _pickSprint() async {
+    unawaited(_loadTeams());
     final picked = await showSprintPicker(
       context,
       iterations: _iterations.all,
       teamName: _teamName ?? widget.project,
       currentIterationId: _sprintId,
+      teams: _teams,
     );
     if (picked == null || !mounted) return;
     switch (picked) {
@@ -1036,6 +1068,11 @@ class _SprintPageState extends State<SprintPage>
         );
         await _load();
       case SprintTeamPicked(:final team):
+        if (team.id == _teamId) return;
+        // Another team is another set of iterations, another taskboard and
+        // another snapshot, so everything resolved for the old one goes —
+        // including the sprint in the route, which names an iteration this
+        // team does not have. The plain route means "this team's current".
         setState(() {
           _teamId = team.id;
           _teamName = team.name;
@@ -1043,8 +1080,21 @@ class _SprintPageState extends State<SprintPage>
           _iterationId = null;
           _iterations = const SprintIterations();
           _capacity = null;
+          _burndown = const [];
           _burndownAsked = false;
+          _analyticsRefused = false;
+          _story = null;
         });
+        if (widget.iteration != null) {
+          context.go(
+            Routes.sprint(
+              AccountScope.of(context),
+              widget.org,
+              widget.project,
+              tab: _tabChosen ? SprintPrefs.tabs[_tabs.index] : null,
+            ),
+          );
+        }
         await _load(refresh: true);
     }
   }
@@ -1093,19 +1143,34 @@ class _SprintPageState extends State<SprintPage>
     final scheme = theme.colorScheme;
     final iteration = _iteration;
     final snapshot = _snapshot;
-    final subtitle = iteration == null
-        ? 'Sprint'
+    // The **sprint** is what this page is about, so it takes the first
+    // line whole; the project and the dates share the second. Project-first
+    // truncated both halves to nothing on a phone ("DevOp…" / "Iteration
+    // 1 ·…", P-C's 04) because the project shell has already said which
+    // project this is, twice.
+    final title = iteration?.name ?? 'Sprint';
+    final when = iteration == null
+        ? null
         : iteration.isEnded()
-        ? '${iteration.name} · '
-              '${sprintEndedLabel(iteration.finishDate)}'
-        : '${iteration.name} · '
-              '${sprintDateRange(iteration.startDate, iteration.finishDate)}';
+        ? sprintEndedLabel(iteration.finishDate)
+        : sprintDateRange(iteration.startDate, iteration.finishDate);
     // A phone's app bar already carries the back arrow, the person filter
     // and a three-segment pill; a fourth control left the two-line title
     // reading "Dev…" / "Iter…". The title *is* the sprint picker instead —
     // which is where the web puts its sprint selector too — and the
     // separate button comes back where there is room for it.
     final compact = context.breakpoint.isCompact;
+    // What is left for the title on an iPhone 17 is 84 dp (measured), so
+    // the first line takes the app bar's smaller title size there and the
+    // second drops the project: "DevOps Mobile App · 8–21 Sep" truncates
+    // to "8–21 Sep · De…", and two letters of a project the shell has
+    // already named are worth less than the dates. From medium up both
+    // fit, and the project comes back.
+    final subtitle = when == null || when.isEmpty
+        ? widget.project
+        : compact
+        ? when
+        : '${widget.project} · $when';
     final canPick = !_iterations.isEmpty;
     return Scaffold(
       appBar: AppBar(
@@ -1114,10 +1179,11 @@ class _SprintPageState extends State<SprintPage>
           onTap: canPick ? _pickSprint : null,
           borderRadius: Radii.chip,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Spacing.xs,
-              vertical: Spacing.xs,
-            ),
+            // Vertical only: `titleSpacing: 0` has already put the title
+            // hard against the back arrow, and every dp of the 84 the
+            // phone leaves here is the difference between "Iteration 2"
+            // and "Iteratio…".
+            padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1127,16 +1193,20 @@ class _SprintPageState extends State<SprintPage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        widget.project,
+                        title,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge,
+                        style: compact
+                            ? theme.textTheme.titleMedium
+                            : theme.textTheme.titleLarge,
                       ),
                       Text(
                         subtitle,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        style:
+                            (compact
+                                    ? theme.textTheme.labelSmall
+                                    : theme.textTheme.labelMedium)
+                                ?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     ],
                   ),
@@ -1144,6 +1214,7 @@ class _SprintPageState extends State<SprintPage>
                 if (canPick)
                   Icon(
                     Icons.arrow_drop_down,
+                    size: 20,
                     color: scheme.onSurfaceVariant,
                     semanticLabel: 'Choose sprint',
                   ),
@@ -1151,8 +1222,14 @@ class _SprintPageState extends State<SprintPage>
             ),
           ),
         ),
+        // 44 dp rather than the default 56: still Apple's minimum target,
+        // and the 12 dp it gives back is what lets the second line say
+        // "Ended 8 days ago" instead of "Ended 8 day…" on an iPhone.
+        leadingWidth: compact ? 44 : null,
         leading: IconButton(
           tooltip: 'Projects',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
           icon: const Icon(Icons.arrow_back),
           onPressed: () =>
               context.go('${orgRoute(context, widget.org)}/projects'),
@@ -1278,7 +1355,6 @@ class _SprintPageState extends State<SprintPage>
     if (_columns.isEmpty) {
       return ListView(
         children: [
-          _header(),
           Padding(
             padding: Spacing.page,
             child: Text(
@@ -1289,15 +1365,23 @@ class _SprintPageState extends State<SprintPage>
         ],
       );
     }
-    // The tablet gets the real grid with a supporting pane; the phone gets
-    // the story chip strip over one Kanban board (S4/S5).
+    // The tablet gets the real grid, the phone the story chip strip over
+    // one Kanban board (S4/S5). Neither gets the sprint header: the tiles,
+    // the sparkline and the verdict belong to the Backlog and Burndown
+    // tabs, and over a board they only push the cards down (Kelly, S13).
     if (!context.breakpoint.isCompact) return _grid(rows);
     return _phoneBoard(rows);
   }
 
+  /// The tablet's taskboard: the grid and nothing else.
+  ///
+  /// It had the sprint header above it and a burndown / capacity pane
+  /// beside it (S5). Both are gone (S13): a taskboard is read as a grid,
+  /// and the two of them together took a third of an iPad's width and
+  /// 180 dp of its height away from the cells. The burndown lives on its
+  /// own tab and the capacity strip on the Backlog tab.
   Widget _grid(List<SprintRow> rows) {
-    final supporting = _supportingPane();
-    final grid = TaskboardGrid(
+    return TaskboardGrid(
       columns: _columns,
       rows: rows,
       columnOf: _columnOf,
@@ -1316,75 +1400,6 @@ class _SprintPageState extends State<SprintPage>
         flash: card.id == _flashId,
         badge: _badgeFor(card, showParent: false),
       ),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _header(),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // `SideBySide`'s columns size themselves to their content,
-              // which a viewport-filling grid cannot do, so the two panes
-              // are a Row here — at the same threshold, and stacking to
-              // the grid alone below it.
-              if (constraints.maxWidth < ContentColumn.twoColumnMin ||
-                  supporting == null) {
-                return grid;
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(flex: 2, child: grid),
-                  SizedBox(
-                    width: (constraints.maxWidth * 0.3).clamp(280.0, 380.0),
-                    child: supporting,
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// The tablet's supporting pane: the burndown and the capacity, the two
-  /// things a taskboard is read next to (S5).
-  Widget? _supportingPane() {
-    final capacity = _capacity;
-    final hasChart = _burndown.length >= 2;
-    if (!hasChart && capacity == null && !_analyticsRefused) return null;
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(0, 0, Spacing.lg, Spacing.xl),
-      children: [
-        if (hasChart) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: Spacing.xs),
-            child: Text('Burndown', style: theme.textTheme.titleSmall),
-          ),
-          SprintBurndownChart(
-            days: _burndown,
-            mode: BurndownMode.full,
-            height: 180,
-            showPoints: _burndown.any((d) => d.points > 0),
-            isNonWorkingDay: capacity == null
-                ? null
-                : (day) => !capacity.isWorkingDay(day),
-          ),
-          const SizedBox(height: Spacing.sm),
-          BurndownLegend(showPoints: _burndown.any((d) => d.points > 0)),
-        ],
-        if (!hasChart && _analyticsRefused)
-          Text(
-            'Analytics refused this sign-in, so there is no burndown chart.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        if (capacity != null) SprintCapacityStrip(capacity: capacity),
-      ],
     );
   }
 
@@ -1455,17 +1470,18 @@ class _SprintPageState extends State<SprintPage>
 
   String? _columnSubtitle(List<WorkItem> cards) {
     var sum = 0.0;
-    var any = false;
     for (final card in cards) {
       final hours = card
           .field<num>(SprintRepository.remainingWorkField)
           ?.toDouble();
-      if (hours != null) {
-        sum += hours;
-        any = true;
-      }
+      if (hours != null) sum += hours;
     }
-    return any ? '${formatRemaining(sum)} remaining' : null;
+    // `any` is not enough: a task whose Remaining Work was cleared holds a
+    // real 0, and `formatRemaining(0)` is the empty string — which left the
+    // column header reading " remaining" with no number (iPhone check,
+    // P-D).
+    final text = formatRemaining(sum);
+    return text.isEmpty ? null : '$text remaining';
   }
 
   /// The card's trailing label: the parent's id while every story is on

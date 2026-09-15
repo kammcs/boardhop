@@ -12,7 +12,10 @@ import 'package:boardhop/data/repositories/work_item_repository.dart';
 import 'package:boardhop/data/write_queue.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
 import 'package:boardhop/features/sprints/sprint_page.dart';
+import 'package:boardhop/features/sprints/widgets/sprint_burndown_chart.dart';
+import 'package:boardhop/features/sprints/widgets/sprint_header.dart';
 import 'package:boardhop/features/sprints/widgets/task_card_sheet.dart';
+import 'package:boardhop/features/sprints/widgets/taskboard_grid.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -200,6 +203,14 @@ void main() {
         .thenAnswer((_) async => team);
     when(() => sprints.defaultTeamName(org, project))
         .thenAnswer((_) async => 'DevOps Mobile App Team');
+    // One team is the puremedia shape, and the picker hides the switch
+    // there; the team-switch test overrides this with two.
+    when(() => sprints.teams(org, project, refresh: any(named: 'refresh')))
+        .thenAnswer(
+          (_) async => const [
+            SprintTeamRef(id: team, name: 'DevOps Mobile App Team'),
+          ],
+        );
     when(
       () => sprints.iterations(
         org,
@@ -972,6 +983,226 @@ void main() {
     });
   });
 
+  group('the header when the rollup is in hours', () {
+    testWidgets('keeps the burndown sentence in items, not "No burndown data"', (
+      tester,
+    ) async {
+      when(
+        () => sprints.load(
+          org,
+          project,
+          any(),
+          team: any(named: 'team'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer(
+        (_) async => snapshotWith(
+          rows: [
+            SprintRow(
+              parent: story(15503, 'The sprint view'),
+              tasks: [task(15550, title: 'Model the columns', remaining: 2)],
+              remaining: 2,
+            ),
+          ],
+        ),
+      );
+      when(
+        () => analytics.burndown(
+          org,
+          project,
+          any(),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          for (var i = 0; i < 4; i++)
+            BurndownDay(date: DateTime.utc(2026, 9, 12 + i), remaining: 17),
+        ],
+      );
+
+      await pump(tester, query: '?tab=backlog');
+
+      expect(find.text('2 h'), findsOneWidget);
+      expect(find.text('No burndown data'), findsNothing);
+      expect(
+        find.textContaining('items/day behind the ideal line'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('the taskboard carries no header (S13)', () {
+    // Kelly, 2026-09-15: the stat tiles, the sparkline and the verdict
+    // belong to the Backlog and Burndown tabs. Over a board they only push
+    // the cards down, and on a tablet the supporting pane took a third of
+    // the width the grid wanted.
+    Future<void> burndownLoaded() async {
+      when(
+        () => analytics.burndown(
+          org,
+          project,
+          any(),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          for (var i = 0; i < 4; i++)
+            BurndownDay(
+              date: DateTime.utc(2026, 9, 12 + i),
+              remaining: 16 - i,
+              points: 5,
+            ),
+        ],
+      );
+    }
+
+    testWidgets('on a tablet the grid has the width and height to itself', (
+      tester,
+    ) async {
+      await burndownLoaded();
+
+      await pump(tester, query: '?tab=taskboard');
+
+      expect(find.byType(TaskboardGrid), findsOneWidget);
+      expect(find.byType(SprintHeader), findsNothing);
+      expect(find.byType(SprintBurndownChart), findsNothing);
+      expect(find.text('Scope change'), findsNothing);
+    });
+
+    testWidgets('and neither does the phone board', (tester) async {
+      await burndownLoaded();
+
+      await pump(
+        tester,
+        query: '?tab=taskboard',
+        size: const Size(1170, 2532),
+        devicePixelRatio: 3,
+      );
+
+      expect(find.byType(SprintHeader), findsNothing);
+      expect(find.byType(SprintBurndownChart), findsNothing);
+    });
+
+    testWidgets('the Backlog and Burndown tabs keep it', (tester) async {
+      await burndownLoaded();
+
+      await pump(tester, query: '?tab=backlog');
+      expect(find.byType(SprintHeader), findsOneWidget);
+
+      await tester.tap(find.text('Burndown'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SprintHeader), findsOneWidget);
+    });
+  });
+
+  group('a cleared Remaining Work is not " remaining"', () {
+    // Clearing the hours writes a real 0 (the service refuses null), and
+    // the column header then read " remaining" with no number on both the
+    // phone board and the grid (iPhone check, P-D).
+    setUp(() {
+      when(
+        () => sprints.load(
+          org,
+          project,
+          any(),
+          team: any(named: 'team'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer(
+        (_) async => snapshotWith(
+          rows: [
+            SprintRow(
+              parent: story(15503, 'The sprint view'),
+              tasks: [task(15550, title: 'Model the columns', remaining: 0)],
+              remaining: 0,
+            ),
+          ],
+        ),
+      );
+    });
+
+    testWidgets('and the header counts items, not "0 h"', (tester) async {
+      await pump(tester, query: '?tab=backlog');
+
+      expect(find.text('0 h'), findsNothing);
+      expect(find.text('1 items'), findsOneWidget);
+    });
+
+    testWidgets('on the phone board', (tester) async {
+      await pump(
+        tester,
+        query: '?tab=taskboard',
+        size: const Size(1170, 2532),
+        devicePixelRatio: 3,
+      );
+
+      expect(find.text('Model the columns'), findsOneWidget);
+      expect(find.textContaining('remaining'), findsNothing);
+    });
+
+    testWidgets('and on the tablet grid', (tester) async {
+      await pump(tester, query: '?tab=taskboard');
+
+      expect(find.byType(TaskboardGrid), findsOneWidget);
+      expect(find.textContaining('remaining'), findsNothing);
+    });
+  });
+
+  group('the app-bar title', () {
+    testWidgets('leads with the sprint, and the phone drops the project', (
+      tester,
+    ) async {
+      // Project-first truncated both halves on an iPhone ("DevOp…" /
+      // "Iteration 1 ·…", P-C's 04); the shell has already named the
+      // project twice by then. What is left for the title there is 84 dp,
+      // so the second line is the dates alone — "DevOps Mobile App ·
+      // 8–21 Sep" ellipsises to two letters of the project.
+      await pump(tester, size: const Size(1170, 2532), devicePixelRatio: 3);
+
+      final title = tester.widget<Text>(find.text('Iteration 1'));
+      expect(title.overflow, TextOverflow.ellipsis);
+      expect(find.text('8–21 Sep'), findsOneWidget);
+      expect(find.text('$project · 8–21 Sep'), findsNothing);
+    });
+
+    testWidgets('a tablet has room for the project as well', (tester) async {
+      await pump(tester);
+
+      expect(find.text('Iteration 1'), findsOneWidget);
+      expect(find.text('$project · 8–21 Sep'), findsOneWidget);
+    });
+
+    testWidgets('an ended sprint says so on the second line (S12)', (
+      tester,
+    ) async {
+      final ended = TeamIteration(
+        id: iterationId,
+        name: 'Iteration 1',
+        path: '$project\\Iteration 1',
+        timeFrame: 'current',
+        startDate: DateTime.now().subtract(const Duration(days: 20)),
+        finishDate: DateTime.now().subtract(const Duration(days: 6)),
+      );
+      when(
+        () => sprints.iterations(
+          org,
+          project,
+          team: any(named: 'team'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer((_) async => SprintIterations(all: [ended]));
+
+      await pump(tester, size: const Size(1170, 2532), devicePixelRatio: 3);
+
+      expect(find.text('Iteration 1'), findsOneWidget);
+      expect(find.text('Ended 6 days ago'), findsWidgets);
+    });
+  });
+
   group('the sprint picker', () {
     testWidgets('picking another sprint changes the route and reloads (S1)', (
       tester,
@@ -1042,6 +1273,59 @@ void main() {
 
       expect(loaded.last, futureId);
       expect(location, endsWith('/sprint?iteration=$futureId'));
+    });
+
+    testWidgets('one team hides the switch row', (tester) async {
+      await pump(tester);
+      await tester.tap(find.byTooltip('Choose sprint'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DevOps Mobile App Team'), findsOneWidget);
+      expect(find.text('Switch team'), findsNothing);
+    });
+
+    testWidgets('picking another team reloads the sprint with its id', (
+      tester,
+    ) async {
+      when(() => sprints.teams(org, project, refresh: any(named: 'refresh')))
+          .thenAnswer(
+            (_) async => const [
+              SprintTeamRef(id: team, name: 'DevOps Mobile App Team'),
+              SprintTeamRef(id: 'team-2', name: 'Relay Team'),
+            ],
+          );
+      final loadedFor = <String?>[];
+      when(
+        () => sprints.load(
+          org,
+          project,
+          any(),
+          team: any(named: 'team'),
+          refresh: any(named: 'refresh'),
+        ),
+      ).thenAnswer((i) async {
+        loadedFor.add(i.namedArguments[#team] as String?);
+        return snapshotWith();
+      });
+
+      await pump(tester, query: '?iteration=$futureId');
+      await tester.tap(find.byTooltip('Choose sprint'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Switch team'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Relay Team'));
+      await tester.pumpAndSettle();
+
+      // Everything the old team resolved is asked for again with the new
+      // team id — iterations, the snapshot — and the sprint in the route
+      // goes, because it names an iteration this team does not have.
+      expect(loadedFor.first, team);
+      expect(loadedFor.last, 'team-2');
+      verify(
+        () => sprints.iterations(org, project, team: 'team-2', refresh: true),
+      ).called(greaterThanOrEqualTo(1));
+      expect(location, endsWith('/sprint'));
+      expect(find.text('Relay Team'), findsNothing);
     });
 
     testWidgets('a deep link to one sprint opens that sprint', (tester) async {

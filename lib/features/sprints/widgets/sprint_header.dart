@@ -18,6 +18,7 @@ class SprintHeaderData {
     this.finish,
     this.isEnded = false,
     this.unit = 'items',
+    this.seriesUnit = 'items',
     this.now,
     this.ideal,
   });
@@ -37,7 +38,20 @@ class SprintHeaderData {
 
   /// The service still calls an over-running sprint `current` (S12).
   final bool isEnded;
+
+  /// What the Remaining tile counts: `h` once any task carries Remaining
+  /// Work, otherwise `items`.
   final String unit;
+
+  /// What [days] counts, which is **always** work items: Analytics answers
+  /// a count and story points, never Remaining Work (research/18 §1). It is
+  /// separate from [unit] because a single task with hours on it flips the
+  /// tile to `h` while the burndown is still in items — reusing one unit
+  /// for both made the verdict read "0.9 h/day behind" over an item series,
+  /// and the page dodged that by dropping the series altogether, so a
+  /// sprint with four days of history said "No burndown data" (iPhone
+  /// check, P-D).
+  final String seriesUnit;
 
   /// Injectable clock for the tests.
   final DateTime? now;
@@ -126,7 +140,7 @@ class SprintHeader extends StatelessWidget {
       finish: data.finish,
       now: data.now,
       daysLeft: sprintDaysLeft(data.finish, now: data.now),
-      unit: data.unit,
+      unit: data.seriesUnit,
     );
     final left = sprintDaysLeft(data.finish, now: data.now);
     // The verdict already says "Ended N days ago" when the sprint is over,
@@ -189,7 +203,7 @@ class SprintHeader extends StatelessWidget {
               SprintBurndownChart(
                 days: data.days,
                 ideal: ideal,
-                unit: data.unit,
+                unit: data.seriesUnit,
               ),
             ],
             const SizedBox(height: Spacing.sm),

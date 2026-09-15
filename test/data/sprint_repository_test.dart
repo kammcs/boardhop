@@ -345,6 +345,46 @@ void main() {
     });
   });
 
+  group('teams', () {
+    test('reads the project\'s teams for the picker switch', () async {
+      adapter.answers['/teams?api-version'] = {
+        'count': 2,
+        'value': [
+          {'id': team, 'name': 'DevOps Mobile App Team'},
+          {'id': 't-2', 'name': 'Relay Team'},
+        ],
+      };
+
+      final teams = await repository.teams(org, project);
+
+      expect(
+        adapter.firstMatching('/teams?')!.uri.toString(),
+        'https://dev.azure.com/$org/_apis/projects/DevOps%20Mobile%20App/'
+        'teams?api-version=7.1',
+      );
+      expect(teams.map((t) => t.id), [team, 't-2']);
+      expect(teams.map((t) => t.name), [
+        'DevOps Mobile App Team',
+        'Relay Team',
+      ]);
+    });
+
+    test('is cached, so opening the picker twice reads once', () async {
+      adapter.answers['/teams?api-version'] = {
+        'count': 1,
+        'value': [
+          {'id': team, 'name': 'DevOps Mobile App Team'},
+        ],
+      };
+
+      await repository.teams(org, project);
+      final again = await repository.teams(org, project);
+
+      expect(adapter.matching('/teams?').length, 1);
+      expect(again.single.name, 'DevOps Mobile App Team');
+    });
+  });
+
   group('columns', () {
     test('derives To Do / In Progress / Done when not customized', () async {
       final columns = await repository.columns(org, project);

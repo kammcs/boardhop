@@ -1,19 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../../data/models/sprint.dart';
 import '../../../data/models/work_item_form.dart';
 import '../../../theme/theme.dart';
 import 'sprint_format.dart';
 
-/// A team of the project, for the picker's team switch. Sprints are
-/// team-scoped and the app resolves the project's default team everywhere
-/// (S8); this is the only place another team can be chosen, and only when
-/// the project has more than one.
-class SprintTeamRef {
-  const SprintTeamRef({required this.id, required this.name});
-
-  final String id;
-  final String name;
-}
+// `SprintTeamRef` is a model (the teams read answers it), re-exported here
+// so callers of the picker keep their one import.
+export '../../../data/models/sprint.dart' show SprintTeamRef;
 
 /// What the picker came back with.
 sealed class SprintPickerResult {

@@ -59,6 +59,9 @@ class SprintRepository {
   static const storyPointsField = 'Microsoft.VSTS.Scheduling.StoryPoints';
   static const effortField = 'Microsoft.VSTS.Scheduling.Effort';
 
+  static String teamsKey(String org, String project) =>
+      'sprint:teams:$org:$project';
+
   static String columnsKey(String org, String project, String team) =>
       'sprint:columns:$org:$project:$team';
   static String snapshotKey(
@@ -93,6 +96,31 @@ class SprintRepository {
   /// costs nothing; null when the read failed or the service gave no name.
   Future<String?> defaultTeamName(String org, String project) =>
       _forms.defaultTeamName(org, project);
+
+  /// Every team of the project, for the picker's team switch (S8).
+  ///
+  /// `GET {org}/_apis/projects/{project}/teams` — project-level, not
+  /// team-scoped, and it takes the project name as well as its id. Teams
+  /// change about as often as iterations do, so it shares the day-long
+  /// cache; the picker hides the switch when the answer has one entry,
+  /// which is every puremedia project (spike s54).
+  Future<List<SprintTeamRef>> teams(
+    String org,
+    String project, {
+    bool refresh = false,
+  }) => _cached<List<SprintTeamRef>>(
+    teamsKey(org, project),
+    () => _client.getJson(
+      org: org,
+      path: '_apis/projects/$project/teams',
+      apiVersion: apiVersion,
+    ),
+    (json) => [
+      for (final t in ((json as Map?)?['value'] as List?) ?? const [])
+        if (t is Map) SprintTeamRef.fromJson(t.cast<String, dynamic>()),
+    ],
+    refresh: refresh,
+  );
 
   /// Every iteration of the team, split into current / future / past.
   ///

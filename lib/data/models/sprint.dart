@@ -481,6 +481,30 @@ class BurndownDay extends Equatable {
   List<Object?> get props => [date, remaining, done, points];
 }
 
+/// A team of the project, for the sprint picker's team switch (S8).
+///
+/// Sprints are team-scoped and the app resolves the project's default team
+/// everywhere; the picker is the only place another team can be chosen, and
+/// it offers the switch only when the project has more than one. Every
+/// puremedia project has exactly one (spike s54), so the row is hidden
+/// there.
+class SprintTeamRef extends Equatable {
+  const SprintTeamRef({required this.id, required this.name});
+
+  factory SprintTeamRef.fromJson(Map<String, dynamic> json) => SprintTeamRef(
+    id: '${json['id'] ?? ''}',
+    name: '${json['name'] ?? ''}',
+  );
+
+  final String id;
+  final String name;
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+
+  @override
+  List<Object?> get props => [id, name];
+}
+
 /// The team's iterations split the way the picker shows them (decision S11:
 /// current, then future, then past, newest first).
 class SprintIterations extends Equatable {

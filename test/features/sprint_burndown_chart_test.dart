@@ -150,6 +150,37 @@ void main() {
     expect(data.rangeAnnotations.verticalRangeAnnotations, hasLength(2));
   });
 
+  testWidgets('the sparkline bands the same days, but fainter', (tester) async {
+    // A weekend out of a four-day series reads as a grey slab at 48 dp
+    // (P-C §6.5); the band is a hint there, not a block.
+    Color? bandOf() {
+      final data = tester.widget<LineChart>(find.byType(LineChart)).data;
+      final bands = data.rangeAnnotations.verticalRangeAnnotations;
+      expect(bands, hasLength(2));
+      return bands.first.color;
+    }
+
+    await tester.pumpWidget(
+      _wrap(
+        SprintBurndownChart(
+          days: _days([10, 9, 8, 8, 8, 6, 4]),
+          mode: BurndownMode.full,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final full = bandOf();
+
+    await tester.pumpWidget(
+      _wrap(SprintBurndownChart(days: _days([10, 9, 8, 8, 8, 6, 4]))),
+    );
+    await tester.pumpAndSettle();
+    final spark = bandOf();
+
+    expect(spark!.a, lessThan(full!.a));
+    expect(spark.a, closeTo(0.03, 0.005));
+  });
+
   testWidgets('empty and all-null data draw nothing and do not throw', (
     tester,
   ) async {

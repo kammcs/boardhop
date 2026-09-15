@@ -232,7 +232,11 @@ class SprintBurndownChart extends StatelessWidget {
 
   List<VerticalRangeAnnotation> _nonWorkingBands(ColorScheme scheme) {
     final off = isNonWorkingDay ?? _weekend;
-    final color = scheme.onSurface.withValues(alpha: 0.06);
+    // The sparkline is 48 dp tall and often only a handful of days wide, so
+    // two banded days out of four read as a grey slab rather than a hint
+    // (P-C §6.5). Half the alpha there; the full chart's band is already
+    // small against a fortnight and stays as it is.
+    final color = scheme.onSurface.withValues(alpha: _sparkline ? 0.03 : 0.06);
     return [
       for (var i = 0; i < days.length; i++)
         if (off(days[i].date))

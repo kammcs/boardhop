@@ -186,6 +186,41 @@ void main() {
     expect(find.byType(SprintBurndownChart), findsOneWidget);
   });
 
+  testWidgets('hours on the tile, items in the verdict and the sparkline', (
+    tester,
+  ) async {
+    // One task with Remaining Work flips the rollup to hours. The burndown
+    // is still a count of work items, so the sentence must stay in items
+    // and the sparkline must stay on screen — dropping the series there
+    // made a sprint with four days of history read "No burndown data"
+    // (iPhone check, P-D).
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      wrap(
+        SprintHeaderData(
+          remaining: 2,
+          done: 0,
+          total: 14,
+          days: _days([17, 17, 17, 17]),
+          start: DateTime.utc(2026, 9, 8),
+          finish: DateTime.utc(2026, 9, 21),
+          now: DateTime.utc(2026, 9, 15),
+          unit: 'h',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 h'), findsOneWidget);
+    expect(find.text('No burndown data'), findsNothing);
+    expect(
+      find.textContaining('items/day behind the ideal line'),
+      findsOneWidget,
+    );
+    expect(find.byType(SprintBurndownChart), findsOneWidget);
+  });
+
   testWidgets('an empty sprint shows dashes and no chart', (tester) async {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
