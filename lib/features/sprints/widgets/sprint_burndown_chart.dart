@@ -17,18 +17,52 @@ enum BurndownMode {
 }
 
 /// The straight line the sprint would follow if it burned down evenly:
-/// from the first day's remaining work to zero on the last day.
+/// from the first day's remaining work to zero on [finish].
+///
+/// **[finish] matters.** Analytics answers one row per day *up to today*,
+/// not to the end of the sprint (P-A §8.4), so burning to zero over the
+/// rows in hand puts the ideal at zero on the day the data stops — four
+/// days into a fortnight the scratch sprint read "Ideal today: 0 items"
+/// and the header called a sprint on schedule "2 items/day behind"
+/// (iPhone check, P-C). With the sprint's finish date the line has the
+/// slope it really has, and simply does not reach zero inside the window
+/// the chart draws.
+///
+/// Without [finish] — an undated sprint, which three of the four puremedia
+/// projects run — it falls back to the old shape, because there is nothing
+/// else to anchor on.
 ///
 /// Pure and separate from the widget because the header's verdict sentence
 /// compares against the same numbers, and because a chart no one can read
 /// is not an accessible answer on its own (DESIGN.md §8).
-List<double> burndownIdealLine(List<BurndownDay> days) {
+List<double> burndownIdealLine(List<BurndownDay> days, {DateTime? finish}) {
   if (days.isEmpty) return const [];
   final start = days.first.remaining.toDouble();
   final last = days.length - 1;
+  if (finish != null) {
+    final span = _dayGap(days.first.date, finish);
+    if (span > 0) {
+      return [
+        for (var i = 0; i <= last; i++)
+          () {
+            final value =
+                start * (1 - _dayGap(days.first.date, days[i].date) / span);
+            return value < 0 ? 0.0 : value;
+          }(),
+      ];
+    }
+  }
   if (last == 0) return [start];
   return [for (var i = 0; i <= last; i++) start * (1 - i / last)];
 }
+
+/// Whole days from [from] to [to], compared as calendar dates: Azure
+/// DevOps dates are date-only and a local-time shift moves them by a day.
+int _dayGap(DateTime from, DateTime to) => DateTime.utc(
+  to.year,
+  to.month,
+  to.day,
+).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
 
 /// One sentence describing the chart for a screen reader: fl_chart has no
 /// semantics of its own (r2 §3.3, fl_chart #1746/#2082), so this is ours.

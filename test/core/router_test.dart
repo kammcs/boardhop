@@ -32,6 +32,7 @@ void main() {
       'home',
       'work-items/15503',
       'boards',
+      'sprint',
       'repos',
       'pipelines/runs/1/logs/2',
     ]) {
@@ -43,6 +44,15 @@ void main() {
       Uri.parse('$project/work-items/15503'),
     );
     expect(item.pathParameters['id'], '15503');
+
+    // The sprint's state rides in the query, so the match is the same
+    // route with or without it (research/18 S1).
+    final sprint = router.configuration.findMatch(
+      Uri.parse('$project/sprint?iteration=abc-123&tab=burndown'),
+    );
+    expect(sprint.isError, isFalse);
+    expect(sprint.uri.queryParameters['iteration'], 'abc-123');
+    expect(sprint.uri.queryParameters['tab'], 'burndown');
   });
 
   // The standalone work item route (`Routes.workItemStandalone`) is the same

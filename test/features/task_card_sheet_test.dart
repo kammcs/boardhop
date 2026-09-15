@@ -157,10 +157,7 @@ void main() {
 
   testWidgets('Done warns that it zeroes remaining work', (tester) async {
     await open(tester, task: _task(remaining: 4));
-    expect(
-      find.text('Moving to Done sets remaining work to 0'),
-      findsOneWidget,
-    );
+    expect(find.text('Moving to Done clears remaining work'), findsOneWidget);
   });
 
   testWidgets('picking a column returns MoveTaskAction', (tester) async {

@@ -19,6 +19,7 @@ class SprintHeaderData {
     this.isEnded = false,
     this.unit = 'items',
     this.now,
+    this.ideal,
   });
 
   /// Work left: hours when the team fills Remaining Work, otherwise the
@@ -40,6 +41,11 @@ class SprintHeaderData {
 
   /// Injectable clock for the tests.
   final DateTime? now;
+
+  /// The ideal line to compare against, when the page has worked one out
+  /// over the sprint's own dates rather than over the days Analytics
+  /// happens to hold ([burndownIdealLine] with a finish date).
+  final List<double>? ideal;
 
   int? get percentDone => total == 0 ? null : (done * 100 / total).round();
 }
@@ -104,10 +110,17 @@ class SprintHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final ideal = burndownIdealLine(data.days);
+    final ideal =
+        data.ideal ?? burndownIdealLine(data.days, finish: data.finish);
+    // Deliberately not `data.remaining`: the tile counts the sprint's
+    // *tasks* (what the taskboard shows), while Analytics counts every
+    // work item in the iteration — 13 against 125 on CloudCover's sprint
+    // (iPhone check, P-C). Comparing one population against the other's
+    // ideal line is not a verdict about anything, so the series is judged
+    // against its own ideal.
     final verdict = sprintVerdict(
       data.days,
-      data.remaining,
+      null,
       ideal,
       isEnded: data.isEnded,
       finish: data.finish,

@@ -13,13 +13,13 @@ import '../../data/models/work_item_form.dart';
 import '../../data/repositories/board_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
-import '../../data/write_queue.dart';
 import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
 import '../work_items/form/new_work_item_button.dart';
 import '../work_items/form/type_chooser.dart';
 import '../work_items/widgets/work_item_visuals.dart';
 import '../work_items/widgets/work_view_switch.dart';
+import 'move_choreography.dart';
 import 'widgets/kanban_board.dart';
 import 'widgets/new_card_row.dart';
 
@@ -241,102 +241,72 @@ class _BoardsPageState extends State<BoardsPage> {
       _error = null;
     });
     final repo = context.read<BoardRepository>();
-    try {
-      if (fromSlot != toSlot) {
-        final updated = await repo.move(
-          widget.org,
-          widget.project,
-          board,
-          card,
-          board.slots[toSlot],
-        );
-        if (!mounted) return;
-        setState(() {
-          final i = _cards[toSlot].indexWhere((c) => c.id == card.id);
-          if (i >= 0) _cards[toSlot][i] = updated;
-        });
-      }
-      final target = _cards[toSlot];
-      final at = target.indexWhere((c) => c.id == card.id);
-      final block = BoardRepository.reorderBlock(target, at, _rankField);
-      final ranks = await repo.reorder(
-        widget.org,
-        widget.project,
-        block.ids,
-        previousId: block.previousId,
-        nextId: block.nextId,
-      );
-      final rankField = _rankField;
-      if (!mounted || rankField == null) return;
-      setState(() {
-        for (var i = 0; i < target.length; i++) {
-          final rank = ranks[target[i].id];
-          if (rank != null) {
-            target[i] = target[i].copyWithFields({rankField: rank});
-          }
-        }
-      });
-    } on AdoAuthException catch (e) {
-      if (mounted) {
-        context.read<AuthBloc>().add(
-          AuthInteractionRequired(
-            e.message,
-            accountId: AccountScope.maybeOf(context),
-          ),
-        );
-      }
-    } on AdoNetworkException {
-      // Offline: keep the move on screen, queue the column write (the rank
-      // is not queued; it is recomputed on the next refresh).
-      if (!mounted || fromSlot == toSlot) return;
-      final ops = BoardRepository.moveOps(board, card, board.slots[toSlot]);
-      final queue = context.read<WriteQueue>();
-      final workItems = context.read<WorkItemRepository>();
-      await queue.enqueuePatch(
-        org: widget.org,
-        project: widget.project,
-        item: card,
-        ops: ops,
-        description: 'Move ${card.id} to ${board.slots[toSlot].title}',
-      );
-      final local = await workItems.applyLocally(
-        widget.org,
-        widget.project,
-        card,
-        WriteQueue.fieldsFromOps(ops),
-      );
-      if (!mounted) return;
-      setState(() {
+    // The dispatch around these writes — sign-in, offline queue, revert —
+    // is shared with the sprint taskboard (`runMoveChoreography`).
+    final outcome = await runMoveChoreography(
+      context,
+      org: widget.org,
+      project: widget.project,
+      card: card,
+      offlineDescription: 'Move ${card.id} to ${board.slots[toSlot].title}',
+      offlineOps: () => fromSlot == toSlot
+          ? const <Map<String, Object?>>[]
+          : BoardRepository.moveOps(board, card, board.slots[toSlot]),
+      onQueued: (local) => setState(() {
         final i = _cards[toSlot].indexWhere((c) => c.id == card.id);
         if (i >= 0) _cards[toSlot][i] = local;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offline: the move will sync later.')),
-      );
-    } on AdoException catch (e) {
-      if (!mounted) return;
-      setState(() {
+      }),
+      onFailed: (message) => setState(() {
         _cards[toSlot].removeWhere((c) => c.id == card.id);
         _cards[fromSlot].insert(
           realFrom.clamp(0, _cards[fromSlot].length),
           card,
         );
-        _error = e is AdoStaleRevisionException
-            ? 'Work item ${card.id} changed elsewhere; the board was reloaded, try again.'
-            : 'Could not move ${card.id}: ${e.message}';
-      });
-      if (e is AdoStaleRevisionException) {
-        await _load();
-        if (mounted) {
-          setState(
-            () => _error =
-                'Work item ${card.id} changed elsewhere; the board was reloaded, try again.',
+        _error = message;
+      }),
+      write: () async {
+        if (fromSlot != toSlot) {
+          final updated = await repo.move(
+            widget.org,
+            widget.project,
+            board,
+            card,
+            board.slots[toSlot],
           );
+          if (!mounted) return;
+          setState(() {
+            final i = _cards[toSlot].indexWhere((c) => c.id == card.id);
+            if (i >= 0) _cards[toSlot][i] = updated;
+          });
         }
-      }
-    } finally {
-      if (mounted) setState(() => _movesInFlight--);
+        final target = _cards[toSlot];
+        final at = target.indexWhere((c) => c.id == card.id);
+        final block = BoardRepository.reorderBlock(target, at, _rankField);
+        final ranks = await repo.reorder(
+          widget.org,
+          widget.project,
+          block.ids,
+          previousId: block.previousId,
+          nextId: block.nextId,
+        );
+        final rankField = _rankField;
+        if (!mounted || rankField == null) return;
+        setState(() {
+          for (var i = 0; i < target.length; i++) {
+            final rank = ranks[target[i].id];
+            if (rank != null) {
+              target[i] = target[i].copyWithFields({rankField: rank});
+            }
+          }
+        });
+      },
+    );
+    if (outcome == MoveOutcome.stale && mounted) {
+      final message = _error;
+      await _load();
+      if (mounted) setState(() => _error = message);
     }
+    if (mounted) setState(() => _movesInFlight--);
   }
 
   /// The `+` at the bottom of a column: the board's types only, the

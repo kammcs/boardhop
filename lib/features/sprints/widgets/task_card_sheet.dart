@@ -53,8 +53,10 @@ final class OpenTaskAction extends TaskCardAction {
 bool columnAcceptsType(TaskboardColumn column, String type) =>
     column.mappings.isEmpty || column.mappings.containsKey(type);
 
-/// Does landing in [column] mean the task is finished? Used for the warning
-/// the web does not show: it silently zeroes Remaining Work on Done.
+/// Does landing in [column] mean the task is finished? Used for the note
+/// the web does not show: the process's own rule empties Remaining Work
+/// when a task reaches its completed state, and writing a zero there is
+/// refused (TF401320 InvalidNotEmpty — see `SprintRepository.moveOps`).
 bool _isDoneColumn(TaskboardColumn column) =>
     (column.stateCategory ?? '').toLowerCase() == 'completed' ||
     column.name.toLowerCase() == 'done';
@@ -244,7 +246,7 @@ class _TaskCardSheetState extends State<TaskCardSheet> {
     final reachable = columnAcceptsType(column, widget.task.type);
     final enabled = reachable && !current;
     final note = _isDoneColumn(column) && enabled
-        ? 'Moving to ${column.name} sets remaining work to 0'
+        ? 'Moving to ${column.name} clears remaining work'
         : !reachable
         ? 'Not available for a ${widget.task.type}'
         : null;

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routes.dart';
 import '../../../theme/theme.dart';
 import '../../shared/account_scope.dart';
 
-enum WorkView { items, board }
+enum WorkView { items, board, sprint }
 
-/// The Work tab holds two views of the same project: the work item list and
-/// the board. This segmented control sits in the app bar of both, left of
-/// the action icons, and switches between their routes so each keeps its
+/// The Work tab holds three views of the same project: the work item list,
+/// the board and the sprint (NEXT-STEPS 24, decision S1). This segmented
+/// control sits in the app bar of all three, left of nothing — it is the
+/// rightmost action — and switches between their routes so each keeps its
 /// own state and deep links. Icons only on phones, icon and label wider.
 class WorkViewSwitch extends StatelessWidget {
   const WorkViewSwitch({
@@ -41,6 +43,15 @@ class WorkViewSwitch extends StatelessWidget {
             icon: const Icon(Icons.view_kanban_outlined),
             tooltip: 'Board',
           ),
+          ButtonSegment(
+            value: WorkView.sprint,
+            label: compact ? null : const Text('Sprint'),
+            // The running figure, not another board or clock glyph: on a
+            // phone this pill is icons only, so the three have to be
+            // unmistakable at a glance.
+            icon: const Icon(Icons.directions_run),
+            tooltip: 'Sprint',
+          ),
         ],
         selected: {current},
         showSelectedIcon: false,
@@ -51,10 +62,12 @@ class WorkViewSwitch extends StatelessWidget {
         onSelectionChanged: (selection) {
           final view = selection.first;
           if (view == current) return;
-          final base = projectRoute(context, org, project);
-          context.go(
-            view == WorkView.items ? '$base/work-items' : '$base/boards',
-          );
+          final account = AccountScope.of(context);
+          context.go(switch (view) {
+            WorkView.items => Routes.workItems(account, org, project),
+            WorkView.board => Routes.board(account, org, project),
+            WorkView.sprint => Routes.sprint(account, org, project),
+          });
         },
       ),
     );

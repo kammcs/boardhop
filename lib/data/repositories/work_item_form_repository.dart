@@ -64,6 +64,7 @@ class WorkItemFormRepository {
       'form:iterations:$org:$project:$team';
 
   final Map<String, String> _defaultTeams = {};
+  final Map<String, String> _defaultTeamNames = {};
   final Map<String, String> _projectIds = {};
 
   // ---------------------------------------------------------------- reads
@@ -301,6 +302,21 @@ class WorkItemFormRepository {
     return id;
   }
 
+  /// The default team's display name, from the same read. Null when the
+  /// project could not be read at all: a name is decoration (the sprint
+  /// picker's header, S8) and never worth failing a page over.
+  Future<String?> defaultTeamName(String org, String project) async {
+    final key = '$org/$project';
+    final cached = _defaultTeamNames[key];
+    if (cached != null) return cached;
+    try {
+      await _readProject(org, project);
+    } on AdoException {
+      return null;
+    }
+    return _defaultTeamNames[key];
+  }
+
   /// The project's **id**. `graph/descriptors/{project}` and the team
   /// member read take the id, not the name: the name answers HTTP 400 and
   /// the people search silently falls back to the whole organization
@@ -327,6 +343,10 @@ class WorkItemFormRepository {
     if (id != null && id.isNotEmpty) _projectIds[key] = id;
     final team = (json['defaultTeam'] as Map?)?['id'] as String?;
     if (team != null && team.isNotEmpty) _defaultTeams[key] = team;
+    final teamName = (json['defaultTeam'] as Map?)?['name'] as String?;
+    if (teamName != null && teamName.isNotEmpty) {
+      _defaultTeamNames[key] = teamName;
+    }
   }
 
   static final _guid = RegExp(

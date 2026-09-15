@@ -39,6 +39,7 @@ import 'features/repos/file_page.dart';
 import 'features/repos/repo_page.dart';
 import 'features/repos/repos_page.dart';
 import 'features/search/search_page.dart';
+import 'features/sprints/sprint_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/shared/account_scope.dart';
 import 'features/shared/splash_page.dart';
@@ -223,6 +224,21 @@ GoRouter buildRouter(AuthBloc auth, AppDependencies deps) {
                         builder: (_, state) => BoardsPage(
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
+                        ),
+                      ),
+                      // The third Work view (decision S1), a sibling of
+                      // the board so the pill's three views share the
+                      // branch navigator and its back stack. `iteration`
+                      // is a team iteration GUID and is absent for the
+                      // current sprint; `tab` is backlog | taskboard |
+                      // burndown.
+                      GoRoute(
+                        path: ':project/sprint',
+                        builder: (_, state) => SprintPage(
+                          org: state.pathParameters['org']!,
+                          project: state.pathParameters['project']!,
+                          iteration: state.uri.queryParameters['iteration'],
+                          initialTab: state.uri.queryParameters['tab'],
                         ),
                       ),
                     ],

@@ -638,6 +638,50 @@ void main() {
       );
     });
 
+    test('a move into Done writes the state and nothing else', () {
+      // The first cut of this put a Remaining Work zero on the same patch,
+      // because the web clears the hours when a task finishes. The service
+      // refused it on the scratch project:
+      //
+      //   TF401320: Rule Error for field Remaining Work.
+      //   Error code: InvalidNotEmpty.
+      //
+      // The stock processes rule that the field is *empty* on a completed
+      // task, so a zero is as invalid as a four — and the rule does the
+      // clearing itself. The page checks the item afterwards instead.
+      expect(
+        SprintRepository.moveOps(
+          derived[2],
+          item(1, state: 'Active', remaining: 4),
+        ),
+        [
+          {'op': 'add', 'path': '/fields/System.State', 'value': 'Closed'},
+        ],
+      );
+    });
+
+    test('a task already in Done writes nothing at all', () {
+      expect(
+        SprintRepository.moveOps(
+          derived[2],
+          item(1, state: 'Closed', remaining: 2),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('moving out of Done leaves Remaining Work alone', () {
+      expect(
+        SprintRepository.moveOps(
+          derived[1],
+          item(1, state: 'Closed', remaining: 2),
+        ),
+        [
+          {'op': 'add', 'path': '/fields/System.State', 'value': 'Active'},
+        ],
+      );
+    });
+
     test('a derived board never needs the taskboard column call', () {
       expect(
         SprintRepository.needsColumnCall(derived, item(1), derived[1]),

@@ -22,6 +22,53 @@ Widget _wrap(Widget child, {Brightness brightness = Brightness.light}) =>
     );
 
 void main() {
+  group('the ideal line is anchored on the sprint, not on the data (P-C)', () {
+    // Analytics answers one row per day up to today, never to the end of
+    // the sprint (P-A §8.4). Burning to zero over the rows in hand put the
+    // ideal at zero four days into a fortnight, and the header then called
+    // a sprint that was on schedule "2 items/day behind".
+    final days = [
+      for (var i = 0; i < 4; i++)
+        BurndownDay(date: DateTime.utc(2026, 9, 12 + i), remaining: 16 - i),
+    ];
+
+    test('with a finish date the line has the slope it really has', () {
+      final ideal = burndownIdealLine(days, finish: DateTime.utc(2026, 9, 21));
+
+      // 16 on 12 Sep down to 0 on 21 Sep: nine days, so 16/9 a day.
+      expect(ideal.first, 16);
+      expect(ideal[1], closeTo(16 * 8 / 9, 0.001));
+      expect(ideal.last, closeTo(16 * 6 / 9, 0.001));
+      // And it never reaches zero inside the window the chart draws.
+      expect(ideal.last, greaterThan(10));
+    });
+
+    test('without one it falls back to the old shape', () {
+      // Three of the four puremedia projects run the stock undated
+      // Iteration 1, so this path is not hypothetical.
+      final ideal = burndownIdealLine(days);
+
+      expect(ideal.first, 16);
+      expect(ideal.last, 0);
+    });
+
+    test('a finish date already past clamps at zero rather than going '
+        'negative', () {
+      final ideal = burndownIdealLine(days, finish: DateTime.utc(2026, 9, 13));
+
+      expect(ideal.first, 16);
+      expect(ideal.last, 0);
+      expect(ideal.every((v) => v >= 0), isTrue);
+    });
+
+    test('a finish date on the first day is no span at all, and the old '
+        'shape answers', () {
+      final ideal = burndownIdealLine(days, finish: DateTime.utc(2026, 9, 12));
+
+      expect(ideal.last, 0);
+    });
+  });
+
   group('burndownIdealLine', () {
     test('runs from the opening scope to zero', () {
       final line = burndownIdealLine(_days([10, 8, 6, 4]));

@@ -88,6 +88,12 @@ class SprintRepository {
   Future<String> defaultTeamId(String org, String project) =>
       _forms.defaultTeamId(org, project);
 
+  /// The default team's display name, for the picker's header (S8). Comes
+  /// off the same single project read [defaultTeamId] already makes, so it
+  /// costs nothing; null when the read failed or the service gave no name.
+  Future<String?> defaultTeamName(String org, String project) =>
+      _forms.defaultTeamName(org, project);
+
   /// Every iteration of the team, split into current / future / past.
   ///
   /// `$timeframe` accepts only `current` (anything else is HTTP 400), so
@@ -702,6 +708,24 @@ class SprintRepository {
   /// maps for that type, and nothing when the card's current state already
   /// belongs there (dragging a Resolved task within In Progress, or a move
   /// that only changes the explicit column).
+  ///
+  /// **A move never writes Remaining Work, not even into a Done column.**
+  /// The first cut of this did, because the web clears the hours when a
+  /// task finishes and the move sheet promises the same. The service
+  /// refused it on the scratch project, verbatim:
+  ///
+  /// > TF401320: Rule Error for field Remaining Work. Error code:
+  /// > InvalidNotEmpty.
+  ///
+  /// The stock Agile and Scrum processes carry a rule on the task's
+  /// completed state that Remaining Work must be **empty**, so a zero is
+  /// as invalid as a four — and the rule empties the field itself the
+  /// moment the state lands. Writing it here would also have put a doomed
+  /// patch in the offline queue. The page checks the refreshed item after
+  /// a move into a Done column and only then, on a process whose rule is
+  /// missing, sends the zero as a patch of its own
+  /// (P-C, verified on the iPhone 17 against DevOps Mobile App,
+  /// 2026-09-15).
   static List<Map<String, Object?>> moveOps(
     TaskboardColumn target,
     WorkItem item,

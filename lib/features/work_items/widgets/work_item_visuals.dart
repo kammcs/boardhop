@@ -7,7 +7,8 @@ import '../../../core/util/format.dart';
 import '../../../data/avatar_store.dart';
 import '../../../data/models/work_item.dart';
 import '../../../theme/theme.dart';
-import '../../boards/widgets/kanban_board.dart' show tintApiColor;
+import '../../boards/widgets/kanban_board.dart'
+    show boardTextScale, tintApiColor;
 
 /// Colors and glyphs for a work item, preferring what the project's process
 /// says (type color, state color) and falling back to [BoardhopColors].
@@ -205,6 +206,8 @@ class WorkItemCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final typeColor = visuals.typeColor(context, item);
+    // AX XXXL and above: the card sheds what it can rather than clipping.
+    final huge = boardTextScale(context) >= 1.6;
     final background = theme.brightness == Brightness.dark
         ? scheme.surfaceContainerHigh
         : scheme.surfaceContainerLowest;
@@ -245,28 +248,53 @@ class WorkItemCard extends StatelessWidget {
               const SizedBox(height: Spacing.xs),
               Text(
                 item.title,
-                maxLines: 3,
+                // Three lines of AX5 type is most of a phone screen, and
+                // the footer below then has nothing left: two at
+                // accessibility sizes (P-B §5).
+                maxLines: huge ? 2 : 3,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: Spacing.sm),
-              Row(
+              // A Wrap, not a Row: at AX XXXL the state, the badge and the
+              // tags cannot share a line and the Row overflowed by 46 px
+              // on the Kanban board and the sprint taskboard alike
+              // (P-B §5, r2 §6). A Wrap has no `Spacer`, so the badge and
+              // the tags follow the state instead of being pushed right.
+              Wrap(
+                spacing: Spacing.sm,
+                runSpacing: Spacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  StateDot(color: visuals.stateColor(context, item)),
-                  const SizedBox(width: Spacing.xs),
-                  Text(item.state, style: theme.textTheme.labelMedium),
-                  if (item.boardColumnDone) ...[
-                    const SizedBox(width: Spacing.sm),
-                    Icon(
-                      Icons.check_circle_outline,
-                      size: 14,
-                      color: context.boardhopColors.stateCompleted,
-                    ),
-                    const SizedBox(width: 2),
-                    Text('Done', style: theme.textTheme.labelSmall),
-                  ],
-                  const Spacer(),
-                  if (badge != null) ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      StateDot(color: visuals.stateColor(context, item)),
+                      const SizedBox(width: Spacing.xs),
+                      // Flexible, because a `Row` hands a plain child
+                      // unbounded width in the main axis: "In Progress" at
+                      // AX XXXL then laid itself out on one 415 px line
+                      // inside a 292 px card.
+                      Flexible(
+                        child: Text(
+                          item.state,
+                          style: theme.textTheme.labelMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (item.boardColumnDone) ...[
+                        const SizedBox(width: Spacing.sm),
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 14,
+                          color: context.boardhopColors.stateCompleted,
+                        ),
+                        const SizedBox(width: 2),
+                        Text('Done', style: theme.textTheme.labelSmall),
+                      ],
+                    ],
+                  ),
+                  if (badge != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: Spacing.xs,
@@ -283,17 +311,16 @@ class WorkItemCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: Spacing.xs),
-                  ],
-                  if (item.tags.isNotEmpty)
-                    Flexible(
-                      child: Text(
-                        item.tags.take(2).join(' · '),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                  // The badge carries the meaning (the swimlane, the
+                  // parent, the remaining work); the tags are the first
+                  // thing to go when the card runs out of room.
+                  if (item.tags.isNotEmpty && !huge)
+                    Text(
+                      item.tags.take(2).join(' · '),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ),

@@ -110,9 +110,12 @@ class _ProjectShellState extends State<ProjectShell>
         ),
       ];
 
-  /// Pages whose content scrolls sideways (the Kanban board) run under
-  /// the glass rail; see [GlassShellLayout].
-  static bool _bleedsUnderRail(String location) => location.endsWith('/boards');
+  /// Pages whose content scrolls sideways (the Kanban board, the sprint
+  /// taskboard) run under the glass rail; see [GlassShellLayout]. The
+  /// location the shell is given is `state.uri.path`, so the sprint's
+  /// `?iteration=` and `?tab=` are already off it.
+  static bool _bleedsUnderRail(String location) =>
+      location.endsWith('/boards') || location.endsWith('/sprint');
 
   String projectPath(BuildContext context, String tail) =>
       '${orgRoute(context, org)}/projects/${Uri.encodeComponent(project)}/$tail';

@@ -17,6 +17,30 @@ abstract final class Routes {
   static String activity(String accountId, String org) =>
       '${Routes.org(accountId, org)}/activity';
 
+  /// The Work tab's three views, so the view switch and the pages stop
+  /// concatenating route strings by hand (research/18 §4.3).
+  static String workItems(String accountId, String org, String project) =>
+      '${Routes.project(accountId, org, project)}/work-items';
+
+  static String board(String accountId, String org, String project) =>
+      '${Routes.project(accountId, org, project)}/boards';
+
+  /// The Sprint view (decision S1). [iteration] is a team iteration GUID and
+  /// is **left out when it is the team's current sprint**, so the plain
+  /// route is the plain view — the rule [search] already follows. [tab] is
+  /// `backlog`, `taskboard` or `burndown` and is left out for the default,
+  /// which the page decides from the sprint's contents.
+  static String sprint(
+    String accountId,
+    String org,
+    String project, {
+    String? iteration,
+    String? tab,
+  }) => _withQuery('${Routes.project(accountId, org, project)}/sprint', {
+    'iteration': iteration,
+    'tab': tab,
+  });
+
   static String pullRequest(String accountId, String org, String id) =>
       '${Routes.org(accountId, org)}/pull-requests/${Uri.encodeComponent(id)}';
 
