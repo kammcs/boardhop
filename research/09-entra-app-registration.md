@@ -113,12 +113,7 @@ Do not create a client secret or certificate. None is needed for a public client
    | `vso.graph` | Looking up people and avatars for pickers |
    | `vso.analytics` | Repository language breakdown on the Repos tab (`projectanalysis/languagemetrics`); added 2026-09-11 |
    | `vso.profile_write` | Starring repositories (the Favorites API); added 2026-09-11 |
-   | `vso.dashboards` | **Needed, not yet granted.** The Dashboards view (research/19). Without it
-     `{project}/_apis/dashboard/dashboards` answers **401 `InvalidIdentityException` /
-     `TF400813`** to the app's token while every other resource in the same session is fine
-     (measured on the iPhone 17 simulator, 2026-09-15, by the Diagnostics page's "Dashboard API"
-     check). Adding it needs a fresh puremedia admin consent, as `vso.analytics` and
-     `vso.profile_write` did. Until then the app shows its built-in Team overview and says why. |
+   | `vso.dashboards` | The Dashboards view (research/19); **added and consented by puremedia on 2026-09-15.** Before the grant `{project}/_apis/dashboard/dashboards` answered **401 `InvalidIdentityException` / `TF400813`** to the app's token while every other resource in the same session was fine (measured on the iPhone 17 simulator by the Diagnostics page's "Dashboard API" check); the app shows its built-in Team overview and says why whenever that refusal comes back (a cached token issued before the grant needs a fresh sign-in). |
 
    The app requests only the read scopes at first sign-in and asks for the write scopes when the user first performs a write, so the initial consent screen stays small. Listing them all here lets a tenant admin consent once for everything.
 
