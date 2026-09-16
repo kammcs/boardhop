@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -46,6 +48,10 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
   /// When the list on screen was fetched (from the network or the cache),
   /// shown next to an error so a stale list is recognisable.
   DateTime? _shownAt;
+
+  /// The signed-in identity, so a row can say why it is in the list (R13).
+  /// A failed read simply leaves the reasons off.
+  String? _meId;
   String? _error;
   bool _loading = false;
   bool _loadedOnce = false;
@@ -66,6 +72,7 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
     });
     final repo = context.read<PullRequestRepository>();
     final filter = _filter;
+    unawaited(_loadMe(repo));
     if (!_loadedOnce) {
       final cached = await repo.cachedList(
         widget.org,
@@ -112,6 +119,18 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
           _loadedOnce = true;
         });
       }
+    }
+  }
+
+  /// `connectionData` is already cached by the repository, so this costs
+  /// nothing after the first list.
+  Future<void> _loadMe(PullRequestRepository repo) async {
+    if (_meId != null) return;
+    try {
+      final me = await repo.meId(widget.org);
+      if (mounted) setState(() => _meId = me);
+    } on AdoException {
+      // The reasons are a nicety; the list itself is what matters.
     }
   }
 
@@ -162,75 +181,82 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
         ),
         actions: [],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ContentColumn(
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              if (_loading) const LinearProgressIndicator(),
-              SizedBox(
-                height: 48,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Spacing.lg,
-                    vertical: Spacing.xs,
-                  ),
-                  children: [
-                    for (final (f, label) in const [
-                      (PrListFilter.toReview, 'To review'),
-                      (PrListFilter.mine, 'Created by me'),
-                      (PrListFilter.all, 'All active'),
-                    ]) ...[
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: _filter == f,
-                        onSelected: (_) => _select(f),
-                      ),
-                      const SizedBox(width: Spacing.sm),
-                    ],
-                  ],
-                ),
-              ),
-              if (_error != null)
-                ListTile(
-                  leading: Icon(Icons.error_outline, color: scheme.error),
-                  title: Text(_error!),
-                  subtitle: _shownAt == null || _items.isEmpty
-                      ? null
-                      : Text(
-                          'Showing the list from ${relativeTime(_shownAt)}.',
-                        ),
-                ),
-              if (_items.isEmpty && _loadedOnce && !_loading)
-                Padding(
-                  padding: const EdgeInsets.all(Spacing.xl),
-                  child: Column(
+      // The shell insets its own pages; this one is pushed over it, and a
+      // phone in landscape reports 59 dp on each side (DESIGN §7).
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: ContentColumn(
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                if (_loading) const LinearProgressIndicator(),
+                SizedBox(
+                  height: 48,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Spacing.lg,
+                      vertical: Spacing.xs,
+                    ),
                     children: [
-                      Icon(
-                        Icons.call_merge,
-                        size: 40,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: Spacing.sm),
-                      Text(switch (_filter) {
-                        PrListFilter.toReview =>
-                          'No pull requests are waiting for your review.',
-                        PrListFilter.mine =>
-                          'You have no active pull requests.',
-                        PrListFilter.all => 'No active pull requests.',
-                      }, textAlign: TextAlign.center),
+                      for (final (f, label) in const [
+                        (PrListFilter.toReview, 'To review'),
+                        (PrListFilter.mine, 'Created by me'),
+                        (PrListFilter.all, 'All active'),
+                      ]) ...[
+                        ChoiceChip(
+                          label: Text(label),
+                          selected: _filter == f,
+                          onSelected: (_) => _select(f),
+                        ),
+                        const SizedBox(width: Spacing.sm),
+                      ],
                     ],
                   ),
                 ),
-              for (final pr in _items)
-                PullRequestTile(
-                  pr: pr,
-                  showProject: !inProject,
-                  onTap: () => _open(pr),
-                ),
-            ],
+                if (_error != null)
+                  ListTile(
+                    leading: Icon(Icons.error_outline, color: scheme.error),
+                    title: Text(_error!),
+                    subtitle: _shownAt == null || _items.isEmpty
+                        ? null
+                        : Text(
+                            'Showing the list from ${relativeTime(_shownAt)}.',
+                          ),
+                  ),
+                if (_items.isEmpty && _loadedOnce && !_loading)
+                  Padding(
+                    padding: const EdgeInsets.all(Spacing.xl),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.call_merge,
+                          size: 40,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: Spacing.sm),
+                        Text(switch (_filter) {
+                          PrListFilter.toReview =>
+                            'No pull requests are waiting for your review.',
+                          PrListFilter.mine =>
+                            'You have no active pull requests.',
+                          PrListFilter.all => 'No active pull requests.',
+                        }, textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                for (final pr in _items)
+                  PullRequestTile(
+                    pr: pr,
+                    showProject: !inProject,
+                    meId: _meId,
+                    onTap: () => _open(pr),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

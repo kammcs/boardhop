@@ -8,6 +8,7 @@ import 'package:boardhop/data/models/pull_request.dart';
 import 'package:boardhop/data/repositories/pr_diff_source.dart';
 import 'package:boardhop/data/repositories/pull_request_repository.dart';
 import 'package:boardhop/data/repositories/work_item_repository.dart';
+import 'package:boardhop/data/viewed_files_store.dart';
 import 'package:boardhop/features/pull_requests/pull_request_detail_page.dart';
 import 'package:boardhop/data/repositories/work_item_form_repository.dart';
 import 'package:boardhop/features/shared/account_scope.dart';
@@ -140,6 +141,16 @@ void main() {
     );
     when(() => repo.workItemIds('o', pr)).thenAnswer((_) async => const []);
     when(() => repo.checks('o', pr)).thenAnswer((_) async => const []);
+    when(() => repo.labels('o', pr)).thenAnswer((_) async => const []);
+    when(
+      () => repo.policies(
+        any(),
+        any(),
+        any(),
+        any(),
+        refresh: any(named: 'refresh'),
+      ),
+    ).thenAnswer((_) async => const PrPolicySet([]));
     when(() => repo.rawThreads('o', pr)).thenAnswer((_) async => threads);
   });
 
@@ -202,6 +213,9 @@ void main() {
           RepositoryProvider<AdoClient>.value(value: client),
           RepositoryProvider<WorkItemFormRepository>.value(value: forms),
           RepositoryProvider<AuthService>.value(value: authService),
+          RepositoryProvider<ViewedFilesStore>.value(
+            value: ViewedFilesStore(null),
+          ),
           ...mentionProviders(stubs),
         ],
         child: BlocProvider<AuthBloc>.value(

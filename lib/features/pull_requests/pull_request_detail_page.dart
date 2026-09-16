@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../auth/auth_bloc.dart';
 import '../../auth/auth_service.dart';
@@ -19,10 +21,15 @@ import '../../data/models/work_item.dart';
 import '../../data/repositories/people_repository.dart';
 import '../../data/repositories/pr_diff_source.dart';
 import '../../data/repositories/pull_request_repository.dart';
+import '../../data/repositories/repo_repository.dart';
 import '../../data/repositories/search_repository.dart';
+import '../../data/repositories/sprint_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../data/viewed_files_store.dart';
 import '../../theme/theme.dart';
+import '../shared/mention/mention_controller.dart';
+import '../shared/mention/mention_field.dart';
 import '../shared/mention/mention_markdown.dart';
 import '../shared/mention/mention_source.dart';
 import '../wiki/wiki_page_source.dart';
@@ -37,8 +44,15 @@ import '../shared/attachments/inline_attachment_source.dart';
 import '../shared/attachments/inline_attachments.dart';
 import '../work_items/form/controls/attachments_section.dart'
     show AttachmentSource;
+import 'widgets/auto_complete_banner.dart';
+import 'widgets/branch_picker_sheet.dart';
+import 'widgets/completion_sheet.dart';
+import 'widgets/labels_editor.dart';
+import 'widgets/merge_box.dart';
 import 'widgets/pr_visuals.dart';
+import 'widgets/reviewers_section.dart';
 import 'widgets/thread_card.dart';
+import 'widgets/work_item_link_sheet.dart';
 
 /// One pull request: overview (description, checks, reviewers, linked work
 /// items), changed files of a chosen iteration, and the conversation with
@@ -113,10 +127,32 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   String? _me;
   List<WorkItem> _workItems = const [];
   List<PrCheck> _checks = const [];
+
+  /// The target branch's policies: what decides whether auto-complete is
+  /// offered, which merge strategies the sheet may show and who the
+  /// required reviewers are (R2/R3). Null when the read was refused.
+  PrPolicySet? _policies;
+
+  /// Names for the GUIDs a "Required reviewers" policy carries, keyed by
+  /// the lower-cased GUID (NEXT-STEPS item 8's open end).
+  Map<String, IdentityRef> _requiredReviewers = const {};
+
+  /// Read only while `mergeStatus` is `conflicts`.
+  List<PrConflict> _conflicts = const [];
+
   List<PrIteration> _iterations = const [];
   List<PrFileChange> _changes = const [];
   int? _iteration;
+
+  /// Which files have been read on this device (R8), and the store they
+  /// live in — shared with the diff page.
+  Map<String, ViewedMark> _viewed = const {};
+
+  /// The threads as the service answered them, kept so the Activity chip
+  /// can re-render the same read with the system threads in (R11).
+  List<Map<String, dynamic>> _rawThreads = const [];
   List<PrThread> _conversation = const [];
+  bool _activity = false;
   PrConversationFilter _threadFilter = PrConversationFilter.all;
   String? _error;
   bool _loading = false;
@@ -218,6 +254,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     final workItems = context.read<WorkItemRepository>();
     final source = PrDiffSource(context.read<AdoClient>());
     final auth = context.read<AuthService>();
+    final viewedFiles = context.read<ViewedFilesStore>();
     final accountId = AccountScope.of(context);
     try {
       final token = await auth.accessToken(accountId: accountId);
@@ -238,16 +275,35 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       _attachments = inlineAttachmentsOf(_uploads!);
       _me = await repo.meId(widget.org);
       final ref = repo.ref(widget.org, pr);
-      final results = await Future.wait<Object>([
+      final results = await Future.wait<Object?>([
         repo.workItemIds(widget.org, pr),
         source.iterations(ref),
         repo.rawThreads(widget.org, pr),
         repo.checks(widget.org, pr),
+        // Labels are filled on every list route and never on the get
+        // (spikes s65 §A, w40), so the detail merges the sub-resource;
+        // the policies decide what the merge box may offer. Neither is
+        // worth failing the page over.
+        _optional(() => repo.labels(widget.org, pr)),
+        _optional(
+          () => repo.policies(
+            widget.org,
+            pr.projectId,
+            pr.repositoryId,
+            pr.targetRefName,
+          ),
+        ),
+        pr.mergeStatus == 'conflicts'
+            ? _optional(() => repo.conflicts(widget.org, pr))
+            : Future<List<PrConflict>?>.value(const []),
       ]);
-      final ids = results[0] as List<int>;
-      final iterations = results[1] as List<PrIteration>;
-      final raw = results[2] as List<Map<String, dynamic>>;
-      final checks = results[3] as List<PrCheck>;
+      final ids = results[0]! as List<int>;
+      final iterations = results[1]! as List<PrIteration>;
+      final raw = results[2]! as List<Map<String, dynamic>>;
+      final checks = results[3]! as List<PrCheck>;
+      final labels = results[4] as List<PrLabel>?;
+      final policies = results[5] as PrPolicySet?;
+      final conflicts = results[6] as List<PrConflict>?;
       // Keep the chosen iteration across reloads when it still exists.
       final selected = iterations.any((i) => i.id == _iteration)
           ? _iteration
@@ -255,22 +311,40 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       final changes = selected == null
           ? const <PrFileChange>[]
           : await source.changes(ref, selected);
+      // R8: a mark is only as good as the version it was made against, so
+      // the ones whose file moved in this iteration go before they are read.
+      if (selected != null && changes.isNotEmpty) {
+        await viewedFiles.prune(
+          widget.org,
+          widget.id,
+          changes,
+          iterationId: selected,
+        );
+      }
+      final viewed = Map<String, ViewedMark>.of(
+        await viewedFiles.marks(widget.org, widget.id),
+      );
       final linked = ids.isEmpty
           ? const <WorkItem>[]
           : await workItems.batch(widget.org, pr.projectId, ids);
       if (!mounted) return;
       setState(() {
-        _pr = pr;
+        _pr = labels == null ? pr : pr.withLabels(labels);
         _offline = false;
         _iterations = iterations;
         _iteration = selected;
         _changes = changes;
+        _viewed = viewed;
         _checks = checks;
+        _policies = policies;
+        _conflicts = conflicts ?? const [];
         _workItems = linked;
+        _rawThreads = raw;
         _conversation = PullRequestRepository.conversation(raw);
       });
       _anchorThread();
       unawaited(_prepareMentions(pr));
+      unawaited(_resolveRequiredReviewers(policies));
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -290,6 +364,52 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// A read the page is better with and fine without: an `AdoException`
+  /// other than an auth one answers null instead of taking the page down.
+  /// The auth one still travels, so `_load` can raise
+  /// `AuthInteractionRequired` for it.
+  static Future<T?> _optional<T>(Future<T> Function() read) async {
+    try {
+      return await read();
+    } on AdoAuthException {
+      rethrow;
+    } on AdoException {
+      return null;
+    }
+  }
+
+  /// Names for the identity GUIDs the target's "Required reviewers" policy
+  /// carries. `identityById` is memoised and never throws, so this is a
+  /// background nicety; it closes the open end of NEXT-STEPS item 8, where
+  /// the Checks row could only say how many there were.
+  Future<void> _resolveRequiredReviewers(PrPolicySet? policies) async {
+    final ids = policies?.requiredReviewerIds ?? const <String>[];
+    if (ids.isEmpty) {
+      if (mounted && _requiredReviewers.isNotEmpty) {
+        setState(() => _requiredReviewers = const {});
+      }
+      return;
+    }
+    final people = context.read<PeopleRepository>();
+    final pr = _pr;
+    // Reviewers already on the pull request are seeded first, so a policy
+    // reviewer who has voted needs no call at all.
+    if (pr != null) {
+      unawaited(
+        people.rememberIdentities(widget.org, [
+          for (final r in pr.reviewers) r.identity,
+        ]),
+      );
+    }
+    final found = <String, IdentityRef>{};
+    for (final id in ids) {
+      final person = await people.identityById(widget.org, id);
+      if (person != null) found[id.toLowerCase()] = person;
+    }
+    if (!mounted) return;
+    setState(() => _requiredReviewers = found);
   }
 
   /// The picker and the comment names, off the page's critical path.
@@ -316,18 +436,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     // The source is built once: a new instance would make every open picker
     // reload its bands.
     if (_mentions != null) return;
-    final sources = _sources ??= MentionSources(
-      org: widget.org,
-      project: pr.projectName,
-      projectId: pr.projectId,
-      people: people,
-      forms: context.read<WorkItemFormRepository>(),
-      recents: context.read<MentionRecents>(),
-      workItems: context.read<WorkItemRepository>(),
-      pullRequests: context.read<PullRequestRepository>(),
-      search: context.read<SearchRepository>(),
-      extraWorkItems: () => _workItems,
-    );
+    final sources = _ensureSources(pr);
     final me = await sources.me(id: _me);
     if (!mounted || _mentions != null) return;
     setState(() {
@@ -346,6 +455,25 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
       );
     });
   }
+
+  /// The page's [MentionSources], built on demand.
+  ///
+  /// The composers get it from [_prepareMentions], which runs in the
+  /// background; the work item link picker reuses its `#` band and may be
+  /// opened before that has finished, so the construction (which makes no
+  /// call of its own) lives here.
+  MentionSources _ensureSources(PullRequest pr) => _sources ??= MentionSources(
+    org: widget.org,
+    project: pr.projectName,
+    projectId: pr.projectId,
+    people: context.read<PeopleRepository>(),
+    forms: context.read<WorkItemFormRepository>(),
+    recents: context.read<MentionRecents>(),
+    workItems: context.read<WorkItemRepository>(),
+    pullRequests: context.read<PullRequestRepository>(),
+    search: context.read<SearchRepository>(),
+    extraWorkItems: () => _workItems,
+  );
 
   /// A `#123` or `!456` tapped inside a comment (M10).
   void _openMention(MentionKind kind, String id) {
@@ -447,86 +575,351 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     await _act(() => repo.vote(widget.org, pr, vote));
   }
 
-  Future<void> _complete() async {
+  // ------------------------------------------------------------- actions
+
+  /// The merge box's one button (R2).
+  Future<void> _primary(PrPrimaryAction action) async {
     final pr = _pr;
     if (pr == null) return;
-    var deleteSource = true;
-    var squash = false;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text('Complete !${pr.id}?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Merge ${pr.sourceBranch} into ${pr.targetBranch}.'),
-              const SizedBox(height: Spacing.sm),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Delete source branch'),
-                value: deleteSource,
-                onChanged: (v) => setState(() => deleteSource = v),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Squash commits'),
-                value: squash,
-                onChanged: (v) => setState(() => squash = v),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Complete'),
-            ),
-          ],
-        ),
-      ),
+    final repo = context.read<PullRequestRepository>();
+    switch (action) {
+      case PrPrimaryAction.complete:
+        await _completion(autoComplete: false);
+      case PrPrimaryAction.setAutoComplete:
+        await _completion(autoComplete: true);
+      case PrPrimaryAction.publish:
+        await _setDraft(false);
+      case PrPrimaryAction.reactivate:
+        await _act(() => repo.setStatus(widget.org, pr, 'active'));
+    }
+  }
+
+  /// Complete and Set auto-complete share one sheet (R3); only the write at
+  /// the end differs. A completion is asynchronous on the service, so it
+  /// settles; auto-complete lands at once and does not.
+  Future<void> _completion({required bool autoComplete}) async {
+    final pr = _pr;
+    if (pr == null) return;
+    final options = await showCompletionSheet(
+      context,
+      pr: pr,
+      policies: _policies,
+      autoComplete: autoComplete,
+      checks: mergePolicyRows(_checks, _policies),
     );
-    if (ok != true || !mounted) return;
+    if (options == null || !mounted) return;
     final repo = context.read<PullRequestRepository>();
     await _act(
-      // P-A replaced the two-flag signature with the full completion
-      // options; P-B rebuilds this dialog as the completion sheet (R3).
-      () => repo.complete(
-        widget.org,
-        pr,
-        PrCompletionOptions(
-          mergeStrategy: squash
-              ? MergeStrategy.squash
-              : MergeStrategy.noFastForward,
-          deleteSourceBranch: deleteSource,
-        ),
-      ),
-      settle: true,
+      () => autoComplete
+          ? repo.setAutoComplete(widget.org, pr, options)
+          : repo.complete(widget.org, pr, options),
+      settle: !autoComplete,
     );
   }
+
+  Future<void> _cancelAutoComplete() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(() => repo.cancelAutoComplete(widget.org, pr));
+  }
+
+  /// Marking as draft resets every vote, which is what R4's confirm warns
+  /// about; publishing needs no confirmation.
+  Future<void> _setDraft(bool isDraft) async {
+    final pr = _pr;
+    if (pr == null) return;
+    if (isDraft) {
+      final ok = await _confirm(
+        title: 'Mark !${pr.id} as draft?',
+        body:
+            'Reviewers stay on the pull request, but every vote already '
+            'cast is reset.',
+        verb: 'Mark as draft',
+      );
+      if (ok != true || !mounted) return;
+    }
+    final repo = context.read<PullRequestRepository>();
+    await _act(() => repo.setDraft(widget.org, pr, isDraft));
+  }
+
+  /// A new target branch adds a `retarget` iteration and re-queues the
+  /// merge (research/22 §1), so the page reloads onto it.
+  Future<void> _retarget() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final repos = context.read<RepoRepository>();
+    final branch = await pickBranch(
+      context,
+      title: 'Change target branch',
+      current: pr.targetBranch,
+      branches: () => repos.branches(widget.org, pr.projectId, pr.repositoryId),
+    );
+    if (branch == null || !mounted) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(() => repo.retarget(widget.org, pr, 'refs/heads/$branch'));
+  }
+
+  Future<void> _restartMerge() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(() => repo.restartMerge(widget.org, pr), settle: false);
+  }
+
+  Future<void> _share() async {
+    final pr = _pr;
+    if (pr == null) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        uri: Uri.parse(pr.webUrl(widget.org)),
+        title: '!${pr.id} ${pr.title}',
+      ),
+    );
+  }
+
+  void _copyLink() {
+    final pr = _pr;
+    if (pr == null) return;
+    // Not awaited: the platform write cannot fail in a way the user could
+    // act on, and awaiting it would put the confirmation a frame behind the
+    // tap.
+    unawaited(Clipboard.setData(ClipboardData(text: pr.webUrl(widget.org))));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Link copied.')));
+  }
+
+  /// Title and description, the description through a [MentionField] so an
+  /// `@` in it is written as `@<guid>` the way a comment is (M15).
+  Future<void> _editDetails() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final edited = await showPrEditSheet(context, pr: pr, mentions: _mentions);
+    if (edited == null || !mounted) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(
+      () => repo.update(
+        widget.org,
+        pr,
+        title: edited.title == pr.title ? null : edited.title,
+        description: edited.description == (pr.description ?? '')
+            ? null
+            : edited.description,
+      ),
+    );
+  }
+
+  Future<void> _reviewerAction(PrReviewer r, PrReviewerAction action) async {
+    final pr = _pr;
+    if (pr == null) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(() async {
+      switch (action) {
+        case PrReviewerAction.makeRequired:
+          await repo.setRequired(widget.org, pr, r.id, true);
+        case PrReviewerAction.makeOptional:
+          await repo.setRequired(widget.org, pr, r.id, false);
+        case PrReviewerAction.resetVote:
+          await repo.resetVote(widget.org, pr, r.id);
+        case PrReviewerAction.remove:
+          await repo.removeReviewer(widget.org, pr, r.id);
+        case PrReviewerAction.flag:
+          await repo.flag(widget.org, pr, r.id);
+        case PrReviewerAction.unflag:
+          await repo.flag(widget.org, pr, r.id, isFlagged: false);
+        case PrReviewerAction.decline:
+          await repo.decline(widget.org, pr, r.id);
+        case PrReviewerAction.undecline:
+          await repo.decline(widget.org, pr, r.id, hasDeclined: false);
+      }
+    });
+  }
+
+  Future<void> _addReviewer() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final people = context.read<PeopleRepository>();
+    final sprints = context.read<SprintRepository>();
+    final picked = await pickReviewer(
+      context,
+      teams: () => sprints.teams(widget.org, pr.projectName),
+      search: (q) => people.searchPeople(widget.org, pr.projectId, q),
+      resolve: (person) => people.resolveIdentityId(widget.org, person),
+      existing: {for (final r in pr.reviewers) r.id.toLowerCase()},
+    );
+    if (picked == null || !mounted) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(
+      () => repo.addReviewer(
+        widget.org,
+        pr,
+        picked.id,
+        isRequired: picked.isRequired,
+      ),
+    );
+  }
+
+  /// The editor answers with the list the user settled on; the page sends
+  /// one write per change, because the service has no "set labels" route.
+  Future<void> _editLabels() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final forms = context.read<WorkItemFormRepository>();
+    final current = [for (final l in pr.labels) l.name];
+    final next = await showLabelsEditor(
+      context,
+      current: current,
+      suggestions: () => forms.tags(widget.org, pr.projectName),
+    );
+    if (next == null || !mounted) return;
+    bool has(List<String> list, String name) =>
+        list.any((v) => v.toLowerCase() == name.toLowerCase());
+    final added = [
+      for (final n in next)
+        if (!has(current, n)) n,
+    ];
+    final removed = [
+      for (final c in current)
+        if (!has(next, c)) c,
+    ];
+    if (added.isEmpty && removed.isEmpty) return;
+    final repo = context.read<PullRequestRepository>();
+    await _act(() async {
+      for (final name in added) {
+        await repo.addLabel(widget.org, pr, name);
+      }
+      for (final name in removed) {
+        await repo.removeLabel(widget.org, pr, name);
+      }
+    });
+  }
+
+  /// Linking is a **work item** write (json-patch on its relations); the
+  /// pull request side has no route for it (research/22 §1).
+  Future<void> _linkWorkItem() async {
+    final pr = _pr;
+    if (pr == null) return;
+    final sources = _ensureSources(pr);
+    final id = await pickWorkItemToLink(
+      context,
+      search: sources.workItemMatches,
+      linked: {for (final w in _workItems) w.id},
+    );
+    if (id == null || !mounted) return;
+    final items = context.read<WorkItemRepository>();
+    await _act(
+      () => items.linkPullRequest(
+        widget.org,
+        id,
+        pr.projectId,
+        pr.repositoryId,
+        pr.id,
+        project: pr.projectName,
+      ),
+    );
+  }
+
+  Future<void> _unlinkWorkItem(WorkItem item) async {
+    final pr = _pr;
+    if (pr == null) return;
+    final ok = await _confirm(
+      title: 'Unlink #${item.id}?',
+      body: 'The work item itself is not changed.',
+      verb: 'Unlink',
+    );
+    if (ok != true || !mounted) return;
+    final items = context.read<WorkItemRepository>();
+    await _act(
+      () => items.unlinkPullRequest(
+        widget.org,
+        item.id,
+        pr.projectId,
+        pr.repositoryId,
+        pr.id,
+        project: pr.projectName,
+      ),
+    );
+  }
+
+  /// R8's check on the Files tab. Local only: Azure DevOps has no
+  /// server-side viewed state (spike s64).
+  Future<void> _toggleViewed(PrFileChange change) async {
+    final iteration = _iteration;
+    if (iteration == null) return;
+    final store = context.read<ViewedFilesStore>();
+    if (_viewed.containsKey(change.path)) {
+      await store.clear(widget.org, widget.id, path: change.path);
+    } else {
+      await store.markViewed(
+        widget.org,
+        widget.id,
+        change.path,
+        iterationId: iteration,
+        objectId: change.objectId,
+      );
+    }
+    final marks = Map<String, ViewedMark>.of(
+      await store.marks(widget.org, widget.id),
+    );
+    if (mounted) setState(() => _viewed = marks);
+  }
+
+  Future<void> _more(PrMoreAction action) async {
+    switch (action) {
+      case PrMoreAction.edit:
+        await _editDetails();
+      case PrMoreAction.markDraft:
+        await _setDraft(true);
+      case PrMoreAction.publish:
+        await _setDraft(false);
+      case PrMoreAction.retarget:
+        await _retarget();
+      case PrMoreAction.restartMerge:
+        await _restartMerge();
+      case PrMoreAction.abandon:
+        await _abandon();
+      case PrMoreAction.reactivate:
+        await _primary(PrPrimaryAction.reactivate);
+      case PrMoreAction.share:
+        await _share();
+      case PrMoreAction.copyLink:
+        _copyLink();
+    }
+  }
+
+  Future<bool?> _confirm({
+    required String title,
+    required String body,
+    required String verb,
+  }) => showDialog<bool>(
+    context: context,
+    // Both actions are text buttons, which is what an adaptive dialog wants:
+    // a filled pill inside a Cupertino alert reads as a foreign control
+    // (checked on the iPhone 17 simulator), and this is the shape the work
+    // item form's confirms already use.
+    builder: (context) => AlertDialog.adaptive(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(verb),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _abandon() async {
     final pr = _pr;
     if (pr == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Abandon !${pr.id}?'),
-        content: const Text('The pull request can be reactivated later.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Abandon'),
-          ),
-        ],
-      ),
+    final ok = await _confirm(
+      title: 'Abandon !${pr.id}?',
+      body: 'The pull request can be reactivated later.',
+      verb: 'Abandon',
     );
     if (ok != true || !mounted) return;
     final repo = context.read<PullRequestRepository>();
@@ -598,7 +991,10 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     try {
       final raw = await repo.rawThreads(widget.org, pr);
       if (!mounted) return;
-      setState(() => _conversation = PullRequestRepository.conversation(raw));
+      setState(() {
+        _rawThreads = raw;
+        _conversation = PullRequestRepository.conversation(raw);
+      });
       // The names map is built from the threads, so a comment that names
       // somebody none of the earlier ones did has to re-run it, or its
       // `@<guid>` draws as "@someone" (M-D finding 1).
@@ -681,15 +1077,15 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
                   ),
               ],
             ),
-          if (pr != null && pr.isActive)
-            PopupMenuButton<String>(
+          if (pr != null)
+            PopupMenuButton<PrMoreAction>(
               tooltip: 'More',
               offset: kTrailingMenuOffset,
               enabled: !_acting,
-              onSelected: (v) => v == 'complete' ? _complete() : _abandon(),
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'complete', child: Text('Complete…')),
-                PopupMenuItem(value: 'abandon', child: Text('Abandon…')),
+              onSelected: _more,
+              itemBuilder: (context) => [
+                for (final a in prMoreActions(pr))
+                  PopupMenuItem(value: a, child: Text(a.label)),
               ],
             ),
         ],
@@ -713,80 +1109,141 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
               attachments: _uploads,
               offline: _offline,
             ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_loading || _acting || _changesLoading)
-            const LinearProgressIndicator(),
-          if (_error != null)
-            ListTile(
-              leading: Icon(Icons.error_outline, color: scheme.error),
-              title: Text(_error!),
+      // The project shell insets its own pages; this one is pushed over it,
+      // and a phone in landscape reports 59 dp on each side (DESIGN §7).
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_loading || _acting || _changesLoading)
+              const LinearProgressIndicator(),
+            if (_error != null)
+              ListTile(
+                leading: Icon(Icons.error_outline, color: scheme.error),
+                title: Text(_error!),
+              ),
+            Expanded(
+              child: pr == null
+                  ? (_loading
+                        ? const Center(
+                            child: CircularProgressIndicator.adaptive(),
+                          )
+                        : const SizedBox.shrink())
+                  : TabBarView(
+                      controller: _tabs,
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Overview(
+                            pr: pr,
+                            checks: _checks,
+                            policies: _policies,
+                            conflicts: _conflicts,
+                            requiredReviewers: _requiredReviewers,
+                            meId: _me,
+                            busy: _acting,
+                            workItems: _workItems,
+                            onWorkItemTap: _openWorkItem,
+                            onLinkWorkItem: _linkWorkItem,
+                            onUnlinkWorkItem: _unlinkWorkItem,
+                            onPrimary: _primary,
+                            onCancelAutoComplete: _cancelAutoComplete,
+                            onEditLabels: _editLabels,
+                            onAddReviewer: _addReviewer,
+                            onReviewerAction: _reviewerAction,
+                            mentionNames: _mentionNames,
+                            attachments: _attachments,
+                            onOpenMention: _openMention,
+                          ),
+                        ),
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Files(
+                            changes: _changes,
+                            iterations: _iterations,
+                            iteration: _iteration,
+                            viewed: _viewed.keys.toSet(),
+                            onToggleViewed: _toggleViewed,
+                            onSelectIteration: _selectIteration,
+                            onTap: _openFile,
+                          ),
+                        ),
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: _Conversation(
+                            threads: _activity
+                                ? PullRequestRepository.conversation(
+                                    _rawThreads,
+                                    includeSystem: true,
+                                  )
+                                : _conversation,
+                            activity: _activity,
+                            onActivity: (v) => setState(() => _activity = v),
+                            keyFor: (id) =>
+                                _threadKeys.putIfAbsent(id, GlobalKey.new),
+                            scroller: _threadScroll,
+                            highlighted: _highlighted,
+                            filter: _threadFilter,
+                            onFilter: (f) => setState(() => _threadFilter = f),
+                            canAct: pr.isActive,
+                            busy: _acting,
+                            mentions: _mentions,
+                            mentionNames: _mentionNames,
+                            attachments: _attachments,
+                            uploads: _uploads,
+                            wikiPages: _wikiPages,
+                            offline: _offline,
+                            onOpenMention: _openMention,
+                            onReply: _reply,
+                            onSetStatus: _setThreadStatus,
+                            onOpenThread: _openThread,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
-          Expanded(
-            child: pr == null
-                ? (_loading
-                      ? const Center(
-                          child: CircularProgressIndicator.adaptive(),
-                        )
-                      : const SizedBox.shrink())
-                : TabBarView(
-                    controller: _tabs,
-                    children: [
-                      RefreshIndicator(
-                        onRefresh: _load,
-                        child: _Overview(
-                          pr: pr,
-                          checks: _checks,
-                          workItems: _workItems,
-                          onWorkItemTap: _openWorkItem,
-                          mentionNames: _mentionNames,
-                          attachments: _attachments,
-                          onOpenMention: _openMention,
-                        ),
-                      ),
-                      RefreshIndicator(
-                        onRefresh: _load,
-                        child: _Files(
-                          changes: _changes,
-                          iterations: _iterations,
-                          iteration: _iteration,
-                          onSelectIteration: _selectIteration,
-                          onTap: _openFile,
-                        ),
-                      ),
-                      RefreshIndicator(
-                        onRefresh: _load,
-                        child: _Conversation(
-                          threads: _conversation,
-                          keyFor: (id) =>
-                              _threadKeys.putIfAbsent(id, GlobalKey.new),
-                          scroller: _threadScroll,
-                          highlighted: _highlighted,
-                          filter: _threadFilter,
-                          onFilter: (f) => setState(() => _threadFilter = f),
-                          canAct: pr.isActive,
-                          busy: _acting,
-                          mentions: _mentions,
-                          mentionNames: _mentionNames,
-                          attachments: _attachments,
-                          uploads: _uploads,
-                          wikiPages: _wikiPages,
-                          offline: _offline,
-                          onOpenMention: _openMention,
-                          onReply: _reply,
-                          onSetStatus: _setThreadStatus,
-                          onOpenThread: _openThread,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+
+/// The detail page's overflow menu (R2). Complete and Set auto-complete are
+/// deliberately not here: they belong to the merge box, which knows which
+/// of the two the pull request's state allows.
+enum PrMoreAction {
+  edit('Edit…'),
+  markDraft('Mark as draft…'),
+  publish('Publish'),
+  retarget('Change target branch…'),
+  restartMerge('Restart merge'),
+  abandon('Abandon…'),
+  reactivate('Reactivate'),
+  share('Share…'),
+  copyLink('Copy link');
+
+  const PrMoreAction(this.label);
+
+  final String label;
+}
+
+/// Which overflow items this pull request's state allows, as a list so the
+/// rules are testable without a pump.
+List<PrMoreAction> prMoreActions(PullRequest pr) => [
+  if (pr.isActive) ...[
+    PrMoreAction.edit,
+    if (pr.isDraft) PrMoreAction.publish else PrMoreAction.markDraft,
+    PrMoreAction.retarget,
+    PrMoreAction.restartMerge,
+    PrMoreAction.abandon,
+  ],
+  if (pr.status == 'abandoned') PrMoreAction.reactivate,
+  PrMoreAction.share,
+  PrMoreAction.copyLink,
+];
 
 class _Overview extends StatelessWidget {
   const _Overview({
@@ -794,6 +1251,18 @@ class _Overview extends StatelessWidget {
     required this.checks,
     required this.workItems,
     required this.onWorkItemTap,
+    required this.onLinkWorkItem,
+    required this.onUnlinkWorkItem,
+    required this.onPrimary,
+    required this.onCancelAutoComplete,
+    required this.onEditLabels,
+    required this.onAddReviewer,
+    required this.onReviewerAction,
+    this.policies,
+    this.conflicts = const [],
+    this.requiredReviewers = const {},
+    this.meId,
+    this.busy = false,
     this.mentionNames = const {},
     this.attachments,
     this.onOpenMention,
@@ -809,17 +1278,26 @@ class _Overview extends StatelessWidget {
   final InlineAttachments? attachments;
   final void Function(MentionKind kind, String id)? onOpenMention;
   final List<PrCheck> checks;
+  final PrPolicySet? policies;
+  final List<PrConflict> conflicts;
+  final Map<String, IdentityRef> requiredReviewers;
+  final String? meId;
+  final bool busy;
   final List<WorkItem> workItems;
   final ValueChanged<WorkItem> onWorkItemTap;
+  final VoidCallback onLinkWorkItem;
+  final ValueChanged<WorkItem> onUnlinkWorkItem;
+  final ValueChanged<PrPrimaryAction> onPrimary;
+  final VoidCallback onCancelAutoComplete;
+  final VoidCallback onEditLabels;
+  final VoidCallback onAddReviewer;
+  final void Function(PrReviewer reviewer, PrReviewerAction action)
+  onReviewerAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final merge = mergeStatusLabel(context, pr.mergeStatus);
-    final blocking = checks
-        .where((c) => c.isBlocking && c.state == PrCheckState.failed)
-        .length;
     return ContentColumn(
       child: ListView(
         // Short pages must still answer a pull-to-refresh.
@@ -883,8 +1361,16 @@ class _Overview extends StatelessWidget {
               ],
             ),
           ),
-          // From tablet width the description sits beside the checks,
-          // reviewers and linked work items.
+          // Full width rather than in a column: it is about the whole pull
+          // request, and its Cancel has to be found at a glance (R2).
+          AutoCompleteBanner(
+            pr: pr,
+            checks: checks,
+            busy: busy,
+            onCancel: onCancelAutoComplete,
+          ),
+          // From tablet width the description sits beside the merge box,
+          // labels, reviewers and linked work items.
           SideBySide(
             startFlex: 3,
             endFlex: 2,
@@ -908,76 +1394,52 @@ class _Overview extends StatelessWidget {
               ),
             ],
             end: [
-              if (merge != null || checks.isNotEmpty) ...[
-                _SectionTitle(
-                  'Checks${blocking > 0 ? ' · $blocking blocking' : ''}',
+              MergeBox(
+                pr: pr,
+                checks: checks,
+                policies: policies,
+                conflicts: conflicts,
+                requiredReviewers: requiredReviewers,
+                busy: busy,
+                onPrimary: onPrimary,
+              ),
+              LabelsSection(
+                labels: pr.labels,
+                canEdit: pr.isActive,
+                busy: busy,
+                onEdit: onEditLabels,
+              ),
+              ReviewersSection(
+                pr: pr,
+                meId: meId,
+                busy: busy,
+                onAdd: onAddReviewer,
+                onAction: onReviewerAction,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Spacing.lg,
+                  Spacing.lg,
+                  Spacing.sm,
+                  Spacing.sm,
                 ),
-                if (merge != null)
-                  ListTile(
-                    dense: true,
-                    leading: Icon(
-                      pr.mergeStatus == 'succeeded'
-                          ? Icons.check_circle
-                          : Icons.warning_amber,
-                      color: merge.$2,
-                    ),
-                    title: Text(merge.$1),
-                  ),
-                for (final c in checks)
-                  ListTile(
-                    dense: true,
-                    leading: Icon(
-                      checkIcon(c.state, isBlocking: c.isBlocking),
-                      color: checkColor(
-                        context,
-                        c.state,
-                        isBlocking: c.isBlocking,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Linked work items (${workItems.length})',
+                        style: theme.textTheme.titleMedium,
                       ),
                     ),
-                    title: Text(c.name),
-                    subtitle: c.detail == null || c.detail!.isEmpty
-                        ? null
-                        : Text(c.detail!),
-                    // "optional" is said out loud on a failing policy that
-                    // does not block: the absence of "required" was the
-                    // only signal, and it was easy to miss next to a red
-                    // row (finding k).
-                    trailing: Text(
-                      c.isBlocking
-                          ? 'required'
-                          : (c.state == PrCheckState.failed ? 'optional' : ''),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    if (pr.isActive)
+                      IconButton(
+                        tooltip: 'Link a work item',
+                        icon: const Icon(Icons.add_link),
+                        onPressed: busy ? null : onLinkWorkItem,
                       ),
-                    ),
-                  ),
-              ],
-              _SectionTitle('Reviewers (${pr.reviewers.length})'),
-              if (pr.reviewers.isEmpty)
-                Padding(
-                  padding: Spacing.pageHorizontal,
-                  child: Text(
-                    'No reviewers yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
+                  ],
                 ),
-              for (final r in pr.reviewers)
-                ListTile(
-                  dense: true,
-                  leading: IdentityAvatar(identity: r.identity, radius: 14),
-                  title: Text(r.displayName),
-                  subtitle: Text(
-                    '${r.vote.label}${r.isRequired ? ' · required' : ''}'
-                    '${r.isContainer ? ' · group' : ''}',
-                  ),
-                  trailing: Icon(
-                    voteIcon(r.vote),
-                    color: voteColor(context, r.vote),
-                  ),
-                ),
-              _SectionTitle('Linked work items (${workItems.length})'),
+              ),
               if (workItems.isEmpty)
                 Padding(
                   padding: Spacing.pageHorizontal,
@@ -998,11 +1460,146 @@ class _Overview extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text('${w.type} ${w.id} · ${w.state}'),
+                  trailing: pr.isActive
+                      ? IconButton(
+                          tooltip: 'Unlink #${w.id}',
+                          icon: const Icon(Icons.close),
+                          onPressed: busy ? null : () => onUnlinkWorkItem(w),
+                        )
+                      : null,
                   onTap: () => onWorkItemTap(w),
                 ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Title and description in one small form (R2's Edit).
+typedef PrEdit = ({String title, String description});
+
+Future<PrEdit?> showPrEditSheet(
+  BuildContext context, {
+  required PullRequest pr,
+  MentionSource? mentions,
+}) {
+  if (!context.breakpoint.isCompact) {
+    return showDialog<PrEdit>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: _PrEditSheet(pr: pr, mentions: mentions, dialog: true),
+        ),
+      ),
+    );
+  }
+  return showModalBottomSheet<PrEdit>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (context) => _PrEditSheet(pr: pr, mentions: mentions),
+  );
+}
+
+class _PrEditSheet extends StatefulWidget {
+  const _PrEditSheet({required this.pr, this.mentions, this.dialog = false});
+
+  final PullRequest pr;
+  final MentionSource? mentions;
+  final bool dialog;
+
+  @override
+  State<_PrEditSheet> createState() => _PrEditSheetState();
+}
+
+class _PrEditSheetState extends State<_PrEditSheet> {
+  late final TextEditingController _title = TextEditingController(
+    text: widget.pr.title,
+  );
+
+  /// The description is stored in wire form (`@<guid>`), and that is what
+  /// goes back: text nobody touched round-trips unchanged, and anything
+  /// picked from the `@` list this time is written as a new `@<guid>`.
+  late final MentionController _description = MentionController(
+    text: widget.pr.description ?? '',
+  );
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          Spacing.lg,
+          widget.dialog ? Spacing.lg : Spacing.sm,
+          Spacing.lg,
+          Spacing.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Edit !${widget.pr.id}', style: theme.textTheme.titleMedium),
+            const SizedBox(height: Spacing.md),
+            TextField(
+              controller: _title,
+              autofocus: true,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Title',
+              ),
+            ),
+            const SizedBox(height: Spacing.md),
+            MentionField(
+              controller: _description,
+              source: widget.mentions,
+              minLines: 3,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Description',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: Spacing.lg),
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: Spacing.sm,
+              overflowSpacing: Spacing.sm,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: _title.text.trim().isEmpty
+                      ? null
+                      : () => Navigator.of(context).pop((
+                          title: _title.text.trim(),
+                          description: _description
+                              .toWire(MentionWire.markdown)
+                              .trim(),
+                        )),
+                  child: const Text('Save'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1139,6 +1736,8 @@ class _Files extends StatelessWidget {
     required this.iteration,
     required this.onSelectIteration,
     required this.onTap,
+    this.viewed = const {},
+    required this.onToggleViewed,
   });
 
   final List<PrFileChange> changes;
@@ -1146,6 +1745,11 @@ class _Files extends StatelessWidget {
   final int? iteration;
   final ValueChanged<int> onSelectIteration;
   final ValueChanged<PrFileChange> onTap;
+
+  /// Paths marked as read on this device (R8). Azure DevOps has no
+  /// server-side viewed state, so this is local and per account.
+  final Set<String> viewed;
+  final ValueChanged<PrFileChange> onToggleViewed;
 
   static IconData _icon(String changeType) => switch (changeType) {
     'add' => Icons.add_circle_outline,
@@ -1171,6 +1775,22 @@ class _Files extends StatelessWidget {
               selected: iteration,
               onSelect: onSelectIteration,
             ),
+          if (changes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Spacing.lg,
+                0,
+                Spacing.lg,
+                Spacing.sm,
+              ),
+              child: Text(
+                '${changes.where((c) => viewed.contains(c.path)).length}'
+                '/${changes.length} viewed',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           if (iterations.isNotEmpty) const Divider(height: 1),
           if (changes.isEmpty)
             Padding(
@@ -1190,16 +1810,30 @@ class _Files extends StatelessWidget {
                 c.path.substring(c.path.lastIndexOf('/') + 1),
                 overflow: TextOverflow.ellipsis,
               ),
-              subtitle: Text(
-                c.path,
-                style: BoardhopTheme.codeStyle(context).copyWith(fontSize: 11),
-                overflow: TextOverflow.ellipsis,
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    c.path,
+                    style: BoardhopTheme.codeStyle(context)
+                        .copyWith(fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    c.changeType,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              trailing: Text(
-                c.changeType,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+              // The check is the whole trailing slot: at xxxL a change type
+              // beside it left the title no room (DESIGN §4).
+              trailing: Checkbox(
+                value: viewed.contains(c.path),
+                semanticLabel: 'Viewed',
+                onChanged: (_) => onToggleViewed(c),
               ),
               onTap: () => onTap(c),
             ),
@@ -1212,6 +1846,8 @@ class _Files extends StatelessWidget {
 class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.threads,
+    required this.activity,
+    required this.onActivity,
     required this.keyFor,
     required this.scroller,
     required this.highlighted,
@@ -1232,6 +1868,12 @@ class _Conversation extends StatelessWidget {
   });
 
   final List<PrThread> threads;
+
+  /// The Activity chip (R11): the system threads — votes, pushes, status
+  /// and auto-complete changes — shown as quiet rows beside the comments.
+  /// The default view is comments only, as it always was.
+  final bool activity;
+  final ValueChanged<bool> onActivity;
 
   /// One stable key per thread id, so `?thread={id}` has something to
   /// scroll to (research/14 §4.2).
@@ -1282,10 +1924,26 @@ class _Conversation extends StatelessWidget {
         ),
       );
     }
-    final shown = PullRequestRepository.filterConversation(threads, filter);
+    // A system thread has no status a reader set, so the Active/Resolved
+    // filters are applied to the comments only and the events stay in
+    // place in the timeline.
+    final comments = [
+      for (final t in threads)
+        if (!t.isSystem) t,
+    ];
+    final shown =
+        [
+          ...PullRequestRepository.filterConversation(comments, filter),
+          for (final t in threads)
+            if (t.isSystem) t,
+        ]..sort((a, b) {
+          final ta = a.startedAt?.millisecondsSinceEpoch ?? 0;
+          final tb = b.startedAt?.millisecondsSinceEpoch ?? 0;
+          return ta == tb ? a.id.compareTo(b.id) : ta.compareTo(tb);
+        });
     final counts = {
       for (final f in PrConversationFilter.values)
-        f: PullRequestRepository.filterConversation(threads, f).length,
+        f: PullRequestRepository.filterConversation(comments, f).length,
     };
     return ContentColumn(
       child: Column(
@@ -1310,6 +1968,12 @@ class _Conversation extends StatelessWidget {
                       onSelected: (_) => onFilter(f),
                     ),
                   ),
+                ChoiceChip(
+                  avatar: const Icon(Icons.history, size: 16),
+                  label: const Text('Activity'),
+                  selected: activity,
+                  onSelected: onActivity,
+                ),
               ],
             ),
           ),
@@ -1344,40 +2008,103 @@ class _Conversation extends StatelessWidget {
                     ),
                     children: [
                       for (final t in shown)
-                        Padding(
-                          key: keyFor(t.id),
-                          padding: const EdgeInsets.only(bottom: Spacing.md),
-                          child: AnchorHighlight(
-                            active: t.id == highlighted,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (t.isFileThread)
-                                  _ThreadFileHeader(
+                        if (t.isSystem)
+                          _SystemRow(key: keyFor(t.id), thread: t)
+                        else
+                          Padding(
+                            key: keyFor(t.id),
+                            padding: const EdgeInsets.only(bottom: Spacing.md),
+                            child: AnchorHighlight(
+                              active: t.id == highlighted,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (t.isFileThread)
+                                    _ThreadFileHeader(
+                                      thread: t,
+                                      onTap: () => onOpenThread(t),
+                                    ),
+                                  ThreadCard(
                                     thread: t,
-                                    onTap: () => onOpenThread(t),
+                                    canAct: canAct,
+                                    busy: busy,
+                                    mentions: mentions,
+                                    mentionNames: mentionNames,
+                                    attachments: attachments,
+                                    uploads: uploads,
+                                    wikiPages: wikiPages,
+                                    offline: offline,
+                                    onOpenMention: onOpenMention,
+                                    onReply: (text) => onReply(t, text),
+                                    onSetStatus: (status) =>
+                                        onSetStatus(t, status),
                                   ),
-                                ThreadCard(
-                                  thread: t,
-                                  canAct: canAct,
-                                  busy: busy,
-                                  mentions: mentions,
-                                  mentionNames: mentionNames,
-                                  attachments: attachments,
-                                  uploads: uploads,
-                                  wikiPages: wikiPages,
-                                  offline: offline,
-                                  onOpenMention: onOpenMention,
-                                  onReply: (text) => onReply(t, text),
-                                  onSetStatus: (status) =>
-                                      onSetStatus(t, status),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
                     ],
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One system thread as a quiet row: a vote, a push, a status change, an
+/// auto-complete or a retarget (R11). The service pre-renders the sentence
+/// and [PrThread] has already substituted the `{n}` identity placeholders.
+class _SystemRow extends StatelessWidget {
+  const _SystemRow({super.key, required this.thread});
+
+  final PrThread thread;
+
+  static IconData iconFor(String? kind) => switch (kind) {
+    'VoteUpdate' => Icons.how_to_vote_outlined,
+    'ResetMultipleVotes' => Icons.restart_alt,
+    'ReviewersUpdate' => Icons.group_add_outlined,
+    'StatusUpdate' => Icons.flag_outlined,
+    'RefUpdate' => Icons.upload_outlined,
+    'AutoCompleteUpdate' => Icons.schedule_send,
+    'IsDraftUpdate' => Icons.edit_note,
+    'TargetChanged' => Icons.alt_route,
+    'PolicyStatusUpdate' => Icons.policy_outlined,
+    _ => Icons.info_outline,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final text =
+        thread.systemText ??
+        (thread.comments.isEmpty ? '' : thread.comments.first.content);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Spacing.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            iconFor(thread.systemKind),
+            size: 16,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Spacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: Spacing.sm),
+          Text(
+            relativeTime(thread.startedAt ?? thread.publishedDate),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
