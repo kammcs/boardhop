@@ -419,18 +419,22 @@ class _BoardsPageState extends State<BoardsPage> {
     final board = _board;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.project, overflow: TextOverflow.ellipsis),
-            Text(
-              board == null ? 'Board' : board.name,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
+        // A portrait phone shows no title (hidesProjectTitle); the board
+        // name is in the Choose board menu when there is more than one.
+        title: hidesProjectTitle(context)
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.project, overflow: TextOverflow.ellipsis),
+                  Text(
+                    board == null ? 'Board' : board.name,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
         leadingWidth: ProjectPickerButton.leadingWidth,
         leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [

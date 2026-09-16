@@ -28,6 +28,17 @@ extension BreakpointContext on BuildContext {
       Breakpoint.fromWidth(MediaQuery.sizeOf(this).width);
 }
 
+/// Whether a root-tab app bar should drop its project-name title.
+///
+/// A phone in portrait leaves the title about 60 dp once the project tile,
+/// the bell or another action and a three-segment pill are in the bar, so
+/// "DevOps Mobile App" read as "De…" (Kelly, 2026-09-16). The tile already
+/// names the project, so on a compact width in portrait the Home, Work and
+/// Board bars show no title at all; landscape phones and tablets keep it.
+bool hidesProjectTitle(BuildContext context) =>
+    context.breakpoint.isCompact &&
+    MediaQuery.orientationOf(context) == Orientation.portrait;
+
 /// How much bigger than the default the user's text is, capped where chart
 /// axes stop being readable.
 ///

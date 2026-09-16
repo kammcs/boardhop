@@ -247,19 +247,23 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
     final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.project, overflow: TextOverflow.ellipsis),
-            Text(
-              _listLabel,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
+        // A portrait phone shows no title: the tile names the project and
+        // the list label is the selected chip below (hidesProjectTitle).
+        title: hidesProjectTitle(context)
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.project, overflow: TextOverflow.ellipsis),
+                  Text(
+                    _listLabel,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
         // L4: the project tile with a chevron, in place of the back arrow.
         leadingWidth: ProjectPickerButton.leadingWidth,
         leading: ProjectPickerButton(org: widget.org, project: widget.project),

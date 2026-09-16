@@ -119,8 +119,9 @@ void main() {
     required String path,
     required Widget Function() page,
     required List<RepositoryProvider<Object>> repositories,
+    Size size = const Size(402, 1600),
   }) async {
-    tester.view.physicalSize = const Size(402, 1600);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -227,5 +228,53 @@ void main() {
     );
 
     expectChrome();
+  });
+
+  group('the project-name title (Kelly, 2026-09-16)', () {
+    Finder titleName() =>
+        find.descendant(of: find.byType(AppBar), matching: find.text(_project));
+
+    testWidgets('is dropped on a phone in portrait', (tester) async {
+      await pumpTab(
+        tester,
+        path: Routes.workItems('u1', _org, _project),
+        page: () => const WorkItemsPage(org: _org, project: _project),
+        repositories: [
+          RepositoryProvider<WorkItemRepository>.value(value: stubWorkItems()),
+        ],
+      );
+      expect(titleName(), findsNothing);
+      // The tile still names the project.
+      expect(find.byType(ProjectPickerButton), findsOneWidget);
+    });
+
+    testWidgets('stays on a phone in landscape', (tester) async {
+      await pumpTab(
+        tester,
+        path: Routes.workItems('u1', _org, _project),
+        page: () => const WorkItemsPage(org: _org, project: _project),
+        repositories: [
+          RepositoryProvider<WorkItemRepository>.value(value: stubWorkItems()),
+        ],
+        size: const Size(874, 402),
+      );
+      expect(titleName(), findsOneWidget);
+    });
+
+    testWidgets('stays on a tablet', (tester) async {
+      await pumpTab(
+        tester,
+        path: '${Routes.project('u1', _org, _project)}/home',
+        page: () => const ProjectHomePage(org: _org, project: _project),
+        repositories: [
+          RepositoryProvider<RepoRepository>.value(value: stubRepos()),
+          RepositoryProvider<PullRequestRepository>.value(value: stubPrs()),
+          RepositoryProvider<WorkItemRepository>.value(value: stubWorkItems()),
+          RepositoryProvider<PipelineRepository>.value(value: stubPipelines()),
+        ],
+        size: const Size(1024, 1366),
+      );
+      expect(titleName(), findsOneWidget);
+    });
   });
 }

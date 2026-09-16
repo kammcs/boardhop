@@ -227,7 +227,11 @@ class _ProjectHomePageState extends State<ProjectHomePage> with ReloadOnReturn {
     final base = _base;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.project, overflow: TextOverflow.ellipsis),
+        // The tile names the project; a portrait phone has no room for
+        // the name beside it (hidesProjectTitle).
+        title: hidesProjectTitle(context)
+            ? null
+            : Text(widget.project, overflow: TextOverflow.ellipsis),
         // L4: the project tile with a chevron, in place of the back arrow.
         leadingWidth: ProjectPickerButton.leadingWidth,
         leading: ProjectPickerButton(org: widget.org, project: widget.project),
