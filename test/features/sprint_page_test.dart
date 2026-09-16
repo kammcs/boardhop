@@ -25,6 +25,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:msal_auth/msal_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'root_tab_stubs.dart';
+
 class _Sprints extends Mock implements SprintRepository {}
 
 class _Analytics extends Mock implements AnalyticsRepository {}
@@ -309,6 +311,7 @@ void main() {
     await tester.pumpWidget(
       MultiRepositoryProvider(
         providers: [
+          ...rootChromeProviders(),
           RepositoryProvider<SprintRepository>.value(value: sprints),
           RepositoryProvider<AnalyticsRepository>.value(value: analytics),
           RepositoryProvider<WorkItemRepository>.value(value: workItems),
@@ -984,53 +987,54 @@ void main() {
   });
 
   group('the header when the rollup is in hours', () {
-    testWidgets('keeps the burndown sentence in items, not "No burndown data"', (
-      tester,
-    ) async {
-      when(
-        () => sprints.load(
-          org,
-          project,
-          any(),
-          team: any(named: 'team'),
-          refresh: any(named: 'refresh'),
-        ),
-      ).thenAnswer(
-        (_) async => snapshotWith(
-          rows: [
-            SprintRow(
-              parent: story(15503, 'The sprint view'),
-              tasks: [task(15550, title: 'Model the columns', remaining: 2)],
-              remaining: 2,
-            ),
+    testWidgets(
+      'keeps the burndown sentence in items, not "No burndown data"',
+      (tester) async {
+        when(
+          () => sprints.load(
+            org,
+            project,
+            any(),
+            team: any(named: 'team'),
+            refresh: any(named: 'refresh'),
+          ),
+        ).thenAnswer(
+          (_) async => snapshotWith(
+            rows: [
+              SprintRow(
+                parent: story(15503, 'The sprint view'),
+                tasks: [task(15550, title: 'Model the columns', remaining: 2)],
+                remaining: 2,
+              ),
+            ],
+          ),
+        );
+        when(
+          () => analytics.burndown(
+            org,
+            project,
+            any(),
+            start: any(named: 'start'),
+            end: any(named: 'end'),
+            refresh: any(named: 'refresh'),
+          ),
+        ).thenAnswer(
+          (_) async => [
+            for (var i = 0; i < 4; i++)
+              BurndownDay(date: DateTime.utc(2026, 9, 12 + i), remaining: 17),
           ],
-        ),
-      );
-      when(
-        () => analytics.burndown(
-          org,
-          project,
-          any(),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          refresh: any(named: 'refresh'),
-        ),
-      ).thenAnswer(
-        (_) async => [
-          for (var i = 0; i < 4; i++)
-            BurndownDay(date: DateTime.utc(2026, 9, 12 + i), remaining: 17),
-        ],
-      );
+        );
 
-      await pump(tester, query: '?tab=backlog');
+        await pump(tester, query: '?tab=backlog');
 
-      expect(find.text('2 h'), findsOneWidget);
-      expect(find.text('No burndown data'), findsNothing);
-      expect(
-        find.textContaining('items/day behind the ideal line'),
-        findsOneWidget,
-      );
-    });
+        expect(find.text('2 h'), findsOneWidget);
+        expect(find.text('No burndown data'), findsNothing);
+        expect(
+          find.textContaining('items/day behind the ideal line'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 
   group('the taskboard carries no header (S13)', () {

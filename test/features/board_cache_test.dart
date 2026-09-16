@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'root_tab_stubs.dart';
+
 const account = 'kelly@kammcs.com-home';
 const org = 'contoso';
 const project = 'Scratch';
@@ -171,6 +173,7 @@ void main() {
     Widget app() => MaterialApp(
       home: MultiRepositoryProvider(
         providers: [
+          ...rootChromeProviders(),
           RepositoryProvider<BoardRepository>.value(value: boards),
           RepositoryProvider<WorkItemRepository>.value(value: workItems),
         ],

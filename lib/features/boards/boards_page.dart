@@ -22,6 +22,7 @@ import '../work_items/widgets/work_view_switch.dart';
 import 'move_choreography.dart';
 import 'widgets/kanban_board.dart';
 import 'widgets/new_card_row.dart';
+import '../projects/widgets/project_picker_button.dart';
 
 /// The team's Kanban board. Columns become drop slots (a split column is two
 /// slots, Doing and Done); swimlanes are a filter chip row, with every lane
@@ -430,12 +431,8 @@ class _BoardsPageState extends State<BoardsPage> {
             ),
           ],
         ),
-        leading: IconButton(
-          tooltip: 'Projects',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [
           if (_boards.length > 1)
             PopupMenuButton<String>(

@@ -621,7 +621,11 @@ void main() {
     ) async {
       await pump(tester);
 
-      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is Icon && w.semanticLabel == 'Choose dashboard',
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Dashboards'), findsOneWidget);
@@ -636,7 +640,11 @@ void main() {
     ) async {
       await pump(tester);
 
-      await tester.tap(find.byIcon(Icons.arrow_drop_down));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is Icon && w.semanticLabel == 'Choose dashboard',
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Release board'));
       await tester.pumpAndSettle();

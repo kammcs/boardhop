@@ -36,6 +36,7 @@ import 'widgets/sprint_picker_sheet.dart';
 import 'widgets/story_chip_strip.dart';
 import 'widgets/task_card_sheet.dart';
 import 'widgets/taskboard_grid.dart';
+import '../projects/widgets/project_picker_button.dart';
 
 /// The Sprint view: the third segment of the Work pill (decision S1).
 ///
@@ -1225,15 +1226,8 @@ class _SprintPageState extends State<SprintPage>
         // 44 dp rather than the default 56: still Apple's minimum target,
         // and the 12 dp it gives back is what lets the second line say
         // "Ended 8 days ago" instead of "Ended 8 day…" on an iPhone.
-        leadingWidth: compact ? 44 : null,
-        leading: IconButton(
-          tooltip: 'Projects',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [
           PersonFilterMenu(
             people: _people,

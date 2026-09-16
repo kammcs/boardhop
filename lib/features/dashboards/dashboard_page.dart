@@ -23,6 +23,7 @@ import 'widgets/dashboard_card.dart';
 import 'widgets/dashboard_chrome.dart';
 import 'widgets/picker_sheet.dart';
 import 'widgets/registry.dart';
+import '../projects/widgets/project_picker_button.dart';
 
 /// The Dashboards view: the Home tab's second segment (research/19).
 ///
@@ -458,15 +459,8 @@ class _DashboardPageState extends State<DashboardPage> with ReloadOnReturn {
             ),
           ),
         ),
-        leadingWidth: compact ? 44 : null,
-        leading: IconButton(
-          tooltip: 'Projects',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         actions: [
           // D5: no Search here; it stays on Summary.
           if (!compact)

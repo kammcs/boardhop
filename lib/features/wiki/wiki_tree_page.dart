@@ -18,6 +18,7 @@ import 'widgets/wiki_page_view.dart';
 import 'widgets/wiki_picker_sheet.dart';
 import 'widgets/wiki_tree_view.dart';
 import 'wiki_prefs.dart';
+import '../projects/widgets/project_picker_button.dart';
 
 /// The Wiki view: the Home tab's third segment and the hub's landing page
 /// (research/20 K1, K2, K6).
@@ -449,15 +450,8 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
             ),
           ],
         ),
-        leadingWidth: compact ? 44 : null,
-        leading: IconButton(
-          tooltip: 'Projects',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () =>
-              context.go('${orgRoute(context, widget.org)}/projects'),
-        ),
+        leadingWidth: ProjectPickerButton.leadingWidth,
+        leading: ProjectPickerButton(org: widget.org, project: widget.project),
         // No compact action: the three-segment pill leaves about 84 dp on a
         // phone (research/20 §4.2).
         actions: [

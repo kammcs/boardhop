@@ -15,6 +15,8 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'root_tab_stubs.dart';
+
 class _Wikis extends Mock implements WikiRepository {}
 
 class _AuthService extends Mock implements AuthService {}
@@ -226,6 +228,7 @@ void main() {
     await tester.pumpWidget(
       MultiRepositoryProvider(
         providers: [
+          ...rootChromeProviders(),
           RepositoryProvider<WikiRepository>.value(value: wikis),
           RepositoryProvider<AuthService>.value(value: auth),
         ],
@@ -270,7 +273,12 @@ void main() {
       expect(find.text('Constructs'), findsOneWidget);
       expect(find.text('Links'), findsOneWidget);
       // One wiki: nothing to pick, so no chevron (K1).
-      expect(find.byIcon(Icons.arrow_drop_down), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Icon && w.semanticLabel == 'Choose wiki',
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('the tree starts collapsed with no last path', (tester) async {
@@ -532,7 +540,12 @@ void main() {
 
       await pump(tester);
 
-      expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Icon && w.semanticLabel == 'Choose wiki',
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('DevOps-Mobile-App.wiki'));
       await tester.pumpAndSettle();
