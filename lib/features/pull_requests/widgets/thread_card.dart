@@ -39,6 +39,10 @@ class ThreadCard extends StatefulWidget {
     this.offline = false,
     this.pick = pickAttachment,
     this.onOpenMention,
+    this.meId,
+    this.onEditComment,
+    this.onDeleteComment,
+    this.onLikeComment,
   });
 
   final PrThread thread;
@@ -89,6 +93,20 @@ class ThreadCard extends StatefulWidget {
   /// Tapping a `#123` or `!456` in a comment.
   final void Function(MentionKind kind, String id)? onOpenMention;
 
+  /// Identity GUID of the signed-in user. Only their own comments carry the
+  /// edit and delete menu, which is also all the service would allow (R9).
+  final String? meId;
+
+  /// Rewrites one comment; answers whether the write went through.
+  final Future<bool> Function(PrComment comment, String text)? onEditComment;
+
+  /// Deletes one comment, after this card has confirmed it.
+  final Future<bool> Function(PrComment comment)? onDeleteComment;
+
+  /// Likes ([like] true) or unlikes one comment. Null leaves no like
+  /// button at all, which is what the conversation tab passed before R9.
+  final Future<bool> Function(PrComment comment, bool like)? onLikeComment;
+
   @override
   State<ThreadCard> createState() => _ThreadCardState();
 }
@@ -122,6 +140,14 @@ class _ThreadCardState extends State<ThreadCard>
   /// The trimmed reply text, so the buttons can follow an empty box.
   String _draft = '';
 
+  /// The comment being edited in place, and its field (R9).
+  int? _editingId;
+  MentionController? _editController;
+  FocusNode? _editFocus;
+
+  /// Optimistic like state by comment id, until the write answers.
+  final Map<int, bool> _liked = {};
+
   @override
   void initState() {
     super.initState();
@@ -129,10 +155,26 @@ class _ThreadCardState extends State<ThreadCard>
   }
 
   @override
+  void didUpdateWidget(ThreadCard old) {
+    super.didUpdateWidget(old);
+    // A re-read thread carries the truth: drop the optimistic overrides and
+    // close an editor whose comment is gone.
+    if (old.thread != widget.thread) {
+      _liked.clear();
+      if (_editingId != null &&
+          !widget.thread.comments.any((c) => c.id == _editingId)) {
+        _editingId = null;
+      }
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _focus.dispose();
+    _editController?.dispose();
+    _editFocus?.dispose();
     super.dispose();
   }
 
@@ -212,6 +254,266 @@ class _ThreadCardState extends State<ThreadCard>
   String get _pairedLabel =>
       widget.thread.isResolved ? 'Reply & reactivate' : 'Reply & resolve';
 
+  /// Whether this comment is mine and still there, so the per-comment menu
+  /// can offer Edit and Delete (R9).
+  bool _isMine(PrComment c) =>
+      widget.meId != null &&
+      c.identity?.id != null &&
+      c.identity!.id!.toLowerCase() == widget.meId!.toLowerCase() &&
+      !c.isDeleted;
+
+  bool _likedByMe(PrComment c) => _liked[c.id] ?? c.likedBy(widget.meId);
+
+  /// The count with the optimistic toggle folded in, so the number moves
+  /// with the button rather than after the re-read.
+  int _likeCount(PrComment c) {
+    final was = c.likedBy(widget.meId);
+    final now = _likedByMe(c);
+    return c.usersLiked.length + (now == was ? 0 : (now ? 1 : -1));
+  }
+
+  Future<void> _toggleLike(PrComment c) async {
+    final like = !_likedByMe(c);
+    setState(() => _liked[c.id] = like);
+    final ok = await widget.onLikeComment!(c, like);
+    if (!mounted || ok) return;
+    setState(() => _liked.remove(c.id));
+  }
+
+  void _startEdit(PrComment c) {
+    _editController?.dispose();
+    _editFocus?.dispose();
+    // Prefilled with the stored text: `@<guid>` stays a GUID unless the
+    // editor picks somebody new, which is what the service holds anyway.
+    _editController = MentionController(text: c.content);
+    _editFocus = FocusNode();
+    setState(() => _editingId = c.id);
+  }
+
+  void _cancelEdit() => setState(() => _editingId = null);
+
+  Future<void> _saveEdit(PrComment c) async {
+    final controller = _editController;
+    if (controller == null || widget.onEditComment == null) return;
+    final text = controller.toWire(MentionWire.markdown).trim();
+    if (text.isEmpty || text == c.content) {
+      _cancelEdit();
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final ok = await widget.onEditComment!(c, text);
+    if (!mounted || !ok) return;
+    setState(() => _editingId = null);
+  }
+
+  Future<void> _confirmDelete(PrComment c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this comment?'),
+        content: const Text(
+          'It stays in the thread as "This comment was deleted".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await widget.onDeleteComment!(c);
+  }
+
+  /// One comment: who and when, the body (or the web's stub when it was
+  /// deleted, or the editor when it is being rewritten), an Apply
+  /// suggestion button and the like button (R9).
+  List<Widget> _comment(BuildContext context, PrComment c) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final t = widget.thread;
+    final editing = _editingId == c.id;
+    final canManage =
+        _isMine(c) &&
+        (widget.onEditComment != null || widget.onDeleteComment != null);
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: Spacing.xs),
+        child: Row(
+          children: [
+            IdentityAvatar(identity: c.identity, radius: 10),
+            const SizedBox(width: Spacing.xs),
+            Expanded(
+              child: Text(
+                c.author,
+                style: theme.textTheme.labelLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: Spacing.xs),
+            Flexible(
+              child: Text(
+                '${relativeTime(c.publishedDate)}'
+                // Deleting moves `lastContentUpdatedDate` too, and "edited"
+                // over a stub says nothing (iPad, 2026-09-16).
+                '${c.isEdited && !c.isDeleted ? ' · edited' : ''}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (c.isDeleted)
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 28,
+            right: Spacing.sm,
+            top: 2,
+            bottom: Spacing.xs,
+          ),
+          child: Text(
+            'This comment was deleted',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        )
+      else if (editing)
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 28,
+            right: Spacing.sm,
+            top: 2,
+            bottom: Spacing.xs,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MentionField(
+                controller: _editController!,
+                source: widget.mentions,
+                focusNode: _editFocus,
+                autofocus: true,
+                minLines: 1,
+                maxLines: 8,
+                enabled: !widget.busy,
+                decoration: const InputDecoration(
+                  hintText: 'Edit the comment (Markdown)',
+                  isDense: true,
+                ),
+              ),
+              MentionHint(controller: _editController!),
+              const SizedBox(height: Spacing.xs),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: Spacing.xs,
+                children: [
+                  TextButton(
+                    onPressed: widget.busy ? null : _cancelEdit,
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: widget.busy ? null : () => _saveEdit(c),
+                    child: Text(widget.busy ? 'Saving…' : 'Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.only(
+            left: 28,
+            right: Spacing.sm,
+            top: 2,
+            bottom: Spacing.xs,
+          ),
+          child: MentionMarkdown(
+            data: c.content,
+            names: widget.mentionNames,
+            onOpen: widget.onOpenMention,
+            attachments: widget.attachments,
+          ),
+        ),
+      if (!c.isDeleted &&
+          !editing &&
+          c.suggestion != null &&
+          widget.canAct &&
+          widget.onApplySuggestion != null &&
+          !t.isResolved)
+        Padding(
+          padding: const EdgeInsets.only(left: 28, bottom: Spacing.xs),
+          child: FilledButton.tonalIcon(
+            onPressed: widget.busy
+                ? null
+                : () => widget.onApplySuggestion!(c, c.suggestion!),
+            icon: const Icon(Icons.auto_fix_high, size: 18),
+            label: const Text('Apply suggestion'),
+          ),
+        ),
+      // The like button and the per-comment menu share one row under the
+      // body, so the header never gives up the author's name for them.
+      if (!c.isDeleted && (widget.onLikeComment != null || canManage))
+        Padding(
+          padding: const EdgeInsets.only(left: 24, right: Spacing.xs),
+          child: Row(
+            children: [
+              if (widget.onLikeComment != null)
+                Tooltip(
+                  message: c.usersLiked.isEmpty
+                      ? 'Like'
+                      : c.usersLiked.map((u) => u.displayName).join(', '),
+                  child: TextButton.icon(
+                    onPressed: widget.busy ? null : () => _toggleLike(c),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 40),
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: _likedByMe(c)
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant,
+                    ),
+                    icon: Icon(
+                      _likedByMe(c) ? Icons.thumb_up : Icons.thumb_up_outlined,
+                      size: 16,
+                    ),
+                    label: Text('${_likeCount(c)}'),
+                  ),
+                ),
+              const Spacer(),
+              if (canManage)
+                PopupMenuButton<String>(
+                  tooltip: 'This comment',
+                  enabled: !widget.busy && !editing,
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  iconSize: 18,
+                  onSelected: (value) =>
+                      value == 'edit' ? _startEdit(c) : _confirmDelete(c),
+                  itemBuilder: (context) => [
+                    if (widget.onEditComment != null)
+                      const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    if (widget.onDeleteComment != null)
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text('Delete'),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -285,61 +587,7 @@ class _ThreadCardState extends State<ThreadCard>
                   const SizedBox(height: 40),
               ],
             ),
-            for (final c in t.comments) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: Spacing.xs),
-                child: Row(
-                  children: [
-                    IdentityAvatar(identity: c.identity, radius: 10),
-                    const SizedBox(width: Spacing.xs),
-                    Expanded(
-                      child: Text(
-                        c.author,
-                        style: theme.textTheme.labelLarge,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: Spacing.sm),
-                      child: Text(
-                        relativeTime(c.publishedDate),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: 28,
-                  right: Spacing.sm,
-                  top: 2,
-                  bottom: Spacing.xs,
-                ),
-                child: MentionMarkdown(
-                  data: c.content,
-                  names: widget.mentionNames,
-                  onOpen: widget.onOpenMention,
-                  attachments: widget.attachments,
-                ),
-              ),
-              if (c.suggestion != null &&
-                  widget.canAct &&
-                  widget.onApplySuggestion != null &&
-                  !t.isResolved)
-                Padding(
-                  padding: const EdgeInsets.only(left: 28, bottom: Spacing.xs),
-                  child: FilledButton.tonalIcon(
-                    onPressed: widget.busy
-                        ? null
-                        : () => widget.onApplySuggestion!(c, c.suggestion!),
-                    icon: const Icon(Icons.auto_fix_high, size: 18),
-                    label: const Text('Apply suggestion'),
-                  ),
-                ),
-            ],
+            for (final c in t.comments) ..._comment(context, c),
             if (widget.canAct && widget.onReply != null)
               if (_replying)
                 Padding(
@@ -457,7 +705,10 @@ class _ThreadCardState extends State<ThreadCard>
               else
                 Padding(
                   padding: const EdgeInsets.only(left: 20),
-                  child: Row(
+                  // A card under a diff line is only as wide as the gutter
+                  // leaves it, so the two buttons wrap rather than overflow.
+                  child: Wrap(
+                    spacing: Spacing.xs,
                     children: [
                       TextButton.icon(
                         onPressed: widget.busy ? null : _startReply,

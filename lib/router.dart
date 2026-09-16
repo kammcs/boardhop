@@ -161,7 +161,9 @@ GoRouter buildRouter(
                         builder: (_, state) => ProjectHomePage(
                           // Keyed by the project so switching projects in the picker
                           // (research/21) rebuilds the page instead of reusing its state.
-                          key: ValueKey('projecthomepage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
+                          key: ValueKey(
+                            'projecthomepage/${state.pathParameters['org']}/${state.pathParameters['project']}',
+                          ),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                         ),
@@ -222,7 +224,9 @@ GoRouter buildRouter(
                         builder: (_, state) => WorkItemsPage(
                           // Keyed by the project so switching projects in the picker
                           // (research/21) rebuilds the page instead of reusing its state.
-                          key: ValueKey('workitemspage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
+                          key: ValueKey(
+                            'workitemspage/${state.pathParameters['org']}/${state.pathParameters['project']}',
+                          ),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                           // A dashboard's query card opens its query here
@@ -325,7 +329,9 @@ GoRouter buildRouter(
                         builder: (_, state) => ReposPage(
                           // Keyed by the project so switching projects in the picker
                           // (research/21) rebuilds the page instead of reusing its state.
-                          key: ValueKey('repospage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
+                          key: ValueKey(
+                            'repospage/${state.pathParameters['org']}/${state.pathParameters['project']}',
+                          ),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                         ),
@@ -494,7 +500,9 @@ GoRouter buildRouter(
                         builder: (_, state) => PipelinesPage(
                           // Keyed by the project so switching projects in the picker
                           // (research/21) rebuilds the page instead of reusing its state.
-                          key: ValueKey('pipelinespage/${state.pathParameters['org']}/${state.pathParameters['project']}'),
+                          key: ValueKey(
+                            'pipelinespage/${state.pathParameters['org']}/${state.pathParameters['project']}',
+                          ),
                           org: state.pathParameters['org']!,
                           project: state.pathParameters['project']!,
                           initialTab: state.uri.queryParameters['tab'],
@@ -615,12 +623,18 @@ GoRouter buildRouter(
                 routes: [
                   GoRoute(
                     path: 'diff',
+                    // `?line=` opens the file on a new-side line, which is
+                    // how the Comments tab jumps into a diff (research/22
+                    // §4.4).
                     builder: (_, state) => PrFileDiffPage(
                       org: state.pathParameters['org']!,
                       id: int.parse(state.pathParameters['id']!),
                       path: state.uri.queryParameters['path'] ?? '',
                       iteration: int.tryParse(
                         state.uri.queryParameters['iteration'] ?? '',
+                      ),
+                      line: int.tryParse(
+                        state.uri.queryParameters['line'] ?? '',
                       ),
                     ),
                   ),

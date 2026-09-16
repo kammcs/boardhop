@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,6 +22,8 @@ import '../../data/repositories/pull_request_repository.dart';
 import '../../data/repositories/search_repository.dart';
 import '../../data/repositories/work_item_form_repository.dart';
 import '../../data/repositories/work_item_repository.dart';
+import '../../data/viewed_files_store.dart';
+import '../../theme/theme.dart';
 import '../shared/account_scope.dart';
 import '../shared/attachments/attachment_links.dart';
 import '../shared/attachments/inline_attachment_source.dart';
@@ -29,15 +33,22 @@ import '../work_items/form/controls/attachments_section.dart'
 import '../shared/mention/mention_source.dart';
 import '../shared/mention/mention_sources.dart';
 import '../wiki/wiki_page_source.dart';
+import 'diff/diff_cursor.dart';
 import 'diff/diff_model.dart';
+import 'diff/diff_nav_pill.dart';
+import 'diff/diff_prefs.dart';
 import 'diff/diff_view.dart';
 import 'diff/highlighter.dart';
 import 'pull_request_detail_page.dart' show IterationPicker;
 
-/// One file of a pull request iteration as a unified diff (spike F5), with
-/// the threads read for that iteration so they sit on their tracked lines,
-/// a tap-to-comment gutter that posts a new anchored thread, replies and
-/// thread status under each thread, and an iteration picker in the bar.
+/// Where the reader should land once the file on screen has loaded.
+enum _Landing { none, firstChange, lastChange, line }
+
+/// One file of a pull request iteration as a unified — or, on a wide
+/// window, side-by-side — diff (spike F5), with the threads read for that
+/// iteration so they sit on their tracked lines, a tap-to-comment gutter on
+/// either side, ranges, file-level comments, the ▲▼ navigation control of
+/// R5–R7 and the keyboard shortcuts of R16.
 class PrFileDiffPage extends StatefulWidget {
   const PrFileDiffPage({
     super.key,
@@ -45,12 +56,17 @@ class PrFileDiffPage extends StatefulWidget {
     required this.id,
     required this.path,
     this.iteration,
+    this.line,
   });
 
   final String org;
   final int id;
   final String path;
   final int? iteration;
+
+  /// New-side line to open on, from `?line=` (a jump from the Comments
+  /// tab).
+  final int? line;
 
   @override
   State<PrFileDiffPage> createState() => _PrFileDiffPageState();
@@ -61,6 +77,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   PrRef? _ref;
   List<PrIteration> _iterations = const [];
   int? _iteration;
+
+  /// The file on screen. State rather than a route parameter, so ▼ at the
+  /// end of a file can open the next one in place (R7).
+  late String _path;
+  List<PrFileChange> _changes = const [];
   PrFileChange? _change;
   LineDiffResult? _diff;
 
@@ -69,10 +90,37 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   List<List<CodeRun>> _oldRuns = const [];
   List<List<CodeRun>> _newRuns = const [];
   List<PrThread> _threads = const [];
-  int? _composerLine;
+
+  /// Where a new comment is being written: a line, a range, either side, or
+  /// the file as a whole (R9, R10).
+  DiffAnchor? _composer;
   String? _error;
   bool _loading = false;
   bool _posting = false;
+
+  /// The diff's navigation stops and viewport (R5–R7).
+  final _nav = DiffViewController();
+  DiffNavMode _mode = DiffNavMode.changes;
+
+  /// Where the last jump left the cursor; null falls back to what is on
+  /// screen.
+  int? _position;
+  bool _pillVisible = true;
+  _Landing _landing = _Landing.none;
+
+  /// How many frames the pending landing has waited for a laid-out list.
+  int _landingTries = 0;
+
+  /// R16's two remembered layout choices; [_sideBySide] null follows the
+  /// window (side by side from the expanded breakpoint).
+  bool _wrap = false;
+  bool? _sideBySide;
+
+  /// R8's local mark for the file on screen.
+  bool _viewed = false;
+
+  /// Identity of the signed-in user: whose comments offer edit and delete.
+  String? _meId;
 
   /// The picker the inline reply boxes and the new-thread composer share,
   /// and the names this file's comments resolve their `@<guid>` runs to.
@@ -99,8 +147,44 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   @override
   void initState() {
     super.initState();
+    _path = widget.path;
     _iteration = widget.iteration;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    if (widget.line != null) _landing = _Landing.line;
+    _nav.addListener(_onStops);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPrefs();
+      _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _nav.removeListener(_onStops);
+    _nav.dispose();
+    super.dispose();
+  }
+
+  /// The viewer rebuilt its rows. It publishes them from inside its own
+  /// build, so everything here waits for the frame to end.
+  void _onStops() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The rows moved: the old position indexes nothing.
+      setState(() => _position = null);
+      _land();
+    });
+  }
+
+  Future<void> _loadPrefs() async {
+    final account = AccountScope.maybeOf(context) ?? '';
+    final wrap = await DiffPrefs.wrap(account);
+    final sideBySide = await DiffPrefs.sideBySide(account);
+    if (!mounted) return;
+    setState(() {
+      _wrap = wrap;
+      _sideBySide = sideBySide;
+    });
   }
 
   /// The same picker the pull request page builds, for the composers that
@@ -180,6 +264,16 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     }
   }
 
+  /// The local viewed marks, absent in the tests that build this page
+  /// without the account's repositories.
+  ViewedFilesStore? get _viewedStore {
+    try {
+      return context.read<ViewedFilesStore>();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -220,12 +314,9 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
       );
       final changes = await source.changes(ref, it.id);
       final change = changes.firstWhere(
-        (c) => c.path == widget.path,
-        orElse: () => PrFileChange(
-          path: widget.path,
-          changeType: 'edit',
-          changeTrackingId: 0,
-        ),
+        (c) => c.path == _path,
+        orElse: () =>
+            PrFileChange(path: _path, changeType: 'edit', changeTrackingId: 0),
       );
       final oldText = change.isAdd
           ? ''
@@ -237,34 +328,51 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
       final newText = change.isDelete
           ? ''
           : await source.fileAt(ref, change.path, it.sourceCommit);
+      // A deleted comment stays in the thread as the web's stub (R9).
       final threads = await source.threads(
         ref,
         iteration: it.id,
         baseIteration: 0,
+        includeDeleted: true,
       );
       if (!mounted) return;
       final brightness = Theme.of(context).brightness;
-      final language = CodeHighlighter.languageFor(widget.path);
+      final language = CodeHighlighter.languageFor(_path);
+      final (oldRuns, newRuns) = await _highlight(
+        oldText,
+        newText,
+        language,
+        brightness,
+      );
+      if (!mounted) return;
+      final viewed =
+          await _viewedStore?.isViewed(widget.org, widget.id, _path) ?? false;
+      if (!mounted) return;
+      var meId = _meId;
+      if (meId == null) {
+        try {
+          meId = await repo.meId(widget.org);
+        } on AdoException {
+          // Only the edit/delete menu depends on it.
+          meId = null;
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _pr = pr;
         _ref = ref;
         _iterations = iterations;
         _iteration = it.id;
+        _changes = changes;
         _change = change;
-        _composerLine = null;
+        _composer = null;
         _newText = newText;
         _diff = LineDiff.compute(oldText, newText);
-        _oldRuns = CodeHighlighter.highlightLines(
-          oldText,
-          language,
-          brightness,
-        );
-        _newRuns = CodeHighlighter.highlightLines(
-          newText,
-          language,
-          brightness,
-        );
+        _oldRuns = oldRuns;
+        _newRuns = newRuns;
         _threads = _forThisFile(threads);
+        _viewed = viewed;
+        _meId = meId;
         _offline = false;
       });
       unawaited(_prepareMentions(pr));
@@ -289,9 +397,34 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     }
   }
 
+  /// Whole-file highlighting off the UI thread for anything big enough to
+  /// drop a frame (spike F5 measured 376 ms for 3,000 lines); a short file
+  /// costs less to colour here than to send to an isolate and back.
+  static const _asyncHighlightChars = 20000;
+
+  Future<(List<List<CodeRun>>, List<List<CodeRun>>)> _highlight(
+    String oldText,
+    String newText,
+    String? language,
+    Brightness brightness,
+  ) async {
+    if (oldText.length + newText.length < _asyncHighlightChars) {
+      return (
+        CodeHighlighter.highlightLines(oldText, language, brightness),
+        CodeHighlighter.highlightLines(newText, language, brightness),
+      );
+    }
+    return (
+      await CodeHighlighter.highlightLinesAsync(oldText, language, brightness),
+      await CodeHighlighter.highlightLinesAsync(newText, language, brightness),
+    );
+  }
+
+  /// This file's threads, minus the ones the service has emptied: a thread
+  /// whose every comment is deleted is gone on the web too.
   List<PrThread> _forThisFile(List<PrThread> threads) => [
     for (final t in threads)
-      if (t.filePath == widget.path) t,
+      if (t.filePath == _path && t.comments.any((c) => !c.isDeleted)) t,
   ];
 
   void _selectIteration(int id) {
@@ -299,6 +432,140 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     setState(() => _iteration = id);
     _load();
   }
+
+  // ───────────────────────── navigation (R5–R7) ─────────────────────────
+
+  int get _fileIndex {
+    final i = _changes.indexWhere((c) => c.path == _path);
+    return i < 0 ? 0 : i;
+  }
+
+  static String _nameOf(String path) =>
+      path.substring(path.lastIndexOf('/') + 1);
+
+  List<int> _stopsFor(DiffNavMode mode) => switch (mode) {
+    DiffNavMode.changes => _nav.stops.changes,
+    DiffNavMode.comments => _nav.stops.comments,
+    DiffNavMode.files => [for (var i = 0; i < _changes.length; i++) i],
+  };
+
+  DiffCursor get _cursor {
+    final index = _fileIndex;
+    var cursor = DiffCursor(
+      mode: _mode,
+      stops: _stopsFor(_mode),
+      position: _mode == DiffNavMode.files ? index : _position,
+      nextFile: index + 1 < _changes.length
+          ? _nameOf(_changes[index + 1].path)
+          : null,
+      previousFile: index > 0 ? _nameOf(_changes[index - 1].path) : null,
+    );
+    if (_mode == DiffNavMode.files) return cursor;
+    final visible = _nav.visibleRows;
+    if (visible != null) cursor = cursor.resolvedFrom(visible.$1, visible.$2);
+    return cursor;
+  }
+
+  Map<DiffNavMode, int> get _counts => {
+    for (final mode in DiffNavMode.values) mode: _stopsFor(mode).length,
+  };
+
+  /// One press of ▲ or ▼, from the pill, the app bar or the keyboard.
+  void _step({required bool down}) {
+    final cursor = _cursor;
+    final next = down ? cursor.nextPosition : cursor.previousPosition;
+    if (next != null) {
+      if (_mode == DiffNavMode.files) {
+        _openFile(
+          cursor.stops[next],
+          landing: down ? _Landing.firstChange : _Landing.lastChange,
+        );
+        return;
+      }
+      setState(() => _position = next);
+      _nav.jumpTo(cursor.stops[next]);
+      return;
+    }
+    switch (down ? cursor.downEdge : cursor.upEdge) {
+      case DiffNavEdge.file:
+        _openFile(
+          _fileIndex + (down ? 1 : -1),
+          landing: down ? _Landing.firstChange : _Landing.lastChange,
+        );
+      case DiffNavEdge.back:
+        if (context.canPop()) context.pop();
+      case DiffNavEdge.stop:
+        break;
+    }
+  }
+
+  /// Opens another file of the same pull request in place: same page, same
+  /// iteration, threads re-read (R7).
+  void _openFile(int index, {_Landing landing = _Landing.firstChange}) {
+    if (index < 0 || index >= _changes.length) return;
+    final path = _changes[index].path;
+    if (path == _path) return;
+    setState(() {
+      _path = path;
+      _diff = null;
+      _threads = const [];
+      _oldRuns = const [];
+      _newRuns = const [];
+      _composer = null;
+      _position = null;
+      _landing = landing;
+      _landingTries = 0;
+    });
+    _load();
+  }
+
+  /// Puts the reader where the jump that opened this file promised.
+  void _land() {
+    final landing = _landing;
+    if (landing == _Landing.none || !_nav.isAttached) return;
+    _landingTries++;
+    final stops = _nav.stops.changes;
+    final int? row = switch (landing) {
+      _Landing.firstChange => stops.isEmpty ? null : stops.first,
+      _Landing.lastChange => stops.isEmpty ? null : stops.last,
+      _Landing.line =>
+        widget.line == null ? null : _nav.rowForNewLine(widget.line!),
+      _Landing.none => null,
+    };
+    // The list may not be laid out on the frame the rows were published;
+    // give it a few before giving up on the jump.
+    if (row == null && _landingTries < 5) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _land();
+      });
+      return;
+    }
+    setState(() {
+      _landing = _Landing.none;
+      _landingTries = 0;
+      // The cursor only follows the landing when the reader is stepping
+      // changes; in the other modes the stops are different rows and the
+      // viewport decides.
+      if (row != null &&
+          landing != _Landing.line &&
+          _mode == DiffNavMode.changes) {
+        _position = landing == _Landing.firstChange ? 0 : stops.length - 1;
+      } else {
+        _position = null;
+      }
+    });
+    if (row != null) _nav.jumpTo(row, animate: false);
+  }
+
+  void _setMode(DiffNavMode mode) {
+    if (mode == _mode) return;
+    setState(() {
+      _mode = mode;
+      _position = null;
+    });
+  }
+
+  // ───────────────────────── writes (R9, R10) ──────────────────────────
 
   /// Runs a write, re-reads the threads, and reports whether the write
   /// itself succeeded (a chained resolve stops if the reply failed).
@@ -319,11 +586,12 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         ref,
         iteration: it,
         baseIteration: 0,
+        includeDeleted: true,
       );
       if (!mounted) return ok;
       setState(() {
         _threads = _forThisFile(threads);
-        _composerLine = null;
+        _composer = null;
       });
       // A comment just posted can name somebody no earlier comment on this
       // file named, and the names map is built from the threads; without
@@ -353,7 +621,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     return ok;
   }
 
-  Future<void> _post(int line, String text) async {
+  Future<void> _post(DiffAnchor anchor, String text) async {
     final pr = _pr;
     if (pr == null) return;
     final repo = context.read<PullRequestRepository>();
@@ -362,8 +630,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         widget.org,
         pr,
         content: text,
-        filePath: widget.path,
-        line: line,
+        filePath: _path,
+        line: anchor.fileLevel ? null : anchor.line,
+        endLine: anchor.fileLevel || !anchor.isRange ? null : anchor.last,
+        leftSide: anchor.leftSide,
+        fileLevel: anchor.fileLevel,
         changeTrackingId: _change?.changeTrackingId,
         iteration: _iteration,
       ),
@@ -383,6 +654,43 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     final repo = context.read<PullRequestRepository>();
     return _write(
       () => repo.setThreadStatus(widget.org, pr, thread.id, status),
+    );
+  }
+
+  Future<bool> _editComment(
+    PrThread thread,
+    PrComment comment,
+    String text,
+  ) async {
+    final pr = _pr;
+    if (pr == null) return false;
+    final repo = context.read<PullRequestRepository>();
+    return _write(
+      () => repo.editComment(widget.org, pr, thread.id, comment.id, text),
+    );
+  }
+
+  Future<bool> _deleteComment(PrThread thread, PrComment comment) async {
+    final pr = _pr;
+    if (pr == null) return false;
+    final repo = context.read<PullRequestRepository>();
+    return _write(
+      () => repo.deleteComment(widget.org, pr, thread.id, comment.id),
+    );
+  }
+
+  Future<bool> _likeComment(
+    PrThread thread,
+    PrComment comment,
+    bool like,
+  ) async {
+    final pr = _pr;
+    if (pr == null) return false;
+    final repo = context.read<PullRequestRepository>();
+    return _write(
+      () => like
+          ? repo.like(widget.org, pr, thread.id, comment.id)
+          : repo.unlike(widget.org, pr, thread.id, comment.id),
     );
   }
 
@@ -408,7 +716,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
         title: const Text('Apply suggestion?'),
         content: Text(
           'Commits the change to ${pr.sourceBranch} '
-          '(line${end > start ? 's $start–$end' : ' $start'} of ${widget.path}) '
+          '(line${end > start ? 's $start–$end' : ' $start'} of $_path) '
           'and resolves the thread.',
         ),
         actions: [
@@ -436,7 +744,7 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
       await repo.pushEdit(
         widget.org,
         pr,
-        path: widget.path,
+        path: _path,
         content: content,
         message: 'Apply suggestion from thread ${thread.id} (Boardhop)',
       );
@@ -458,101 +766,385 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
     await _load();
   }
 
+  // ─────────────────────── app bar actions (R8, R16) ────────────────────
+
+  Future<void> _toggleViewed() async {
+    final store = _viewedStore;
+    final iteration = _iteration;
+    if (store == null || iteration == null) return;
+    final viewed = _viewed;
+    // Marking advances nothing: the reader stays on the file (R8).
+    setState(() => _viewed = !viewed);
+    if (viewed) {
+      await store.clear(widget.org, widget.id, path: _path);
+    } else {
+      await store.markViewed(
+        widget.org,
+        widget.id,
+        _path,
+        iterationId: iteration,
+        objectId: _change?.objectId,
+      );
+    }
+  }
+
+  Future<void> _toggleWrap() async {
+    setState(() => _wrap = !_wrap);
+    await DiffPrefs.setWrap(AccountScope.maybeOf(context) ?? '', _wrap);
+  }
+
+  Future<void> _toggleSideBySide() async {
+    final next = !_sideBySideNow;
+    setState(() => _sideBySide = next);
+    await DiffPrefs.setSideBySide(AccountScope.maybeOf(context) ?? '', next);
+  }
+
+  /// Two panes unless the reader said otherwise: the default follows the
+  /// window (R16).
+  bool get _sideBySideNow =>
+      _sideBySide ?? (context.breakpoint == Breakpoint.expanded);
+
+  void _commentOnFile() => setState(
+    () => _composer = _composer?.fileLevel == true
+        ? null
+        : const DiffAnchor.file(),
+  );
+
+  // ───────────────────────── keyboard (R16) ─────────────────────────────
+
+  /// Shortcuts never fire while a comment is being typed.
+  bool get _typing {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (ctx == null) return false;
+    return ctx.widget is EditableText ||
+        ctx.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
+  void _shortcutStep(DiffNavMode mode, {required bool down}) {
+    if (_mode != mode) {
+      setState(() {
+        _mode = mode;
+        _position = null;
+      });
+    }
+    _step(down: down);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final diff = _diff;
-    final name = widget.path.substring(widget.path.lastIndexOf('/') + 1);
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name, overflow: TextOverflow.ellipsis),
-            Text(
-              diff == null
-                  ? widget.path
-                  : '+${diff.added} −${diff.removed} · ${_threads.length} thread${_threads.length == 1 ? '' : 's'}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          if (_iterations.isNotEmpty)
-            IterationPicker(
-              iterations: _iterations,
-              selected: _iteration,
-              onSelect: _loading ? (_) {} : _selectIteration,
-              dense: true,
-            ),
-        ],
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_loading || _posting) const LinearProgressIndicator(),
-          if (_error != null)
-            ListTile(
-              leading: Icon(Icons.error_outline, color: scheme.error),
-              title: Text(_error!),
-            ),
-          Expanded(
-            child: diff == null
-                ? (_loading
-                      ? const Center(
-                          child: CircularProgressIndicator.adaptive(),
-                        )
-                      : const SizedBox.shrink())
-                // The diff scrolls sideways too, so only a pull on the
-                // rows themselves refreshes (same rule as the board).
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    notificationPredicate: (n) =>
-                        n.depth == 1 && n.metrics.axis == Axis.vertical,
-                    child: DiffView(
-                      diff: diff,
-                      oldRuns: _oldRuns,
-                      newRuns: _newRuns,
-                      threads: _threads,
-                      composerLine: _composerLine,
-                      posting: _posting,
-                      canAct: _pr?.isActive == true,
-                      mentions: _mentions,
-                      mentionNames: _mentionNames,
-                      attachments: _attachments,
-                      uploads: _uploads,
-                      wikiPages: _wikiPages,
-                      offline: _offline,
-                      onOpenMention: _openMention,
-                      onGutterTap: _pr?.isActive == true
-                          ? (line) => setState(
-                              () => _composerLine = _composerLine == line
-                                  ? null
-                                  : line,
-                            )
-                          : null,
-                      onCancelComposer: () =>
-                          setState(() => _composerLine = null),
-                      onPost: _post,
-                      onReply: _reply,
-                      onSetThreadStatus: _setThreadStatus,
-                      onApplySuggestion:
-                          _pr?.isActive == true && _atLatestIteration
-                          ? _applySuggestion
-                          : null,
-                    ),
-                  ),
+    final name = _nameOf(_path);
+    final expanded = context.breakpoint == Breakpoint.expanded;
+    final cursor = _cursor;
+    final canAct = _pr?.isActive == true;
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.bracketRight): _NextFileIntent(),
+        SingleActivator(LogicalKeyboardKey.bracketLeft): _PreviousFileIntent(),
+        SingleActivator(LogicalKeyboardKey.keyN): _NextCommentIntent(),
+        SingleActivator(LogicalKeyboardKey.keyP): _PreviousCommentIntent(),
+        SingleActivator(LogicalKeyboardKey.f7): _NextChangeIntent(),
+        SingleActivator(LogicalKeyboardKey.f7, shift: true):
+            _PreviousChangeIntent(),
+        SingleActivator(LogicalKeyboardKey.keyV): _ToggleViewedIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _NextFileIntent: _DiffShortcut<_NextFileIntent>(
+            () => !_typing,
+            () => _openFile(_fileIndex + 1),
           ),
-        ],
+          _PreviousFileIntent: _DiffShortcut<_PreviousFileIntent>(
+            () => !_typing,
+            () => _openFile(_fileIndex - 1),
+          ),
+          _NextCommentIntent: _DiffShortcut<_NextCommentIntent>(
+            () => !_typing,
+            () => _shortcutStep(DiffNavMode.comments, down: true),
+          ),
+          _PreviousCommentIntent: _DiffShortcut<_PreviousCommentIntent>(
+            () => !_typing,
+            () => _shortcutStep(DiffNavMode.comments, down: false),
+          ),
+          _NextChangeIntent: _DiffShortcut<_NextChangeIntent>(
+            () => !_typing,
+            () => _shortcutStep(DiffNavMode.changes, down: true),
+          ),
+          _PreviousChangeIntent: _DiffShortcut<_PreviousChangeIntent>(
+            () => !_typing,
+            () => _shortcutStep(DiffNavMode.changes, down: false),
+          ),
+          _ToggleViewedIntent: _DiffShortcut<_ToggleViewedIntent>(
+            () => !_typing,
+            _toggleViewed,
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, overflow: TextOverflow.ellipsis),
+                  Text(
+                    diff == null
+                        ? _path
+                        : '+${diff.added} −${diff.removed} · '
+                              '${_threads.length} thread'
+                              '${_threads.length == 1 ? '' : 's'}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.pop(),
+              ),
+              actions: [
+                if (expanded && diff != null)
+                  DiffNavBarControls(
+                    cursor: cursor,
+                    counts: _counts,
+                    onUp: () => _step(down: false),
+                    onDown: () => _step(down: true),
+                    onMode: _setMode,
+                  ),
+                IconButton(
+                  tooltip: _viewed ? 'Viewed' : 'Mark as viewed',
+                  onPressed: _viewedStore == null ? null : _toggleViewed,
+                  icon: Icon(
+                    _viewed ? Icons.check_circle : Icons.check_circle_outline,
+                    color: _viewed ? context.boardhopColors.voteApproved : null,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Diff options',
+                  offset: kTrailingMenuOffset,
+                  onSelected: (value) => switch (value) {
+                    'file' => _commentOnFile(),
+                    'wrap' => _toggleWrap(),
+                    _ => _toggleSideBySide(),
+                  },
+                  itemBuilder: (context) => [
+                    if (canAct)
+                      const PopupMenuItem(
+                        value: 'file',
+                        child: ListTile(
+                          leading: Icon(Icons.comment_outlined),
+                          title: Text('Comment on file'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    CheckedPopupMenuItem(
+                      value: 'wrap',
+                      checked: _wrap,
+                      child: const Text('Wrap long lines'),
+                    ),
+                    CheckedPopupMenuItem(
+                      value: 'split',
+                      checked: _sideBySideNow,
+                      child: const Text('Side by side'),
+                    ),
+                  ],
+                ),
+                if (_iterations.isNotEmpty)
+                  IterationPicker(
+                    iterations: _iterations,
+                    selected: _iteration,
+                    onSelect: _loading ? (_) {} : _selectIteration,
+                    dense: true,
+                  ),
+              ],
+            ),
+            body: SafeArea(
+              top: false,
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_loading || _posting) const LinearProgressIndicator(),
+                  if (_error != null)
+                    ListTile(
+                      leading: Icon(Icons.error_outline, color: scheme.error),
+                      title: Text(_error!),
+                    ),
+                  Expanded(
+                    child: diff == null
+                        ? (_loading
+                              ? const Center(
+                                  child: CircularProgressIndicator.adaptive(),
+                                )
+                              : const SizedBox.shrink())
+                        : _body(diff, canAct: canAct, expanded: expanded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
+
+  Widget _body(
+    LineDiffResult diff, {
+    required bool canAct,
+    required bool expanded,
+  }) {
+    // The pill hides while a comment is being written and while the reader
+    // scrolls down, and comes back on the way up (R6).
+    final showsPill = !expanded && _composer == null && _pillVisible;
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification.metrics.axis != Axis.vertical) return false;
+            if (notification is UserScrollNotification) {
+              final visible = switch (notification.direction) {
+                ScrollDirection.reverse => false,
+                ScrollDirection.forward => true,
+                ScrollDirection.idle => _pillVisible,
+              };
+              if (visible != _pillVisible) {
+                setState(() => _pillVisible = visible);
+              }
+            } else if (notification is ScrollStartNotification &&
+                notification.dragDetails != null) {
+              // The reader took over from the last jump: from here the
+              // indicator follows the viewport (R6).
+              setState(() => _position = null);
+            } else if (notification is ScrollEndNotification) {
+              // Re-read the viewport, which is where the indicator comes
+              // from while no jump is standing.
+              if (_position == null) setState(() {});
+            }
+            return false;
+          },
+          // The diff scrolls sideways too, so only a pull on the
+          // rows themselves refreshes (same rule as the board).
+          child: RefreshIndicator(
+            onRefresh: _load,
+            notificationPredicate: (n) =>
+                n.depth == 1 && n.metrics.axis == Axis.vertical,
+            child: DiffView(
+              diff: diff,
+              controller: _nav,
+              oldRuns: _oldRuns,
+              newRuns: _newRuns,
+              threads: _threads,
+              composer: _composer,
+              wrap: _wrap,
+              sideBySide: _sideBySideNow,
+              endPadding: expanded ? Spacing.xxl : 96,
+              posting: _posting,
+              canAct: canAct,
+              meId: _meId,
+              mentions: _mentions,
+              mentionNames: _mentionNames,
+              attachments: _attachments,
+              uploads: _uploads,
+              wikiPages: _wikiPages,
+              offline: _offline,
+              onOpenMention: _openMention,
+              onGutterTap: canAct
+                  ? (anchor) => setState(
+                      () => _composer = _composer == anchor ? null : anchor,
+                    )
+                  : null,
+              onCancelComposer: () => setState(() => _composer = null),
+              onPost: _post,
+              onReply: _reply,
+              onSetThreadStatus: _setThreadStatus,
+              onEditComment: _editComment,
+              onDeleteComment: _deleteComment,
+              onLikeComment: _likeComment,
+              onApplySuggestion: canAct && _atLatestIteration
+                  ? _applySuggestion
+                  : null,
+            ),
+          ),
+        ),
+        if (!expanded)
+          Positioned(
+            right: Spacing.lg,
+            bottom: Spacing.lg + MediaQuery.paddingOf(context).bottom,
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 120),
+              offset: showsPill ? Offset.zero : const Offset(0, 1.6),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 120),
+                opacity: showsPill ? 1 : 0,
+                child: IgnorePointer(
+                  ignoring: !showsPill,
+                  child: DiffNavPill(
+                    cursor: _cursor,
+                    counts: _counts,
+                    onUp: () => _step(down: false),
+                    onDown: () => _step(down: true),
+                    onMode: _setMode,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// One of the diff's keyboard shortcuts (R16).
+///
+/// It is an [Action] rather than a `CallbackAction` for one reason: an
+/// action that is **disabled** leaves the key event alone, while one that
+/// invokes and does nothing still swallows it. Typing `n` into a comment on
+/// an iPad has to reach the field, and on the device it did not until this
+/// reported itself disabled (found on the iPad, 2026-09-16).
+class _DiffShortcut<T extends Intent> extends Action<T> {
+  _DiffShortcut(this.enabled, this.run);
+
+  final bool Function() enabled;
+  final void Function() run;
+
+  @override
+  bool isEnabled(T intent, [BuildContext? context]) => enabled();
+
+  @override
+  Object? invoke(covariant T intent) {
+    run();
+    return null;
+  }
+}
+
+class _NextFileIntent extends Intent {
+  const _NextFileIntent();
+}
+
+class _PreviousFileIntent extends Intent {
+  const _PreviousFileIntent();
+}
+
+class _NextCommentIntent extends Intent {
+  const _NextCommentIntent();
+}
+
+class _PreviousCommentIntent extends Intent {
+  const _PreviousCommentIntent();
+}
+
+class _NextChangeIntent extends Intent {
+  const _NextChangeIntent();
+}
+
+class _PreviousChangeIntent extends Intent {
+  const _PreviousChangeIntent();
+}
+
+class _ToggleViewedIntent extends Intent {
+  const _ToggleViewedIntent();
 }
