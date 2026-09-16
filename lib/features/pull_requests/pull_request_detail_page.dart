@@ -504,9 +504,30 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     });
     final source = PrDiffSource(context.read<AdoClient>());
     final ref = context.read<PullRequestRepository>().ref(widget.org, pr);
+    final viewedFiles = context.read<ViewedFilesStore>();
     try {
       final changes = await source.changes(ref, id);
-      if (mounted) setState(() => _changes = changes);
+      // R8 again: picking a newer iteration is the other way a reader meets
+      // a version they have not read, so the marks it touches go here too.
+      // Only `_load` used to prune, so stepping the picker from 9 to 10 left
+      // a tick on a file that the tenth iteration had just rewritten (P-D).
+      if (changes.isNotEmpty) {
+        await viewedFiles.prune(
+          widget.org,
+          widget.id,
+          changes,
+          iterationId: id,
+        );
+      }
+      final marks = Map<String, ViewedMark>.of(
+        await viewedFiles.marks(widget.org, widget.id),
+      );
+      if (mounted) {
+        setState(() {
+          _changes = changes;
+          _viewed = marks;
+        });
+      }
     } on AdoAuthException catch (e) {
       if (mounted) {
         context.read<AuthBloc>().add(
@@ -956,10 +977,15 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
 
   /// Opens the file a thread is anchored to, at the iteration being
   /// viewed, so the comment can be read in context.
+  ///
+  /// The thread's own new-side line rides along as `?line=`, so the diff
+  /// lands on the commented line instead of the top of the file (R5's
+  /// Comments jump, research/22 §4.4). A left-side-only thread has no
+  /// new-side line to land on, so it opens the file plain.
   Future<void> _openThread(PrThread thread) async {
     final path = thread.filePath;
     if (path == null) return;
-    await _openDiff(path);
+    await _openDiff(path, line: thread.rightLine);
   }
 
   /// The diff is a route pushed over this page, and threads are written
@@ -967,14 +993,18 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
   /// the threads it read before that, so the Comments tab showed the state
   /// from before the write until someone pulled (iPad walkthrough, defect
   /// 6). Re-read them when the diff comes back.
-  Future<void> _openDiff(String path) async {
+  Future<void> _openDiff(String path, {int? line}) async {
     final it = _iteration;
     if (it == null) return;
     await context.push(
       Uri(
         path:
             '${orgRoute(context, widget.org)}/pull-requests/${widget.id}/diff',
-        queryParameters: {'path': path, 'iteration': '$it'},
+        queryParameters: {
+          'path': path,
+          'iteration': '$it',
+          if (line != null) 'line': '$line',
+        },
       ).toString(),
     );
     if (!mounted) return;

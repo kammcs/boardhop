@@ -270,6 +270,24 @@ void main() {
       expect(pillHidden(tester), isTrue);
     });
 
+    testWidgets('it hides while a thread\'s own reply box has focus', (
+      tester,
+    ) async {
+      // P-D, on the phone: only the page's new-thread composer hid the
+      // pill, so a thread card's reply box (and its edit-in-place field,
+      // which is the same widget) left the pill sitting over the
+      // Cancel / Save row. Descendant focus covers all three.
+      await pumpDiffPage(
+        tester,
+        threads: [threadJson(id: 1, rightLine: 2, content: 'a note')],
+      );
+      expect(pillHidden(tester), isFalse);
+
+      await tester.tap(find.text('Reply').first);
+      await tester.pumpAndSettle();
+      expect(pillHidden(tester), isTrue);
+    });
+
     testWidgets('a tablet keeps the pair in the app bar instead', (
       tester,
     ) async {

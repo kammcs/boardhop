@@ -205,6 +205,21 @@ class _ThreadCardState extends State<ThreadCard>
       _draft = _controller.text.trim();
     });
     _revealComposer();
+    _claimFocus(_focus);
+  }
+
+  /// `autofocus: true` on the field is not enough here (P-D): the reveal
+  /// below scrolls the list in the same frame the scope resolves
+  /// autofocuses, and the box came up with no caret and no keyboard, so
+  /// every reply and every edit needed a second tap before it could be
+  /// typed into. Asking for the focus once the frame has settled is what
+  /// actually lands it.
+  void _claimFocus(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && node.context != null && !node.hasFocus) {
+        node.requestFocus();
+      }
+    });
   }
 
   /// Posts the reply and, when [thenStatus] is set, flips the thread to
@@ -286,8 +301,9 @@ class _ThreadCardState extends State<ThreadCard>
     // Prefilled with the stored text: `@<guid>` stays a GUID unless the
     // editor picks somebody new, which is what the service holds anyway.
     _editController = MentionController(text: c.content);
-    _editFocus = FocusNode();
+    final focus = _editFocus = FocusNode();
     setState(() => _editingId = c.id);
+    _claimFocus(focus);
   }
 
   void _cancelEdit() => setState(() => _editingId = null);

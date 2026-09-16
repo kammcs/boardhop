@@ -218,6 +218,35 @@ void main() {
     expect(find.byIcon(Icons.thumb_up_outlined), findsOneWidget);
   });
 
+  testWidgets('the reply box and the edit box come up already focused', (
+    tester,
+  ) async {
+    // P-D: `autofocus: true` on the field lost the race with the scroll
+    // that reveals the composer, so both boxes opened with no caret and
+    // needed a second tap before anything could be typed.
+    await tester.pumpWidget(host(prThread(id: 1, rightLine: 2)));
+
+    await tester.tap(find.text('Reply'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .any((f) => f.focusNode.hasFocus),
+      isTrue,
+    );
+
+    await tester.tap(find.byTooltip('This comment'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .any((f) => f.focusNode.hasFocus),
+      isTrue,
+    );
+  });
+
   testWidgets('no callbacks means the card is exactly what it was', (
     tester,
   ) async {

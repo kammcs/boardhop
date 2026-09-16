@@ -90,4 +90,40 @@ void main() {
     await harness.pump(tester, initialTab: 'files');
     expect(find.text('1/1 viewed'), findsOneWidget);
   });
+
+  testWidgets('stepping the picker to a newer iteration prunes the mark', (
+    tester,
+  ) async {
+    // P-D found this on the device: only `_load` pruned, so picking
+    // iteration 2 — which had just rewritten the file — left the tick on.
+    final harness = PrHarness(
+      pr: samplePr(),
+      policies: policyTargetSet(),
+      changesByIteration: {
+        1: [change('/spike/w39/one.txt', 'blob-1')],
+        2: [change('/spike/w39/one.txt', 'blob-2')],
+      },
+    );
+    await harness.pump(tester, initialTab: 'files');
+
+    // Opens on the newest iteration, so step back to 1 and read it there.
+    await tester.tap(find.byIcon(Icons.history));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Iteration 1').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    expect(find.text('1/1 viewed'), findsOneWidget);
+
+    // Iteration 2 rewrote it: the mark goes without a reload of the page.
+    await tester.tap(find.byIcon(Icons.history));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Iteration 2').last);
+    await tester.pumpAndSettle();
+    expect(find.text('0/1 viewed'), findsOneWidget);
+    expect(
+      await harness.viewed.isViewed('o', 8401, '/spike/w39/one.txt'),
+      isFalse,
+    );
+  });
 }

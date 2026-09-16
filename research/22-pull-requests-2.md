@@ -199,3 +199,111 @@ the pill on `SampleDiff`) and a canned side-by-side.
 Create PR from the inbox, cherry-pick/revert, commits tab, batched review submission, pending
 thread status and extra thread filters, conflict resolution, view merge changes, follow,
 labels/avatars/counts on inbox rows, PR writes through the offline queue.
+
+## 7. What landed (2026-09-16)
+
+Built in dispatcher mode over four phases on `main`, all of it in one day.
+Every scratch write went to PR **8401** (`spike/w39-20260916-043401-a` →
+`scratch/policy-target`, policies 192 minimum-reviewers and 193 merge-strategy,
+both created by w39) or to **8334**; the client projects were read only.
+
+**P-A — the data layer.** `PullRequest` gained `autoCompleteSetBy`,
+`completionOptions` (`PrCompletionOptions`), `mergeFailureType/Message`,
+`hasMultipleMergeBases`, `labels`, `closedBy`, `webUrl` and `isDraft`;
+`PrReviewer` gained `isRequired`, `isFlagged`, `hasDeclined`, `isContainer` and
+`votedFor`; `PrComment` gained `isDeleted`, `lastContentUpdatedDate` and
+`usersLiked`; `PrThread` gained `leftLine/leftLineEnd`, `rightLineEnd`,
+`isFileLevel` and `systemKind`/`systemText` behind a flag. New `PrConflict`,
+`PrPolicy`, `PrPolicySet` and `MergeStrategy`. `PullRequestRepository` gained
+the whole write set of R2–R14 plus `policies` (cached, `git/policy/
+configurations`), `conflicts` and a `threadBody` that can anchor file-level,
+left-side and range contexts. `ViewedFilesStore` keeps R8's marks as one JSON
+document per pull request in the account-namespaced `JsonCache` rather than a
+drift table; `DiffPrefs` keeps wrap and side-by-side. `diff_model.dart` gained
+`hunkStarts`. Every write is online-only.
+
+**P-B — the detail actions.** The Overview's merge box (policies required-first
+with resolved required-reviewer names, merge state with the conflicts list, the
+state-driven Complete / Set auto-complete / Publish / Reactivate button), the
+auto-complete banner with Cancel, the completion sheet shared by Complete and
+auto-complete, the More menu (Mark as draft with R4's confirm, Publish, Abandon,
+Reactivate, Change target branch, Restart merge, Share, Copy link, Edit), the
+reviewers section with people and teams, the labels editor over the project's
+tag pool, work item link and unlink through the `#` picker, and the inbox tile's
+auto-complete badge and reason line. 54 new tests.
+
+**P-C — diff navigation and comment tools.** `DiffCursor` with Changes /
+Comments / Files modes, R7's Next file / Back to files at the ends, the floating
+pill on phones and the app-bar pair on tablets, the R16 hardware shortcuts that
+stay disabled while a field has focus, the viewed check in the diff app bar,
+wrap and side-by-side remembered per account, left-side threads rendered and
+posted from removed lines, Comment on file, long-press-drag range selection,
+`ThreadCard` edit in place and delete with the web's stub, likes with names,
+async highlighting over 20k chars, `?line=` on the diff route, and the diff
+probe's navigation battery. 56 new tests.
+
+**P-D — acceptance.** The full §5 list on the iPhone 17 and iPad Pro 13-inch
+simulators (debug, both themes, xxxL, the phone in landscape), written up in
+`research/walkthroughs/2026-09-16-pull-requests.md`. Suite **1824 green**,
+`flutter analyze` clean, no exception, overflow or assert on either console.
+
+### Proven on scratch
+
+Auto-complete set, read back in the banner and cancelled, with the options
+remembered afterwards and the merge-type list limited to squash and
+no-fast-forward by policy 193; the "wait for optional policies too" toggle
+correctly disabled because both policies are blocking. Mark as draft with the
+vote-reset confirm, and Publish. Retarget to `main` and back, with the iteration
+picker labelling every iteration `push` or `retarget`. Restart merge. Title
+edited and restored. The project team added as a reviewer, made required, made
+optional and removed. A label added and removed against the project's tag pool.
+#15545 unlinked and relinked. Share to the system sheet. On the diff: the pill
+stepping hunks, comments and files with its indicator, R7's Next file and Back
+to files, the mode menu, hiding on scroll-down and while composing, wrap, the
+viewed check; on the iPad the app-bar pair, side-by-side with left-side threads
+under the left pane, and all four keyboard shortcut families. Viewed marks
+survived a cold restart and then cleared for exactly the file a new commit
+touched — `w41_push_to_8401.py` pushed one line onto `/spike/w39/one.txt`,
+making iteration 10. Comment edit, delete stub, like and unlike, file-level,
+left-side, range and pending threads, and the Activity chip listing the run's
+own system events. The inbox's auto-complete and Draft badges.
+
+Read-only on a client project, `s66_required_reviewer_policies.py` found the
+five *Required reviewers* policies in the organization (the scratch branch has
+none) and one of their pull requests was opened to confirm the merge box
+renders **Required by policy** with all six names resolved — which closes
+NEXT-STEPS item 8's last open note.
+
+### Device defects fixed in P-D
+
+1. **The Comments tab never sent `&line=`.** The route and the diff page had
+   supported it since P-C, but `_openDiff` only ever passed `path` and
+   `iteration`, so a tap on a thread's file header opened at the top of the
+   file. It now carries the thread's own `rightLine`.
+2. **A newer iteration picked from the picker did not clear its viewed marks.**
+   `ViewedFilesStore.prune` ran only from `_load`, which keeps whichever
+   iteration the reader chose, so stepping the picker forward was the one way
+   to meet an unread version and keep the tick. `_selectIteration` prunes now.
+3. **The nav pill sat over a thread's Cancel / Save row.** `showsPill` tested
+   only the page's own new-thread composer; a card's inline reply box and its
+   edit-in-place field are the card's state. The pill now also hides while any
+   field inside the diff has focus.
+4. **The reply and edit boxes came up unfocused** (a P-C defect found while
+   chasing 3): `autofocus: true` lost the race with the `ensureVisible` that
+   reveals the composer, so both needed a second tap before they could be typed
+   into. `_startReply` and `_startEdit` claim the focus post-frame.
+
+### Still open
+
+Not demonstrable while Kelly is the only identity on the tenant: the Complete
+state after a second reviewer's vote; reset vote, flag and decline driven from
+the app (w39 proved all three against the API); the required/optional reviewer
+inbox reason labels; and the bypass-refusal text. The conflicts list has still
+never been seen in the app, because 8401 merges cleanly and w39's conflict PR
+was abandoned. Smaller: the branch picker offers the pull request's own source
+branch and shows the service's raw refusal code; the Files tab keeps the
+reader's chosen iteration after a new one arrives; the inbox list needs a pull
+to pick up a detail-page write; Side by side is offered on a phone, where R16
+only promises it at the expanded breakpoint; likers' names are a tooltip the
+tap harness cannot raise; and `tool/shot-ios.sh` still double-rotates landscape
+thumbnails on this iOS.

@@ -106,6 +106,11 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   /// screen.
   int? _position;
   bool _pillVisible = true;
+
+  /// True while a text field inside the diff has focus — the page's own
+  /// composer, a thread's reply box or its edit-in-place field — so the
+  /// pill can get out of the way of the Cancel / Save row (R6).
+  bool _editorFocused = false;
   _Landing _landing = _Landing.none;
 
   /// How many frames the pending landing has waited for a laid-out list.
@@ -999,74 +1004,90 @@ class _PrFileDiffPageState extends State<PrFileDiffPage> {
   }) {
     // The pill hides while a comment is being written and while the reader
     // scrolls down, and comes back on the way up (R6).
-    final showsPill = !expanded && _composer == null && _pillVisible;
+    //
+    // "Being written" is more than the page's own new-thread composer: a
+    // thread card's inline reply box and its edit-in-place field are its
+    // own state, and on a phone the pill sat straight over their Cancel /
+    // Save row (P-D). Both autofocus, so descendant focus is the signal
+    // that covers all three without the card having to report upwards.
+    final showsPill =
+        !expanded && _composer == null && !_editorFocused && _pillVisible;
     return Stack(
       children: [
-        NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            if (notification.metrics.axis != Axis.vertical) return false;
-            if (notification is UserScrollNotification) {
-              final visible = switch (notification.direction) {
-                ScrollDirection.reverse => false,
-                ScrollDirection.forward => true,
-                ScrollDirection.idle => _pillVisible,
-              };
-              if (visible != _pillVisible) {
-                setState(() => _pillVisible = visible);
-              }
-            } else if (notification is ScrollStartNotification &&
-                notification.dragDetails != null) {
-              // The reader took over from the last jump: from here the
-              // indicator follows the viewport (R6).
-              setState(() => _position = null);
-            } else if (notification is ScrollEndNotification) {
-              // Re-read the viewport, which is where the indicator comes
-              // from while no jump is standing.
-              if (_position == null) setState(() {});
+        Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onFocusChange: (hasFocus) {
+            if (hasFocus != _editorFocused) {
+              setState(() => _editorFocused = hasFocus);
             }
-            return false;
           },
-          // The diff scrolls sideways too, so only a pull on the
-          // rows themselves refreshes (same rule as the board).
-          child: RefreshIndicator(
-            onRefresh: _load,
-            notificationPredicate: (n) =>
-                n.depth == 1 && n.metrics.axis == Axis.vertical,
-            child: DiffView(
-              diff: diff,
-              controller: _nav,
-              oldRuns: _oldRuns,
-              newRuns: _newRuns,
-              threads: _threads,
-              composer: _composer,
-              wrap: _wrap,
-              sideBySide: _sideBySideNow,
-              endPadding: expanded ? Spacing.xxl : 96,
-              posting: _posting,
-              canAct: canAct,
-              meId: _meId,
-              mentions: _mentions,
-              mentionNames: _mentionNames,
-              attachments: _attachments,
-              uploads: _uploads,
-              wikiPages: _wikiPages,
-              offline: _offline,
-              onOpenMention: _openMention,
-              onGutterTap: canAct
-                  ? (anchor) => setState(
-                      () => _composer = _composer == anchor ? null : anchor,
-                    )
-                  : null,
-              onCancelComposer: () => setState(() => _composer = null),
-              onPost: _post,
-              onReply: _reply,
-              onSetThreadStatus: _setThreadStatus,
-              onEditComment: _editComment,
-              onDeleteComment: _deleteComment,
-              onLikeComment: _likeComment,
-              onApplySuggestion: canAct && _atLatestIteration
-                  ? _applySuggestion
-                  : null,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.axis != Axis.vertical) return false;
+              if (notification is UserScrollNotification) {
+                final visible = switch (notification.direction) {
+                  ScrollDirection.reverse => false,
+                  ScrollDirection.forward => true,
+                  ScrollDirection.idle => _pillVisible,
+                };
+                if (visible != _pillVisible) {
+                  setState(() => _pillVisible = visible);
+                }
+              } else if (notification is ScrollStartNotification &&
+                  notification.dragDetails != null) {
+                // The reader took over from the last jump: from here the
+                // indicator follows the viewport (R6).
+                setState(() => _position = null);
+              } else if (notification is ScrollEndNotification) {
+                // Re-read the viewport, which is where the indicator comes
+                // from while no jump is standing.
+                if (_position == null) setState(() {});
+              }
+              return false;
+            },
+            // The diff scrolls sideways too, so only a pull on the
+            // rows themselves refreshes (same rule as the board).
+            child: RefreshIndicator(
+              onRefresh: _load,
+              notificationPredicate: (n) =>
+                  n.depth == 1 && n.metrics.axis == Axis.vertical,
+              child: DiffView(
+                diff: diff,
+                controller: _nav,
+                oldRuns: _oldRuns,
+                newRuns: _newRuns,
+                threads: _threads,
+                composer: _composer,
+                wrap: _wrap,
+                sideBySide: _sideBySideNow,
+                endPadding: expanded ? Spacing.xxl : 96,
+                posting: _posting,
+                canAct: canAct,
+                meId: _meId,
+                mentions: _mentions,
+                mentionNames: _mentionNames,
+                attachments: _attachments,
+                uploads: _uploads,
+                wikiPages: _wikiPages,
+                offline: _offline,
+                onOpenMention: _openMention,
+                onGutterTap: canAct
+                    ? (anchor) => setState(
+                        () => _composer = _composer == anchor ? null : anchor,
+                      )
+                    : null,
+                onCancelComposer: () => setState(() => _composer = null),
+                onPost: _post,
+                onReply: _reply,
+                onSetThreadStatus: _setThreadStatus,
+                onEditComment: _editComment,
+                onDeleteComment: _deleteComment,
+                onLikeComment: _likeComment,
+                onApplySuggestion: canAct && _atLatestIteration
+                    ? _applySuggestion
+                    : null,
+              ),
             ),
           ),
         ),

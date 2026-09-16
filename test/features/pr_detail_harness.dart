@@ -147,9 +147,14 @@ PrPolicySet policyTargetSet({
 
 /// Answers the two reads [PrDiffSource] makes for the Files tab.
 class PrAdapter implements HttpClientAdapter {
-  PrAdapter({this.changeEntries = const []});
+  PrAdapter({this.changeEntries = const [], this.changesByIteration});
 
   final List<Map<String, dynamic>> changeEntries;
+
+  /// Per-iteration change lists, for the tests that step the picker. When
+  /// it is set the iteration list is as long as it is; otherwise there is
+  /// one iteration answering [changeEntries].
+  final Map<int, List<Map<String, dynamic>>>? changesByIteration;
 
   @override
   Future<ResponseBody> fetch(
@@ -157,17 +162,34 @@ class PrAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    final body = options.uri.path.contains('/changes')
-        ? {'changeEntries': changeEntries}
-        : {
-            'value': [
-              {
-                'id': 1,
-                'sourceRefCommit': {'commitId': 'src'},
-                'commonRefCommit': {'commitId': 'base'},
-              },
-            ],
-          };
+    final byIteration = changesByIteration;
+    final Map<String, dynamic> body;
+    if (options.uri.path.contains('/changes')) {
+      final id =
+          int.tryParse(
+            RegExp(r'/iterations/(\d+)/changes')
+                    .firstMatch(options.uri.path)
+                    ?.group(1) ??
+                '',
+          ) ??
+          1;
+      body = {
+        'changeEntries': byIteration == null
+            ? changeEntries
+            : (byIteration[id] ?? const []),
+      };
+    } else {
+      body = {
+        'value': [
+          for (final id in byIteration?.keys ?? const [1])
+            {
+              'id': id,
+              'sourceRefCommit': {'commitId': 'src$id'},
+              'commonRefCommit': {'commitId': 'base'},
+            },
+        ],
+      };
+    }
     return ResponseBody.fromString(
       jsonEncode(body),
       200,
@@ -192,6 +214,7 @@ class PrHarness {
     this.conflicts = const [],
     this.threads = const [],
     this.changeEntries = const [],
+    this.changesByIteration,
     this.workItemsLinked = const [],
   });
 
@@ -202,6 +225,7 @@ class PrHarness {
   List<PrConflict> conflicts;
   List<Map<String, dynamic>> threads;
   List<Map<String, dynamic>> changeEntries;
+  final Map<int, List<Map<String, dynamic>>>? changesByIteration;
   List<WorkItem> workItemsLinked;
 
   late final PrRepo repo = PrRepo();
@@ -336,7 +360,11 @@ class PrHarness {
     addTearDown(tester.view.reset);
     final client = AdoClient(
       tokenProvider: ({String? tenantId, String? accountId}) async => 'tok',
-      dio: Dio()..httpClientAdapter = PrAdapter(changeEntries: changeEntries),
+      dio: Dio()
+        ..httpClientAdapter = PrAdapter(
+          changeEntries: changeEntries,
+          changesByIteration: changesByIteration,
+        ),
     );
     final auth = AuthBloc(PrAuth());
     addTearDown(auth.close);
