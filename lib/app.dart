@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'auth/auth_bloc.dart';
 import 'auth/auth_service.dart';
+import 'core/config/app_config.dart';
 import 'core/http/ado_client.dart';
 import 'core/notifications/notification_service.dart';
 import 'data/activity_sync.dart';
@@ -34,6 +35,7 @@ import 'data/repositories/work_item_repository.dart';
 import 'data/search_recents.dart';
 import 'data/viewed_files_store.dart';
 import 'data/write_queue.dart';
+import 'demo/demo_account.dart';
 import 'features/launch/launch_dependencies.dart';
 import 'features/launch/launch_resolver.dart';
 import 'features/notifications/push_coordinator.dart';
@@ -275,7 +277,13 @@ class _BoardhopAppState extends State<BoardhopApp> {
   /// the first one the accounts offer. Built here so the router's redirect
   /// and the picker share one instance, memory and pending notice alike.
   late final LaunchResolver _launch = launchResolverFor(widget.deps);
-  late final _router = buildRouter(_authBloc, widget.deps, launch: _launch);
+  late final _router = buildRouter(
+    _authBloc,
+    widget.deps,
+    launch: _launch,
+    // Demo mode's scripted destination for store screenshots.
+    launchOverride: AppConfig.demoMode ? demoLaunchRoute : null,
+  );
   late final PushCoordinator _push = PushCoordinator(
     push: widget.deps.push,
     notifications: widget.deps.notifications,
@@ -302,7 +310,8 @@ class _BoardhopAppState extends State<BoardhopApp> {
     // pointer (`push:{json}`), which the coordinator turns into a route for
     // the account that organization belongs to.
     _taps = deps.notifications.taps.listen(_onNotificationPayload);
-    _push.start();
+    // Demo mode never registers with the relay.
+    if (!AppConfig.demoMode) _push.start();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final launch = deps.notifications.takeLaunchRoute();
       if (launch != null) _onNotificationPayload(launch);
@@ -319,7 +328,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
             ..beforeNotify = _push.drainPushed
             ..start();
         }
-        unawaited(_push.syncAccounts(ids));
+        if (!AppConfig.demoMode) unawaited(_push.syncAccounts(ids));
       } else if (state is AuthSignedOut) {
         for (final bound in deps.boundAccounts.toList()) {
           bound.activitySync.stop();
@@ -372,6 +381,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
           child: Builder(
             builder: (context) => MaterialApp.router(
               title: 'Boardhop',
+              debugShowCheckedModeBanner: !AppConfig.demoMode,
               theme: _light,
               darkTheme: _dark,
               themeMode: ThemeScope.of(context).mode,

@@ -66,8 +66,12 @@ GoRouter buildRouter(
   AuthBloc auth,
   AppDependencies deps, {
   LaunchResolver? launch,
+  String? launchOverride,
 }) {
-  final redirect = LaunchRedirect(launch ?? launchResolverFor(deps));
+  final redirect = LaunchRedirect(
+    launch ?? launchResolverFor(deps),
+    override: launchOverride,
+  );
   return GoRouter(
     initialLocation: '/',
     refreshListenable: _StreamListenable(auth.stream),

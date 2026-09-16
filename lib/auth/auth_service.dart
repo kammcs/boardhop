@@ -20,7 +20,11 @@ import '../core/http/ado_exceptions.dart';
 /// real time by answering 401 with a claims challenge, which
 /// [resolveChallenge] feeds back into MSAL.
 class AuthService {
-  AuthService._(this._pca);
+  AuthService._(this._pca, [this._demo]);
+
+  /// Demo mode (`BOARDHOP_DEMO`): one invented account that is always
+  /// signed in, whose token only the demo backend ever sees.
+  AuthService.demo(Account account) : this._(null, account);
 
   /// Creates the public client application. Returns an unconfigured service
   /// (every auth call throws `AdoAuthException`) when `BOARDHOP_CLIENT_ID`
@@ -52,6 +56,7 @@ class AuthService {
   }
 
   final MultipleAccountPca? _pca;
+  final Account? _demo;
 
   /// Access tokens by `accountId|tenantId` (tenant null = home tenant).
   final Map<String, AuthenticationResult> _tokens = {};
@@ -61,7 +66,7 @@ class AuthService {
   /// Refresh this long before expiry to avoid racing the clock.
   static const _expirySlack = Duration(minutes: 3);
 
-  bool get isConfigured => _pca != null;
+  bool get isConfigured => _pca != null || _demo != null;
 
   /// Most recent token result per account and tenant; diagnostics only.
   Map<String, AuthenticationResult> get cachedResults =>
@@ -92,6 +97,8 @@ class AuthService {
 
   /// Every signed-in account, by username.
   Future<List<Account>> accounts() async {
+    final demo = _demo;
+    if (demo != null) return _accounts = [demo];
     if (_pca == null) return const [];
     try {
       final list = await _client.getAccounts();
@@ -170,6 +177,7 @@ class AuthService {
   /// or MSAL would need the user, so callers fall back to the Azure DevOps
   /// profile instead of prompting.
   Future<String?> graphAccessToken(String accountId) async {
+    if (_demo != null) return null;
     final cached = _graphTokens[accountId];
     if (cached != null &&
         cached.expiresOn.isAfter(DateTime.now().add(_expirySlack))) {
@@ -201,6 +209,7 @@ class AuthService {
 
   /// `TokenProvider` for `AdoClient`: cached token if fresh, else silent.
   Future<String> accessToken({String? tenantId, String? accountId}) async {
+    if (_demo != null) return 'demo';
     final account = accountId ?? await _defaultAccountId();
     final cached = _tokens[_key(account, tenantId)];
     if (cached != null &&

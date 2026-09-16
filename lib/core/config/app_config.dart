@@ -15,10 +15,16 @@ abstract final class AppConfig {
   /// it, store builds (TestFlight, Google Play, both `--release`) do not. A
   /// release build can opt back in with `--dart-define=BOARDHOP_DIAGNOSTICS=true`
   /// for a one-off investigation; nothing in the ship scripts sets it.
+  /// Demo mode turns it off too, so no test gear shows in a screenshot.
   static const diagnosticsEnabled = bool.fromEnvironment(
     'BOARDHOP_DIAGNOSTICS',
-    defaultValue: !kReleaseMode,
+    defaultValue: !kReleaseMode && !demoMode,
   );
+
+  /// Store-screenshot demo mode: no sign-in and no network. Every Azure
+  /// DevOps call is answered locally by `lib/demo` with invented data about
+  /// Boardhop building itself. Never set by the ship scripts.
+  static const demoMode = bool.fromEnvironment('BOARDHOP_DEMO');
 
   /// Android redirect URI: `msauth://<package>/<url-encoded signature hash>`.
   /// The hash is per signing key, so debug builds on another machine need
@@ -47,7 +53,7 @@ abstract final class AppConfig {
   /// answers. Android reads the same flag from `assets/msal_config.json`.
   static const clientCapabilities = <String>['CP1'];
 
-  static bool get isConfigured => clientId.isNotEmpty;
+  static bool get isConfigured => demoMode || clientId.isNotEmpty;
 
   static String authorityFor(String? tenantId) => tenantId == null
       ? authority
