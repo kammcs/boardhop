@@ -99,22 +99,21 @@ void main() {
       expect(uri.queryParameters['api-version'], '7.1');
       expect(meta.queryType, 'flat');
       expect(meta.isFlat, isTrue);
-      expect(meta.columns, [
-        'System.Id',
-        'System.Title',
-        'System.State',
-      ]);
+      expect(meta.columns, ['System.Id', 'System.Title', 'System.State']);
       expect(meta.wiql, startsWith('SELECT'));
     });
 
-    test('a tree query is not flat, which changes what the card draws', () async {
-      adapter.answers['wit/queries/$queryId'] = {
-        ...queryAnswer(),
-        'queryType': 'tree',
-      };
-      final meta = await repository.queryMeta(org, project, queryId);
-      expect(meta.isFlat, isFalse);
-    });
+    test(
+      'a tree query is not flat, which changes what the card draws',
+      () async {
+        adapter.answers['wit/queries/$queryId'] = {
+          ...queryAnswer(),
+          'queryType': 'tree',
+        };
+        final meta = await repository.queryMeta(org, project, queryId);
+        expect(meta.isFlat, isFalse);
+      },
+    );
 
     test('is cached and the second call makes no request', () async {
       adapter.answers['wit/queries/$queryId'] = queryAnswer();
@@ -123,10 +122,7 @@ void main() {
       await repository.queryMeta(org, project, queryId);
 
       expect(adapter.requests.length, 1);
-      expect(
-        WorkItemRepository.queryMetaKey(queryId),
-        'query:meta:$queryId',
-      );
+      expect(WorkItemRepository.queryMetaKey(queryId), 'query:meta:$queryId');
     });
 
     test('a failure falls back to the cached definition', () async {
@@ -266,6 +262,151 @@ void main() {
       expect(query[r'$top'], '20');
     });
   });
+
+  group('pull request link/unlink (research/22 §1)', () {
+    const projectGuid = '98720989-0195-48cb-ae2e-0e58ec1bb9a9';
+    const repoGuid = '4c06881a-4e20-49c8-88c4-a21323fe04b5';
+    const prId = 8401;
+    const artifact =
+        'vstfs:///Git/PullRequestId/$projectGuid%2F$repoGuid%2F$prId';
+
+    Map<String, dynamic> item({List<Map<String, dynamic>>? relations}) => {
+      'id': 15545,
+      'rev': 34,
+      'fields': {'System.Title': 'Scratch work item'},
+      'relations': relations ?? const <Map<String, dynamic>>[],
+    };
+
+    Map<String, dynamic> artifactLink(String url) => {
+      'rel': 'ArtifactLink',
+      'url': url,
+      'attributes': {'name': 'Pull Request'},
+    };
+
+    List<Map<String, dynamic>> ops(RequestOptions r) => [
+      for (final op in r.data as List) (op as Map).cast<String, dynamic>(),
+    ];
+
+    test('link adds one ArtifactLink with the encoded separators', () async {
+      adapter.answers['wit/workitems/15545'] = item();
+
+      await repository.linkPullRequest(
+        org,
+        15545,
+        projectGuid,
+        repoGuid,
+        prId,
+        project: project,
+      );
+
+      // A read with the relations, then the guarded patch.
+      expect(adapter.requests.first.method, 'GET');
+      expect(adapter.last.method, 'PATCH');
+      expect(
+        adapter.last.headers[Headers.contentTypeHeader],
+        contains('json-patch'),
+      );
+      final patch = ops(adapter.last);
+      // Every work item patch opens with the revision guard.
+      expect(patch.first, {'op': 'test', 'path': '/rev', 'value': 34});
+      expect(patch.last['op'], 'add');
+      expect(patch.last['path'], '/relations/-');
+      final value = (patch.last['value'] as Map).cast<String, dynamic>();
+      expect(value['rel'], 'ArtifactLink');
+      expect(value['url'], artifact);
+      // The service stores `%2f`; a plain `/` url is taken as a second,
+      // duplicate relation, so the app always writes the encoded form.
+      expect(value['url'], contains('%2F'));
+      expect(
+        value['url'].toString().split('PullRequestId/').last,
+        isNot(contains('/')),
+      );
+      expect((value['attributes'] as Map)['name'], 'Pull Request');
+    });
+
+    test('link is a no-op when the relation is already there', () async {
+      adapter.answers['wit/workitems/15545'] = item(
+        relations: [artifactLink(artifact)],
+      );
+
+      await repository.linkPullRequest(
+        org,
+        15545,
+        projectGuid,
+        repoGuid,
+        prId,
+        project: project,
+      );
+
+      expect(adapter.requests.map((r) => r.method), ['GET']);
+    });
+
+    test('unlink removes the relation by index', () async {
+      adapter.answers['wit/workitems/15545'] = item(
+        relations: [
+          {'rel': 'System.LinkTypes.Hierarchy-Reverse', 'url': 'x'},
+          artifactLink(artifact),
+        ],
+      );
+
+      await repository.unlinkPullRequest(
+        org,
+        15545,
+        projectGuid,
+        repoGuid,
+        prId,
+        project: project,
+      );
+
+      final patch = ops(adapter.last);
+      expect(patch.first, {'op': 'test', 'path': '/rev', 'value': 34});
+      expect(patch.last, {'op': 'remove', 'path': '/relations/1'});
+    });
+
+    test('unlink matches the plain-slash and upper-case forms too', () async {
+      adapter.answers['wit/workitems/15545'] = item(
+        relations: [
+          artifactLink(
+            'vstfs:///Git/PullRequestId/'
+            '${projectGuid.toUpperCase()}/$repoGuid/$prId',
+          ),
+        ],
+      );
+
+      await repository.unlinkPullRequest(
+        org,
+        15545,
+        projectGuid,
+        repoGuid,
+        prId,
+        project: project,
+      );
+
+      expect(ops(adapter.last).last, {'op': 'remove', 'path': '/relations/0'});
+    });
+
+    test('unlink does nothing when the link has already gone', () async {
+      adapter.answers['wit/workitems/15545'] = item();
+
+      await repository.unlinkPullRequest(
+        org,
+        15545,
+        projectGuid,
+        repoGuid,
+        prId,
+        project: project,
+      );
+
+      expect(adapter.requests.map((r) => r.method), ['GET']);
+    });
+
+    test('the artifact url is built the way the service stores it', () {
+      expect(
+        WorkItemRepository.pullRequestArtifactUrl(projectGuid, repoGuid, prId),
+        artifact,
+      );
+    });
+  });
 }
 
 /// Answers the first request with [firstStatus] and everything after it
@@ -292,9 +433,13 @@ class _SwitchingAdapter implements HttpClientAdapter {
     if (isFirst()) {
       onFirst();
       inner.requests.add(options);
-      return ResponseBody.fromString('', firstStatus, headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType],
-      });
+      return ResponseBody.fromString(
+        '',
+        firstStatus,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
+      );
     }
     return inner.fetch(options, requestStream, cancelFuture);
   }

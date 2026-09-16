@@ -32,6 +32,9 @@ class PullRequestRepository {
   static const apiVersion = '7.1';
   static const policyApiVersion = '7.1-preview.1';
 
+  /// Branch policies change rarely; the merge box reads them on every open.
+  static const policiesTtl = Duration(hours: 1);
+
   final Map<String, String> _me = {};
 
   static String listKey(
@@ -244,31 +247,359 @@ class PullRequestRepository {
     return PrReviewer.fromJson(json);
   }
 
-  Future<PullRequest> complete(
+  /// `PATCH {pr}` with whatever the caller changed. Every pull request
+  /// write is online-only: nothing here goes through the [WriteQueue],
+  /// because a merge, a vote or a reviewer change read back later would be
+  /// a different answer than the one the user was shown (§4.1).
+  Future<PullRequest> _patch(
     String org,
-    PullRequest pr, {
-    bool deleteSourceBranch = true,
-    bool squash = false,
-    String? commitMessage,
-  }) async {
+    PullRequest pr,
+    Map<String, dynamic> body,
+  ) async {
     final json = await _client.send(
       method: 'PATCH',
       org: org,
       project: pr.projectId,
       path: '_apis/git/repositories/${pr.repositoryId}/pullRequests/${pr.id}',
       apiVersion: apiVersion,
-      body: {
-        'status': 'completed',
-        if (pr.lastMergeSourceCommit != null)
-          'lastMergeSourceCommit': {'commitId': pr.lastMergeSourceCommit},
-        'completionOptions': {
-          'deleteSourceBranch': deleteSourceBranch,
-          'mergeStrategy': squash ? 'squash' : 'noFastForward',
-          'mergeCommitMessage': ?commitMessage,
-        },
-      },
+      body: body,
     );
     return PullRequest.fromJson(json);
+  }
+
+  /// Completes the pull request now, with the sheet's choices.
+  Future<PullRequest> complete(
+    String org,
+    PullRequest pr,
+    PrCompletionOptions options,
+  ) => _patch(org, pr, {
+    'status': 'completed',
+    if (pr.lastMergeSourceCommit != null)
+      'lastMergeSourceCommit': {'commitId': pr.lastMergeSourceCommit},
+    'completionOptions': options.toJson(),
+  });
+
+  /// Auto-complete: the service merges once every blocking policy passes.
+  ///
+  /// It is only offered when the target carries a blocking policy
+  /// ([PrPolicySet.hasBlocking]) — without one the service merges the
+  /// moment this lands, which is not what "auto-complete" reads as.
+  Future<PullRequest> setAutoComplete(
+    String org,
+    PullRequest pr,
+    PrCompletionOptions options,
+  ) async {
+    final me = await meId(org);
+    return _patch(org, pr, {
+      'autoCompleteSetBy': {'id': me},
+      'completionOptions': options.toJson(),
+    });
+  }
+
+  /// The null GUID is how auto-complete is cancelled; the options stay,
+  /// which is what makes the sheet's choices sticky (spike w39 §2).
+  static const nullGuid = '00000000-0000-0000-0000-000000000000';
+
+  Future<PullRequest> cancelAutoComplete(String org, PullRequest pr) =>
+      _patch(org, pr, {
+        'autoCompleteSetBy': {'id': nullGuid},
+      });
+
+  /// Publish a draft (`false`) or mark an active pull request as a draft.
+  /// Marking as draft clears the votes, which is what R4's confirm warns
+  /// about.
+  Future<PullRequest> setDraft(String org, PullRequest pr, bool isDraft) =>
+      _patch(org, pr, {'isDraft': isDraft});
+
+  /// Change the target branch; the service adds a `retarget` iteration with
+  /// no files and re-queues the merge.
+  Future<PullRequest> retarget(
+    String org,
+    PullRequest pr,
+    String targetRefName,
+  ) => _patch(org, pr, {'targetRefName': targetRefName});
+
+  /// Re-runs the merge. There is no "restart merge" route: writing the
+  /// default merge options is what the web does, and it moves the status
+  /// back to `queued` (spike w39 §2).
+  Future<PullRequest> restartMerge(String org, PullRequest pr) =>
+      _patch(org, pr, {
+        'mergeOptions': {
+          'detectRenameFalsePositives': false,
+          'disableRenames': false,
+          'conflictAuthorshipCommits': false,
+        },
+      });
+
+  Future<PullRequest> update(
+    String org,
+    PullRequest pr, {
+    String? title,
+    String? description,
+  }) => _patch(org, pr, {'title': ?title, 'description': ?description});
+
+  /// `PUT reviewers/{id}` adds the reviewer, or toggles required on one
+  /// already there. `isRequired: false` is how the web makes a reviewer
+  /// optional again (the field simply drops off the answer).
+  Future<PrReviewer> addReviewer(
+    String org,
+    PullRequest pr,
+    String identityId, {
+    bool isRequired = false,
+  }) async {
+    final json = await _client.send(
+      method: 'PUT',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'reviewers/$identityId'),
+      apiVersion: apiVersion,
+      body: {'id': identityId, 'vote': 0, 'isRequired': isRequired},
+    );
+    return PrReviewer.fromJson(json);
+  }
+
+  Future<void> removeReviewer(String org, PullRequest pr, String identityId) =>
+      _client.send(
+        method: 'DELETE',
+        org: org,
+        project: pr.projectId,
+        path: _prPath(pr, 'reviewers/$identityId'),
+        apiVersion: apiVersion,
+      );
+
+  /// Required/optional without touching the vote: the same `PUT` as
+  /// [addReviewer], which is idempotent for someone already a reviewer.
+  Future<PrReviewer> setRequired(
+    String org,
+    PullRequest pr,
+    String identityId,
+    bool isRequired,
+  ) => addReviewer(org, pr, identityId, isRequired: isRequired);
+
+  /// The author resetting one reviewer's vote: the batch `PATCH reviewers`
+  /// route, which answers 204 with no body. `PUT reviewers/{id}` with
+  /// `vote: 0` would vote *as* that reviewer, which the service refuses.
+  Future<void> resetVote(String org, PullRequest pr, String reviewerId) =>
+      _client.send(
+        method: 'PATCH',
+        org: org,
+        project: pr.projectId,
+        path: _prPath(pr, 'reviewers'),
+        apiVersion: apiVersion,
+        body: [
+          {'id': reviewerId, 'vote': 0},
+        ],
+      );
+
+  /// Flag the pull request for the author's attention (R12).
+  Future<PrReviewer> flag(
+    String org,
+    PullRequest pr,
+    String reviewerId, {
+    bool isFlagged = true,
+  }) async {
+    final json = await _client.send(
+      method: 'PATCH',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'reviewers/$reviewerId'),
+      apiVersion: apiVersion,
+      body: {'isFlagged': isFlagged},
+    );
+    return PrReviewer.fromJson(json);
+  }
+
+  /// Decline to review. The creator cannot decline their own pull request:
+  /// the service answers HTTP 500, so the action is hidden for the author.
+  Future<PrReviewer> decline(
+    String org,
+    PullRequest pr,
+    String reviewerId, {
+    bool hasDeclined = true,
+  }) async {
+    final json = await _client.send(
+      method: 'PATCH',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'reviewers/$reviewerId'),
+      apiVersion: apiVersion,
+      body: {'hasDeclined': hasDeclined},
+    );
+    return PrReviewer.fromJson(json);
+  }
+
+  /// Labels, which `GET pullRequests/{id}` never carries (spikes s65 §A,
+  /// w40): the detail page merges this sub-resource into the pull request.
+  Future<List<PrLabel>> labels(String org, PullRequest pr) async {
+    final json = await _client.getJson(
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'labels'),
+      apiVersion: apiVersion,
+    );
+    return PrLabel.listFrom(json['value']);
+  }
+
+  /// Adds a label by name; an existing one comes back unchanged.
+  Future<PrLabel> addLabel(String org, PullRequest pr, String name) async {
+    final json = await _client.send(
+      method: 'POST',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'labels'),
+      apiVersion: apiVersion,
+      body: {'name': name},
+    );
+    return PrLabel.fromJson(json);
+  }
+
+  /// Removes a label by name or id; a name goes in unencoded because
+  /// [AdoClient.buildUri] encodes each path segment itself.
+  Future<void> removeLabel(String org, PullRequest pr, String nameOrId) =>
+      _client.send(
+        method: 'DELETE',
+        org: org,
+        project: pr.projectId,
+        path: _prPath(pr, 'labels/$nameOrId'),
+        apiVersion: apiVersion,
+      );
+
+  /// Edits one comment in place; the service moves
+  /// `lastContentUpdatedDate`, which is what renders the "edited" marker.
+  Future<PrComment> editComment(
+    String org,
+    PullRequest pr,
+    int threadId,
+    int commentId,
+    String content,
+  ) async {
+    final json = await _client.send(
+      method: 'PATCH',
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'threads/$threadId/comments/$commentId'),
+      apiVersion: apiVersion,
+      body: {'content': content},
+    );
+    return PrComment.fromJson(json);
+  }
+
+  /// Deletes one comment. The comment stays in the thread with
+  /// `isDeleted: true` and no content (the web's stub); deleting the last
+  /// one deletes the thread with it.
+  Future<void> deleteComment(
+    String org,
+    PullRequest pr,
+    int threadId,
+    int commentId,
+  ) => _client.send(
+    method: 'DELETE',
+    org: org,
+    project: pr.projectId,
+    path: _prPath(pr, 'threads/$threadId/comments/$commentId'),
+    apiVersion: apiVersion,
+  );
+
+  /// Both like routes are idempotent (spike w39 §4).
+  Future<void> like(String org, PullRequest pr, int threadId, int commentId) =>
+      _client.send(
+        method: 'POST',
+        org: org,
+        project: pr.projectId,
+        path: _prPath(pr, 'threads/$threadId/comments/$commentId/likes'),
+        apiVersion: apiVersion,
+      );
+
+  Future<void> unlike(
+    String org,
+    PullRequest pr,
+    int threadId,
+    int commentId,
+  ) => _client.send(
+    method: 'DELETE',
+    org: org,
+    project: pr.projectId,
+    path: _prPath(pr, 'threads/$threadId/comments/$commentId/likes'),
+    apiVersion: apiVersion,
+  );
+
+  /// The merge conflicts behind `mergeStatus: conflicts` (undocumented but
+  /// 7.1). Resolution stays out of v1: the list is read-only here.
+  Future<List<PrConflict>> conflicts(
+    String org,
+    PullRequest pr, {
+    bool excludeResolved = false,
+    int top = 100,
+  }) async {
+    final json = await _client.getJson(
+      org: org,
+      project: pr.projectId,
+      path: _prPath(pr, 'conflicts'),
+      apiVersion: apiVersion,
+      query: {if (excludeResolved) 'excludeResolved': 'true', r'$top': '$top'},
+    );
+    return ((json['value'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => PrConflict.fromJson(m.cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// Mails the pull request to people (R2's Share).
+  Future<void> share(
+    String org,
+    PullRequest pr,
+    List<String> identityIds,
+    String message,
+  ) => _client.send(
+    method: 'POST',
+    org: org,
+    project: pr.projectId,
+    path: _prPath(pr, 'share'),
+    apiVersion: apiVersion,
+    body: {
+      'receivers': [
+        for (final id in identityIds) {'id': id},
+      ],
+      'message': message,
+    },
+  );
+
+  static String policiesKey(String org, String repositoryId, String refName) =>
+      'pr:policies:$org:$repositoryId:$refName';
+
+  /// Branch policies on the pull request's target, which decide whether
+  /// auto-complete is offered at all, which merge strategies the sheet may
+  /// offer, and the required-reviewer names in Checks.
+  ///
+  /// Cached for an hour: policies change rarely and every merge box read
+  /// would otherwise cost a call. A cached answer is filtered through
+  /// [PrPolicySet.forTarget] again so a stale blob cannot leak another
+  /// branch's rules.
+  Future<PrPolicySet> policies(
+    String org,
+    String project,
+    String repositoryId,
+    String targetRefName, {
+    bool refresh = false,
+  }) async {
+    final key = policiesKey(org, repositoryId, targetRefName);
+    if (!refresh) {
+      final hit = await _cache.get(key);
+      if (hit != null &&
+          DateTime.now().difference(hit.fetchedAt) < policiesTtl) {
+        return PrPolicySet.fromJson(hit.json, targetRefName);
+      }
+    }
+    final json = await _client.getJson(
+      org: org,
+      project: project,
+      path: '_apis/git/policy/configurations',
+      apiVersion: apiVersion,
+      query: {'repositoryId': repositoryId, 'refName': targetRefName},
+    );
+    final set = PrPolicySet.fromJson(json, targetRefName);
+    await _store(key, set.toJson());
+    return set;
   }
 
   Future<PullRequest> setStatus(
@@ -287,35 +618,60 @@ class PullRequestRepository {
     return PullRequest.fromJson(json);
   }
 
-  /// Body for a new thread: a plain conversation comment, or a line comment
-  /// anchored on the right side of [iteration] with the change's tracking
-  /// id so the service moves it across later pushes (spike w03).
+  /// `offset: 2147483647` is how the service spells "end of line"; a range
+  /// that covers whole lines ends there (research/22 §1).
+  static const endOfLineOffset = 2147483647;
+
+  /// Body for a new thread.
+  ///
+  /// Four shapes, all verified on the scratch pull request (spike w39 §4):
+  /// a plain conversation comment (no [filePath]); a **file-level** comment
+  /// ([fileLevel], a `threadContext` with the path and nothing else); a line
+  /// comment on the right (new) side; and the same on the **left**
+  /// (original) side with [leftSide], which is what the gutter of a removed
+  /// line posts. [endLine] extends any of the line shapes into a range
+  /// (R10). The iteration context carries the change's tracking id so the
+  /// service moves the thread across later pushes (spike w03).
   static Map<String, dynamic> threadBody({
     required String content,
     String? filePath,
     int? line,
+    int? endLine,
+    bool leftSide = false,
+    bool fileLevel = false,
     int? changeTrackingId,
     int? iteration,
-  }) => {
-    'comments': [
-      {'parentCommentId': 0, 'content': content, 'commentType': 1},
-    ],
-    'status': 1,
-    if (filePath != null && line != null)
-      'threadContext': {
-        'filePath': filePath,
-        'rightFileStart': {'line': line, 'offset': 1},
-        'rightFileEnd': {'line': line, 'offset': 1},
+  }) {
+    final last = endLine == null || endLine < (line ?? 0) ? line : endLine;
+    final isRange = line != null && last != null && last > line;
+    final anchored = filePath != null && line != null && !fileLevel;
+    final startKey = leftSide ? 'leftFileStart' : 'rightFileStart';
+    final endKey = leftSide ? 'leftFileEnd' : 'rightFileEnd';
+    final context = switch (filePath) {
+      final String path when fileLevel => {'filePath': path},
+      final String path when anchored => {
+        'filePath': path,
+        startKey: {'line': line, 'offset': 1},
+        endKey: {'line': last, 'offset': isRange ? endOfLineOffset : 1},
       },
-    if (filePath != null && line != null && iteration != null)
-      'pullRequestThreadContext': {
-        'changeTrackingId': ?changeTrackingId,
-        'iterationContext': {
-          'firstComparingIteration': iteration,
-          'secondComparingIteration': iteration,
+      _ => null,
+    };
+    return {
+      'comments': [
+        {'parentCommentId': 0, 'content': content, 'commentType': 1},
+      ],
+      'status': 1,
+      'threadContext': ?context,
+      if (filePath != null && iteration != null && (anchored || fileLevel))
+        'pullRequestThreadContext': {
+          'changeTrackingId': ?changeTrackingId,
+          'iterationContext': {
+            'firstComparingIteration': iteration,
+            'secondComparingIteration': iteration,
+          },
         },
-      },
-  };
+    };
+  }
 
   Future<int> addThread(
     String org,
@@ -323,6 +679,9 @@ class PullRequestRepository {
     required String content,
     String? filePath,
     int? line,
+    int? endLine,
+    bool leftSide = false,
+    bool fileLevel = false,
     int? changeTrackingId,
     int? iteration,
   }) async {
@@ -336,6 +695,9 @@ class PullRequestRepository {
         content: content,
         filePath: filePath,
         line: line,
+        endLine: endLine,
+        leftSide: leftSide,
+        fileLevel: fileLevel,
         changeTrackingId: changeTrackingId,
         iteration: iteration,
       ),
@@ -502,8 +864,24 @@ class PullRequestRepository {
   /// threads on ServiceDelivery !8261), so the Conversation tab shows them
   /// all; system threads (votes, pushes) and deleted ones drop out in
   /// [PrThread.fromJson].
-  static List<PrThread> conversation(List<Map<String, dynamic>> raw) {
-    final threads = [for (final t in raw) ?PrThread.fromJson(t)];
+  ///
+  /// [includeSystem] adds the votes, pushes and status changes as quiet
+  /// rows for the Activity chip (R11); [includeDeleted] keeps the deleted
+  /// stubs the web renders (R9). Both are off by default, so every existing
+  /// caller reads the same list it always did.
+  static List<PrThread> conversation(
+    List<Map<String, dynamic>> raw, {
+    bool includeSystem = false,
+    bool includeDeleted = false,
+  }) {
+    final threads = [
+      for (final t in raw)
+        ?PrThread.fromJson(
+          t,
+          includeSystem: includeSystem,
+          includeDeleted: includeDeleted,
+        ),
+    ];
     threads.sort((a, b) {
       final ta = a.startedAt?.millisecondsSinceEpoch ?? 0;
       final tb = b.startedAt?.millisecondsSinceEpoch ?? 0;

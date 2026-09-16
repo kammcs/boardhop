@@ -473,6 +473,88 @@ class WorkItemRepository {
     return updated;
   }
 
+  /// The artifact url of a pull request as a work item relation stores it.
+  ///
+  /// The separators are percent-encoded (`%2F`): the service stores `%2f`
+  /// and accepts a plain `/` as a *second*, duplicate relation, so the app
+  /// always writes the encoded form and matches case-insensitively
+  /// (research/22 §1).
+  static String pullRequestArtifactUrl(
+    String projectId,
+    String repositoryId,
+    int pullRequestId,
+  ) => 'vstfs:///Git/PullRequestId/$projectId%2F$repositoryId%2F$pullRequestId';
+
+  /// True when [url] points at the same pull request, whichever separator
+  /// and case the service stored it with.
+  static bool _sameArtifact(String url, String artifactUrl) =>
+      url.toLowerCase().replaceAll('%2f', '/') ==
+      artifactUrl.toLowerCase().replaceAll('%2f', '/');
+
+  /// Links a pull request to a work item. `POST pullRequests/{id}/workitems`
+  /// is HTTP 405 (spike w39 §5): the link is a work item write.
+  ///
+  /// [project] is only the scope the answer is cached under; the route
+  /// itself is happy with the project GUID.
+  Future<WorkItem> linkPullRequest(
+    String org,
+    int workItemId,
+    String projectId,
+    String repositoryId,
+    int pullRequestId, {
+    String? project,
+  }) async {
+    final scope = project ?? projectId;
+    final item = await refreshItem(org, scope, workItemId);
+    final url = pullRequestArtifactUrl(projectId, repositoryId, pullRequestId);
+    // Already linked: the service would take a duplicate relation happily.
+    if (item.relations.any(
+      (r) =>
+          r.rel == WorkItemRelation.artifactLinkRel &&
+          _sameArtifact(r.url, url),
+    )) {
+      return item;
+    }
+    return patch(org, scope, item, [
+      {
+        'op': 'add',
+        'path': '/relations/-',
+        'value': {
+          'rel': WorkItemRelation.artifactLinkRel,
+          'url': url,
+          'attributes': {'name': 'Pull Request'},
+        },
+      },
+    ]);
+  }
+
+  /// Removes the link by index, which is the only way json-patch addresses a
+  /// relation; the index comes from a fresh `$expand=relations` read so it
+  /// cannot be stale, and the `test /rev` guard in [patch] catches the race.
+  Future<WorkItem> unlinkPullRequest(
+    String org,
+    int workItemId,
+    String projectId,
+    String repositoryId,
+    int pullRequestId, {
+    String? project,
+  }) async {
+    final scope = project ?? projectId;
+    final item = await refreshItem(org, scope, workItemId);
+    final url = pullRequestArtifactUrl(projectId, repositoryId, pullRequestId);
+    final index = item.relations.indexWhere(
+      (r) =>
+          r.rel == WorkItemRelation.artifactLinkRel &&
+          _sameArtifact(r.url, url),
+    );
+    // Nothing to remove is not an error: the link may have gone from the
+    // web while the page was open.
+    if (index < 0) return item;
+    return patch(org, scope, item, [
+      {'op': 'remove', 'path': '/relations/$index'},
+    ]);
+  }
+
   /// One saved query's definition, cached under `query:meta:{id}`.
   ///
   /// `$expand=wiql` is the smallest expansion that carries `queryType` and
@@ -563,5 +645,4 @@ class WorkItemRepository {
       return null;
     }
   }
-
 }

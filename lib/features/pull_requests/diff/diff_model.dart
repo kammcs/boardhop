@@ -42,10 +42,16 @@ class LineDiffResult {
     required this.maxChars,
     required this.editDistance,
     required this.truncated,
+    this.hunkStarts = const <int>[],
   });
 
   final List<DiffLine> lines;
   final int hunks;
+
+  /// Index into [lines] of the first row of every change run, in order:
+  /// the stops the diff's ▲▼ control walks in Changes mode (R5).
+  /// `hunkStarts.length == hunks`.
+  final List<int> hunkStarts;
   final int added;
   final int removed;
   final int maxChars;
@@ -134,29 +140,31 @@ abstract final class LineDiff {
     }
     _emphasize(out);
 
-    var hunks = 0;
+    final hunkStarts = <int>[];
     var added = 0;
     var removed = 0;
     var maxChars = 0;
     var inHunk = false;
-    for (final l in out) {
+    for (var i = 0; i < out.length; i++) {
+      final l = out[i];
       maxChars = max(maxChars, l.text.length);
       switch (l.kind) {
         case DiffKind.context:
           inHunk = false;
         case DiffKind.added:
           added++;
-          if (!inHunk) hunks++;
+          if (!inHunk) hunkStarts.add(i);
           inHunk = true;
         case DiffKind.removed:
           removed++;
-          if (!inHunk) hunks++;
+          if (!inHunk) hunkStarts.add(i);
           inHunk = true;
       }
     }
     return LineDiffResult(
       lines: out,
-      hunks: hunks,
+      hunks: hunkStarts.length,
+      hunkStarts: hunkStarts,
       added: added,
       removed: removed,
       maxChars: maxChars,

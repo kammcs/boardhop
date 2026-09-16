@@ -32,6 +32,7 @@ import 'data/repositories/work_item_form_repository.dart';
 import 'data/repositories/wiki_repository.dart';
 import 'data/repositories/work_item_repository.dart';
 import 'data/search_recents.dart';
+import 'data/viewed_files_store.dart';
 import 'data/write_queue.dart';
 import 'features/launch/launch_dependencies.dart';
 import 'features/launch/launch_resolver.dart';
@@ -61,6 +62,7 @@ class AccountDeps {
     searchRecents = SearchRecents(accountId: accountId);
     people = PeopleRepository(client, db, accountId);
     mentionRecents = MentionRecents(accountId: accountId);
+    viewedFiles = ViewedFilesStore(db, userId: accountId);
     workItemForms = WorkItemFormRepository(
       client,
       workItems,
@@ -128,6 +130,9 @@ class AccountDeps {
   late final SearchRecents searchRecents;
   late final PeopleRepository people;
   late final MentionRecents mentionRecents;
+
+  /// Local per-account "viewed" marks for pull request files (R8).
+  late final ViewedFilesStore viewedFiles;
   late final WorkItemFormRepository workItemForms;
   late final SprintRepository sprints;
   late final AnalyticsRepository analytics;
@@ -160,6 +165,7 @@ class AccountDeps {
     RepositoryProvider<SearchRecents>.value(value: searchRecents),
     RepositoryProvider<PeopleRepository>.value(value: people),
     RepositoryProvider<MentionRecents>.value(value: mentionRecents),
+    RepositoryProvider<ViewedFilesStore>.value(value: viewedFiles),
     RepositoryProvider<ActivityRepository>.value(value: activity),
     RepositoryProvider<ActivitySync>.value(value: activitySync),
     RepositoryProvider<PushRegistrar>.value(value: pushRegistrar),

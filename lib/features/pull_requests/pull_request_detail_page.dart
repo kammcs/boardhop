@@ -492,11 +492,17 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
     if (ok != true || !mounted) return;
     final repo = context.read<PullRequestRepository>();
     await _act(
+      // P-A replaced the two-flag signature with the full completion
+      // options; P-B rebuilds this dialog as the completion sheet (R3).
       () => repo.complete(
         widget.org,
         pr,
-        deleteSourceBranch: deleteSource,
-        squash: squash,
+        PrCompletionOptions(
+          mergeStrategy: squash
+              ? MergeStrategy.squash
+              : MergeStrategy.noFastForward,
+          deleteSourceBranch: deleteSource,
+        ),
       ),
       settle: true,
     );
