@@ -143,3 +143,65 @@ Observation for Kelly: with the tile, Search, the bell and the three-segment Hom
 title truncates to "DevO…" at phone width, and the Work tab's two-line title likewise. The header
 below already names the project, so dropping the app-bar title text on Home at compact width is the
 obvious fix; decision left to Kelly.
+
+## 7. Acceptance on iOS (2026-09-15, iPhone 17 and iPad Pro 13" simulators)
+
+Debug builds, both themes, xxxL, the iPad in both orientations. Full record in
+`research/walkthroughs/2026-09-15-launch-ios.md`; screenshots in `.shots/`
+(`li*` iPhone, `lp*` iPad), all of them the scratch project. **No writes of any
+kind**; the two theme radios and the tablet's "Tab rail on the right" toggle
+were flipped for the checks and put back. **No code changed — nothing
+misbehaved.** `flutter analyze` clean, 1615 tests green.
+
+Passed on both devices: **(1)** cold start straight to the remembered
+project's Home, with no page in between, including the harder case of being
+killed on the Accounts page — `ProjectMemory` rightly ignores the
+organization-level routes and the next launch still opened the remembered
+project. **(3)** the tile ▾ opens the picker from all four root tabs; rows
+switch and rebuild the body as well as the header (the router's per-project
+`ValueKey` holds on iOS); the current row is ticked; the phone sheet opens at
+0.6 and drags to 0.95, and its last row (Diagnostics) clears the floating
+dock. **(5)** the bell and the picker's Activity row agreed on the unread
+count, and the dot cleared after a visit and stayed clear across a cold start
+(iPhone; the iPad had nothing unread left to clear). **(6)** Manage accounts
+opens `/orgs` titled **Accounts**, its org row still opens the project list,
+and a project row from there still enters the shell.
+
+The glass shell's own question — **does the anchored panel clear the rail and
+the dock?** — is a yes in every combination: portrait (panel ends far above
+the dock), landscape with the rail on the right, and landscape with the rail
+on the **left**, where the app bar's tile has already moved right of the
+gutter so the panel opens clear of it.
+
+**(7)** was re-proved on the iPhone: the memory was edited to "Gone Project"
+with `PlistBuddy` (a host `defaults write` is silently lost — the simulator's
+`cfprefsd` serves its cached copy back), the shell opened it without a
+pre-check per L8, the Home sections showed `TF200016`, and the snackbar with
+"Choose another project" appeared on the first frame and opened the picker.
+
+Not demonstrable, as on Android and for the same reasons: **(2)** a fresh
+install's first sign-in (needs Kelly's credentials) and **(4)** sign-out and
+Add account (one account signed in; the paths are unit-tested). The picker's
+filter field also never appeared — puremedia has four projects and the
+threshold is eight.
+
+Regressions re-checked under the new app bars and all passing: the Home pill
+(Summary / Dashboards / Wiki) still fits beside the tile, bell and magnifier
+at phone width; a dashboard and a wiki page open on both devices; Search from
+Home; the Work pill (Items / Board / Sprint); a work item and PR !8334 open
+and go back. The tile replaces the back arrow on the four **root** tabs only —
+Dashboards, Wiki, Board, Sprint, the work item and the PR all kept theirs.
+
+**Kelly's compact-width question, now photographed** (`li43-dark-home`,
+`li15-relaunch`, `li44-dark-work`, `li06-work`): on the iPhone the Home title
+is `De…` and the Work title `De…` over `As…` — three characters, worse than
+Android's `DevO…` because the pill segments are wider. Repos and Pipelines,
+with one action each, show the project name and subtitle in full, and the iPad
+shows them everywhere. The layout was left alone; the decision is Kelly's.
+
+Two smaller observations left open: the fallback snackbar overlaps the top of
+the glass dock for its 8 s (the shell's Scaffold has no `bottomNavigationBar`
+on Apple platforms for it to sit above, and every shell snackbar shares this),
+and the picker sheet is pushed on a different navigator depending on whether
+it was opened from the tile or from the snackbar's action, so the dock floats
+over it in one case and not the other. Both cosmetic.
