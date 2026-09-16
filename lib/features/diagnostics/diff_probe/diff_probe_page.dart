@@ -12,12 +12,19 @@ import '../../../core/http/ado_exceptions.dart';
 import '../../../theme/theme.dart';
 import '../frame_stats.dart';
 import '../../../data/repositories/pr_diff_source.dart';
+import '../../pull_requests/diff/diff_cursor.dart';
 import '../../pull_requests/diff/diff_model.dart';
+import '../../pull_requests/diff/diff_nav_pill.dart';
+import '../../pull_requests/diff/diff_view.dart';
 import '../../pull_requests/diff/highlighter.dart';
 
 enum _Source { synthetic, live }
 
 enum _ListImpl { superList, plain }
+
+/// Which viewer draws the rows: the probe's own, or the shipping
+/// [DiffView] with its navigation control (R5–R7, R16).
+enum _Layout { probe, diffView }
 
 sealed class _Row {
   const _Row();
@@ -62,6 +69,14 @@ class _DiffProbePageState extends State<DiffProbePage> {
 
   _Source _source = _Source.synthetic;
   _ListImpl _listImpl = _ListImpl.superList;
+  _Layout _layout = _Layout.probe;
+  bool _probeSideBySide = false;
+
+  /// The shipping viewer's navigation state, for the battery below.
+  final _navController = DiffViewController();
+  DiffNavMode _navMode = DiffNavMode.changes;
+  int? _navPosition;
+  String? _battery;
   String _fileName = 'sample.dart';
   LineDiffResult? _diff;
   List<List<CodeRun>> _oldRuns = const [];
@@ -98,6 +113,7 @@ class _DiffProbePageState extends State<DiffProbePage> {
   void dispose() {
     _stats.detach();
     _listController.dispose();
+    _navController.dispose();
     _vertical.dispose();
     _org.dispose();
     _prId.dispose();
@@ -390,6 +406,88 @@ class _DiffProbePageState extends State<DiffProbePage> {
     });
   }
 
+  /// Four threads over the fixture, one of each shape the viewer has to
+  /// place: right side, left side (a removed line), resolved, and one on
+  /// the file as a whole.
+  List<PrThread> _cannedThreads() {
+    final diff = _diff;
+    if (diff == null) return const [];
+    int? firstOf(DiffKind kind, {int skip = 0}) {
+      var seen = 0;
+      for (final line in diff.lines) {
+        if (line.kind != kind) continue;
+        if (seen++ < skip) continue;
+        return kind == DiffKind.removed ? line.oldNo : line.newNo;
+      }
+      return null;
+    }
+
+    PrThread thread(
+      int id,
+      String content, {
+      int? right,
+      int? left,
+      String status = PrThreadStatus.active,
+    }) => PrThread(
+      id: id,
+      status: status,
+      filePath: _fileName,
+      rightLine: right,
+      leftLine: left,
+      trackedFromLine: null,
+      comments: [
+        PrComment(
+          id: 1,
+          author: 'Diff probe',
+          content: content,
+          publishedDate: DateTime.now(),
+        ),
+      ],
+    );
+
+    return [
+      thread(1, 'A comment on the file as a whole (R9).'),
+      if (firstOf(DiffKind.added) case final int line)
+        thread(2, 'Right-side thread on line $line.', right: line),
+      if (firstOf(DiffKind.removed) case final int line)
+        thread(3, 'Left-side thread on removed line $line.', left: line),
+      if (firstOf(DiffKind.added, skip: 3) case final int line)
+        thread(
+          4,
+          'Resolved, so it comes last in Comments mode.',
+          right: line,
+          status: PrThreadStatus.fixed,
+        ),
+    ];
+  }
+
+  /// Walks every stop of every mode through the shipping control and times
+  /// the jumps (R5–R7).
+  Future<void> _navBattery() async {
+    if (_layout != _Layout.diffView || !_navController.isAttached) {
+      setState(() => _battery = 'Switch to the DiffView layout first.');
+      return;
+    }
+    final out = StringBuffer();
+    for (final mode in DiffNavMode.values) {
+      if (mode == DiffNavMode.files) continue;
+      final stops = mode == DiffNavMode.changes
+          ? _navController.stops.changes
+          : _navController.stops.comments;
+      final sw = Stopwatch()..start();
+      for (final row in stops) {
+        _navController.jumpTo(row, animate: false);
+        await Future<void>.delayed(Duration.zero);
+      }
+      out.write(
+        '${mode.label}: ${stops.length} stops in '
+        '${sw.elapsedMilliseconds} ms. ',
+      );
+    }
+    if (!mounted) return;
+    setState(() => _battery = out.toString());
+  }
+
   String _report() {
     final diff = _diff;
     final b = StringBuffer('F5 diff probe: ');
@@ -412,6 +510,14 @@ class _DiffProbePageState extends State<DiffProbePage> {
       'jump to $_lastJump ${_jumpTime?.inMilliseconds} ms',
     );
     b.writeln('frames: ${_stats.all.summary(_stats.budget)}');
+    if (_layout == _Layout.diffView) {
+      b.writeln(
+        'DiffView: side by side $_probeSideBySide, '
+        'change stops ${_navController.stops.changes.length}, '
+        'comment stops ${_navController.stops.comments.length}'
+        '${_battery == null ? '' : ', battery $_battery'}',
+      );
+    }
     return b.toString();
   }
 
@@ -497,6 +603,33 @@ class _DiffProbePageState extends State<DiffProbePage> {
                     _stats.reset();
                   }),
                 ),
+                SegmentedButton<_Layout>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: _Layout.probe, label: Text('Probe')),
+                    ButtonSegment(
+                      value: _Layout.diffView,
+                      label: Text('DiffView'),
+                    ),
+                  ],
+                  selected: {_layout},
+                  onSelectionChanged: (s) => setState(() {
+                    _layout = s.first;
+                    _battery = null;
+                    _stats.reset();
+                  }),
+                ),
+                if (_layout == _Layout.diffView) ...[
+                  FilterChip(
+                    label: const Text('Side by side'),
+                    selected: _probeSideBySide,
+                    onSelected: (v) => setState(() => _probeSideBySide = v),
+                  ),
+                  ActionChip(
+                    label: const Text('Nav battery'),
+                    onPressed: _navBattery,
+                  ),
+                ],
               ],
             ),
           ),
@@ -521,13 +654,84 @@ class _DiffProbePageState extends State<DiffProbePage> {
               ),
             ),
           ),
+          if (_battery != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Spacing.lg),
+              child: Text(
+                _battery!,
+                style: BoardhopTheme.codeStyle(context)
+                    .copyWith(fontSize: 11, color: theme.colorScheme.primary),
+              ),
+            ),
           Expanded(
             child: _diff == null
                 ? const Center(child: CircularProgressIndicator())
-                : _diffView(context),
+                : (_layout == _Layout.diffView
+                      ? _shippingView(context)
+                      : _diffView(context)),
           ),
         ],
       ),
+    );
+  }
+
+  /// The shipping [DiffView] over the same fixture, with the floating pill
+  /// and the canned threads: what the page under a pull request draws.
+  Widget _shippingView(BuildContext context) {
+    final diff = _diff!;
+    final threads = _cannedThreads();
+    final stops = _navMode == DiffNavMode.changes
+        ? _navController.stops.changes
+        : _navController.stops.comments;
+    var cursor = DiffCursor(
+      mode: _navMode,
+      stops: _navMode == DiffNavMode.files ? const [0, 1] : stops,
+      position: _navPosition,
+      nextFile: 'next.dart',
+    );
+    final visible = _navController.visibleRows;
+    if (visible != null && _navMode != DiffNavMode.files) {
+      cursor = cursor.resolvedFrom(visible.$1, visible.$2);
+    }
+    void step(bool down) {
+      final next = down ? cursor.nextPosition : cursor.previousPosition;
+      if (next == null) return;
+      setState(() => _navPosition = next);
+      _navController.jumpTo(cursor.stops[next]);
+    }
+
+    return Stack(
+      children: [
+        DiffView(
+          diff: diff,
+          controller: _navController,
+          oldRuns: _oldRuns,
+          newRuns: _newRuns,
+          threads: threads,
+          sideBySide: _probeSideBySide,
+          endPadding: 96,
+          canAct: true,
+          onGutterTap: (_) {},
+        ),
+        Positioned(
+          right: Spacing.lg,
+          bottom: Spacing.lg,
+          child: DiffNavPill(
+            cursor: cursor,
+            counts: {
+              DiffNavMode.changes: _navController.stops.changes.length,
+              DiffNavMode.comments: _navController.stops.comments.length,
+              DiffNavMode.files: 2,
+            },
+            onUp: () => step(false),
+            onDown: () => step(true),
+            onMode: (mode) => setState(() {
+              _navMode = mode;
+              _navPosition = null;
+            }),
+          ),
+        ),
+      ],
     );
   }
 
