@@ -340,14 +340,15 @@ void main() {
       );
 
       expect(find.text('Add account'), findsOneWidget);
-      expect(find.text('Manage accounts'), findsOneWidget);
+      // L3 revised: no Manage accounts row and no link to the project list.
+      expect(find.text('Manage accounts'), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+      await tester.tap(find.text('contoso'));
+      await tester.pumpAndSettle();
+      expect(gone, isEmpty);
       expect(find.text('Activity'), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
-
-      await tester.tap(find.text('Manage accounts'));
-      await tester.pumpAndSettle();
-      expect(gone, [Routes.orgs]);
 
       await tester.tap(find.text('Activity'));
       await tester.pumpAndSettle();

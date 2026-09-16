@@ -174,10 +174,18 @@ class _PullRequestsPageState extends State<PullRequestsPage> {
           tooltip: 'Back',
           icon: const Icon(Icons.arrow_back),
           // Pushed from Home, a repository page or the org bell; a deep link
-          // has nowhere to pop to and lands on the projects.
-          onPressed: () => context.canPop()
-              ? context.pop()
-              : context.go('${orgRoute(context, widget.org)}/projects'),
+          // has nowhere to pop to and lands on the project's Home, or on
+          // the launch redirect (the remembered project) for the org-wide
+          // inbox. Never the project list (research/21 L3, revised).
+          onPressed: () {
+            if (context.canPop()) return context.pop();
+            final project = widget.project;
+            context.go(
+              project == null
+                  ? '/'
+                  : '${projectRoute(context, widget.org, project)}/home',
+            );
+          },
         ),
         actions: [],
       ),

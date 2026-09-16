@@ -505,9 +505,9 @@ class _ProjectPickerContentState extends State<ProjectPickerContent> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: const Icon(Icons.chevron_right, size: 18),
-          // L3: the project list stays, reached from the organization's row.
-          onTap: () => _goTo('${Routes.org(account.id, org.name)}/projects'),
+          // L3 revised (Kelly, 2026-09-16): the organization row is a
+          // subhead, not a link. Nothing in the app leads to the project
+          // list or the Accounts page any more; both stay only as routes.
         ),
       );
       if (projects.isEmpty && loading) {
@@ -556,11 +556,6 @@ class _ProjectPickerContentState extends State<ProjectPickerContent> {
         leading: const Icon(Icons.person_add_alt_1_outlined),
         title: const Text('Add account'),
         onTap: _addAccount,
-      ),
-      ListTile(
-        leading: const Icon(Icons.manage_accounts_outlined),
-        title: const Text('Manage accounts'),
-        onTap: () => _goTo(Routes.orgs),
       ),
       ListTile(
         leading: Badge(
