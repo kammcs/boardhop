@@ -361,6 +361,16 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage>
           _offline = e is AdoNetworkException;
         });
       }
+    } catch (e, stack) {
+      // A response the parsers did not expect (a deleted file with no
+      // `item.path` once left the page blank with no error at all): say so
+      // instead of showing nothing, and keep the trace for debug builds.
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: e, stack: stack, library: 'boardhop'),
+      );
+      if (mounted) {
+        setState(() => _error = 'This pull request could not be read.');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

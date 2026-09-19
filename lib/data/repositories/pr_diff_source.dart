@@ -78,6 +78,30 @@ class PrFileChange {
   /// viewed mark is keyed on so a later push clears it.
   final String? objectId;
 
+  /// The blob entries of an iteration's `changeEntries`. A deleted file
+  /// can come back with `item.path: null` and its path only in
+  /// `originalPath` (seen on a client PR, 2026-09-19); an entry with
+  /// neither is dropped rather than failing the whole page.
+  static List<PrFileChange> listFrom(Object? entries) => [
+    for (final e in (entries as List?)?.whereType<Map>() ?? const <Map>[])
+      ?_fromEntry(e.cast<String, dynamic>()),
+  ];
+
+  static PrFileChange? _fromEntry(Map<String, dynamic> e) {
+    final item = (e['item'] as Map?)?.cast<String, dynamic>() ?? const {};
+    if ((item['gitObjectType'] ?? 'blob') != 'blob') return null;
+    final originalPath = e['originalPath'] as String?;
+    final path = item['path'] as String? ?? originalPath;
+    if (path == null) return null;
+    return PrFileChange(
+      path: path,
+      changeType: e['changeType'] as String? ?? '',
+      changeTrackingId: (e['changeTrackingId'] as num?)?.toInt() ?? 0,
+      originalPath: originalPath,
+      objectId: item['objectId'] as String?,
+    );
+  }
+
   bool get isAdd => changeType.contains('add');
   bool get isDelete => changeType.contains('delete');
 }
@@ -395,21 +419,7 @@ class PrDiffSource {
       apiVersion: '7.1',
       query: {r'$top': '2000'},
     );
-    final entries = (json['changeEntries'] as List?) ?? const [];
-    return [
-      for (final e in entries.cast<Map<String, dynamic>>())
-        if (((e['item'] as Map<String, dynamic>?)?['gitObjectType'] ??
-                'blob') ==
-            'blob')
-          PrFileChange(
-            path: (e['item'] as Map<String, dynamic>)['path'] as String,
-            changeType: e['changeType'] as String? ?? '',
-            changeTrackingId: e['changeTrackingId'] as int? ?? 0,
-            originalPath: e['originalPath'] as String?,
-            objectId:
-                (e['item'] as Map<String, dynamic>)['objectId'] as String?,
-          ),
-    ];
+    return PrFileChange.listFrom(json['changeEntries']);
   }
 
   /// File content at a commit through the Items API (JSON with content).
