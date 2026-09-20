@@ -86,7 +86,8 @@ class ReservedRegion {
   final String? source;
 
   /// [rect] with the margins taken off: the obstruction itself.
-  Rect get inner => margins == EdgeInsets.zero ? rect : margins.deflateRect(rect);
+  Rect get inner =>
+      margins == EdgeInsets.zero ? rect : margins.deflateRect(rect);
 
   @override
   String toString() =>
@@ -110,19 +111,27 @@ class DisplayRegions {
 
   final CutoutSide cutoutSide;
 
-  /// The active fold, if the display has one. `SideBySide` puts its column
-  /// gap here and the shell keeps the rail off it.
-  Rect? get hinge {
+  /// The active fold's **keep-out band**, if the display has one: the
+  /// whole reported frame, margins included.
+  ///
+  /// On an iPhone Duo that band is 40 pt wide with 20 pt of margin on each
+  /// side, so the crease itself is the zero-width line down its middle
+  /// (research/23 §2). Named for the band rather than the hinge because
+  /// [HingeState] already owns that word: this is geometry, that is the
+  /// fold's status. `DisplayEnvironment.crease` is the line.
+  ReservedRegion? get activeDivision {
     for (final r in regions) {
-      if (r.kind == ReservedRegionKind.division && r.active) return r.rect;
+      if (r.kind == ReservedRegionKind.division && r.active) return r;
     }
     return null;
   }
 
+  /// [activeDivision]'s frame, or null when nothing is folded right now.
+  Rect? get creaseBand => activeDivision?.rect;
+
   /// The display folds, whether or not the fold is in force right now. An
   /// iPhone Duo reports its division even when open.
-  bool get folds =>
-      regions.any((r) => r.kind == ReservedRegionKind.division);
+  bool get folds => regions.any((r) => r.kind == ReservedRegionKind.division);
 }
 
 /// Asks iOS about the shape of the display.
@@ -156,7 +165,11 @@ class DisplayRegions {
 class DisplayCutout {
   DisplayCutout._();
 
-  static const _channel = MethodChannel('com.kammcs.boardhop/display');
+  /// The channel the Runner answers on, and pushes `displayChanged` over
+  /// (`lib/core/display_environment.dart`).
+  static const channelName = 'com.kammcs.boardhop/display';
+
+  static const _channel = MethodChannel(channelName);
 
   /// Which side the cutout is on, or [CutoutSide.unknown] on a folding
   /// display. Kept as its own call for the shell, which wants only this.
@@ -165,16 +178,30 @@ class DisplayCutout {
   /// The edge iOS wants its vertical bar on, or [BarEdge.unspecified]
   /// where it wants none (and on every platform without the trait).
   static Future<BarEdge> verticalBarEdge() async =>
-      switch (await _invoke<String>('verticalBarEdge')) {
-        'leading' => BarEdge.leading,
-        'trailing' => BarEdge.trailing,
-        _ => BarEdge.unspecified,
-      };
+      decodeBarEdge(await _invoke<String>('verticalBarEdge'));
 
   /// The fold's status and angle. [HingeStatus.none] where nothing folds.
-  static Future<HingeState> hinge() async {
-    final raw = await _invoke<Map<dynamic, dynamic>>('hinge');
-    if (raw == null) return const HingeState();
+  static Future<HingeState> hinge() async =>
+      decodeHinge(await _invoke<Map<dynamic, dynamic>>('hinge'));
+
+  /// The display's reserved regions and cutout side in one round trip.
+  static Future<DisplayRegions> regions() async {
+    final orientation = await _invoke<String>('interfaceOrientation');
+    final raw = await _invoke<List<dynamic>>('reservedRegions');
+    return decodeRegions(raw, orientation: orientation);
+  }
+
+  /// `"leading" | "trailing" | anything else` from the channel.
+  static BarEdge decodeBarEdge(Object? raw) => switch (raw) {
+    'leading' => BarEdge.leading,
+    'trailing' => BarEdge.trailing,
+    _ => BarEdge.unspecified,
+  };
+
+  /// `{status, angle, updates, view}` from the channel; a null map is a
+  /// platform that does not fold.
+  static HingeState decodeHinge(Object? raw) {
+    if (raw is! Map) return const HingeState();
     final map = raw.cast<String, dynamic>();
     return HingeState(
       status: switch (map['status']) {
@@ -190,10 +217,13 @@ class DisplayCutout {
     );
   }
 
-  /// The display's reserved regions and cutout side in one round trip.
-  static Future<DisplayRegions> regions() async {
-    final orientation = await _invoke<String>('interfaceOrientation');
-    final raw = await _invoke<List<dynamic>>('reservedRegions');
+  /// The reserved-region list from the channel, with the cutout side the
+  /// interface orientation implies. A null list is "not asked", which is
+  /// not the same as "nothing in the way", and keeps [supported] false.
+  static DisplayRegions decodeRegions(
+    List<dynamic>? raw, {
+    String? orientation,
+  }) {
     final parsed = <ReservedRegion>[];
     for (final entry in raw ?? const []) {
       final map = (entry as Map?)?.cast<String, dynamic>();
@@ -201,9 +231,7 @@ class DisplayCutout {
       final region = _region(map);
       if (region != null) parsed.add(region);
     }
-    final folds = parsed.any(
-      (r) => r.kind == ReservedRegionKind.division,
-    );
+    final folds = parsed.any((r) => r.kind == ReservedRegionKind.division);
     return DisplayRegions(
       regions: parsed,
       supported: raw != null,

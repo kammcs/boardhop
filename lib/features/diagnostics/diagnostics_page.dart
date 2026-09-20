@@ -434,7 +434,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
             onPressed: () => context.push('/diagnostics/wiki'),
           ),
           IconButton(
-            tooltip: 'Display probe (Duo phase 0)',
+            tooltip: 'Display probe (Duo)',
             icon: const Icon(Icons.phonelink_outlined),
             onPressed: () => context.push('/diagnostics/display'),
           ),

@@ -558,3 +558,57 @@ one is solid black, which is also how `duo-pose` knows a pose has landed.
    should be computed from the *margins*, not from the frame, or each half will lose 20 pt it
    could have used.
 
+### 9.8 Phase 1 landed (2026-09-20)
+
+4.1 and 4.2 are built and verified on the Duo simulator with a **debug** build, signed in, on the
+scratch project (D8). What landed: `displayState` and the pushed `displayChanged` in the Runner
+(`ios/Runner/AppDelegate.swift`), `lib/core/display_environment.dart` with `DisplayEnvironment` and
+`DisplayScope`, `DisplayRegions.hinge` renamed to `creaseBand` (with `activeDivision` beside it),
+`ProjectShell` reading `DisplayScope.of(context).cutoutSide` instead of polling, the Display
+diagnostics page reading the scope with a push counter and pull-to-refresh, and
+`test/core/display_environment_test.dart`. **No layout changed** — that is phase 2.
+
+**The fold reaches Dart, and nothing else does.** With the Display page open and the app untouched,
+`tool/duo-pose book` raised the push counter from 0 to **17** (17 hinge updates, coalesced one per
+runloop turn) while `metrics changes` stayed at **1**: `MediaQuery` still sees nothing, exactly as
+§9.2 found. The page's division region flipped to active and the derived row filled in with
+`crease 475.5, 0.0 0.0 x 669.0`, `creaseBand 455.5, 0.0 40.0 x 669.0`, `creaseAxis vertical`,
+`halves 0.0,0.0 475.5 x 669.0 / 475.5,0.0 475.5 x 669.0` — the measured §2 numbers, on the device,
+with no tap. `tool/duo-pose open` cleared all of them again (33 pushes by then). One
+`duo-pose rotate` moved `verticalBarEdge` to **unspecified** and `railSide` to none, with the
+division turning horizontal at `(0, 455.5) 669 x 40` and `padding` 82 pt on top — §2 row for row.
+Screenshots: `.shots/duo/phase1-{open-wide,book,open,tall,tall-book,restored}.png` and the scrolled
+`phase1-{derived,book-derived,open-derived}.png`, each with a 400 px thumbnail.
+
+**The surprise: an unfold pushes a stale region.** The first build reported `hinge: fullyOpen`
+beside `division: active` after opening from book, and stayed that way — UIKit flips a division
+region's `isActive` **after** the hinge interaction has reported the new status, and on an unfold
+nothing follows: no layout pass, no metrics change, no further hinge update. Phase 2 would have laid
+out around a crease that was no longer there. The Runner now arms a single **settling re-read**
+0.35 s after the last push of a burst (a `DispatchWorkItem`, cancelled and replaced by each push)
+which sends only when a signature of the regions, the bar edge, the orientation and the hinge status
+differs from what was last sent. With it, opening from book ends at 33 pushes with the division
+inactive and `crease` null. A fold that changes nothing therefore still costs exactly zero extra
+calls.
+
+Three smaller findings:
+
+- **The layout pass is observed, not subclassed.** The `FlutterViewController` comes from the
+  storyboard by way of the implicit engine, so there is nothing to subclass from the app delegate.
+  An inert zero-alpha `DisplayLayoutObserver` sits behind the root view, sized to the window by its
+  autoresizing mask, and its `layoutSubviews` runs in the same pass. It takes no touches
+  (`hitTest` returns nil) and is not an accessibility element, and `idb ui tap --api ax` kept
+  working on the inner panel throughout, which is the check that it stays invisible to the tree.
+- **Installed at registration, not on first use.** The observers (hinge interaction, trait
+  registration, layout observer) go in as soon as the scene is up — retried every 0.25 s until it
+  is, with `applicationDidBecomeActive` as the backstop — so a fold before anything asks is not
+  missed. Pushes are held until Dart has called `displayState` once, so they cannot race startup.
+- **`registerForTraitChanges` needs the typed array.** `UITraitCollection
+  .systemTraitsAffectingVerticalBarEdge` is `NS_REFINED_FOR_SWIFT` and arrives in Swift as
+  `[any UITraitDefinition.Type]`; the two size classes are appended to it.
+
+Left for later: Split View is still unmeasured (§9.5 — Kelly starts it by hand), so the two pane
+rows of §2 and the `compactPane` behaviour are covered by unit tests at 475 x 669 and not yet by the
+device. `halves` is computed from the margins, as §9.7 asked, so the two halves meet on the crease
+line and neither loses the 20 pt keep-out; keeping content out of the band is `CreasePadding`'s job
+in phase 3.

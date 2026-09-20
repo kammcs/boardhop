@@ -179,6 +179,10 @@ import UserNotifications
   /// becomes active, wrapping whatever it displaces.
   override func applicationDidBecomeActive(_ application: UIApplication) {
     installNotificationCentreProxy()
+    // The scene may only have come up now, and the pose can change while
+    // the app is away.
+    installDisplayObservers()
+    scheduleDisplayPush()
     if wantsToken, apnsToken == nil {
       // The earlier ask went unanswered (no network, or it failed and the
       // retries ran out); the app is in front again, so ask once more.
@@ -242,8 +246,13 @@ import UserNotifications
     pushChannel?.invokeMethod("onOpened", arguments: pointer)
   }
 
-  /// The display channel, read by lib/core/display_cutout.dart.
+  /// The display channel, read by `lib/core/display_cutout.dart` and
+  /// `lib/core/display_environment.dart`.
   ///
+  /// * `displayState` — everything below in one call, as
+  ///   `{regions, verticalBarEdge, hinge, interfaceOrientation}`. This is
+  ///   what `DisplayEnvironment` polls once at startup, and the same shape
+  ///   the Runner pushes afterwards.
   /// * `interfaceOrientation` — Boardhop's glass rail asks which side the
   ///   Dynamic Island is on while the phone is in landscape. Flutter's
   ///   safe-area insets are the same on both sides there, so only the
@@ -254,13 +263,35 @@ import UserNotifications
   ///   is where the glass rail belongs (research/23 D1).
   /// * `hinge` — the fold's status and angle, from a `UIHingeInteraction`.
   ///
-  /// All four are polled by Dart; the push the plan calls for arrives in
-  /// phase 1.
+  /// **Push, not poll (research/23 §9.2).** Folding an iPhone Duo changes
+  /// no metric Flutter can see: `MediaQuery.size`, `padding` and
+  /// `orientation` are byte-identical open and half-folded, and
+  /// `didChangeMetrics` never fires. Only this channel knows, so the Runner
+  /// calls `displayChanged` on it with a fresh `displayState` payload from
+  /// three sources — the hinge interaction, a trait-change registration and
+  /// the window's layout pass — coalesced to one call per runloop turn.
+  /// Nothing is pushed until Dart has asked for `displayState` once, so a
+  /// push can never race startup.
+  private var displayChannel: FlutterMethodChannel?
+
+  /// Dart has called `displayState`, so it has a handler installed and
+  /// pushes are safe to send.
+  private var displayPushesWanted = false
+
+  /// One push per runloop turn: the hinge handler alone ran 38 times
+  /// during a single fold (research/23 §9.2).
+  private var displayPushScheduled = false
+
   private func registerDisplayChannel(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "com.kammcs.boardhop/display", binaryMessenger: messenger)
+    displayChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
+      case "displayState":
+        self?.displayPushesWanted = true
+        self?.installDisplayObservers()
+        result(self?.displayState())
       case "interfaceOrientation":
         result(Self.interfaceOrientation())
       case "reservedRegions":
@@ -272,6 +303,151 @@ import UserNotifications
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+    // The sources have to be live before the first fold rather than
+    // installed by the first `hinge` call, or a fold nobody asked about
+    // would be missed. The scene is usually not up yet at registration
+    // time, so this retries until it is.
+    DispatchQueue.main.async { [weak self] in self?.installDisplayObservers() }
+  }
+
+  /// `{regions, verticalBarEdge, hinge, interfaceOrientation}` — what a
+  /// fresh poll of the four methods would return, in one map.
+  private func displayState() -> [String: Any] {
+    return [
+      "regions": reservedRegions(),
+      "verticalBarEdge": verticalBarEdge(),
+      "hinge": hingeState(),
+      "interfaceOrientation": Self.interfaceOrientation(),
+    ]
+  }
+
+  private func scheduleDisplayPush() {
+    guard displayPushesWanted, !displayPushScheduled else { return }
+    displayPushScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.displayPushScheduled = false
+      guard self.displayPushesWanted, let channel = self.displayChannel else { return }
+      let state = self.displayState()
+      self.lastSentSignature = Self.signature(of: state)
+      channel.invokeMethod("displayChanged", arguments: state)
+      self.scheduleDisplayVerify()
+    }
+  }
+
+  /// A late re-read, 0.35 s after the last push of a burst.
+  ///
+  /// UIKit flips a division region's `isActive` **after** the hinge
+  /// interaction has reported the new status, so the payload sent from that
+  /// handler can still carry the old region state — and on an unfold
+  /// nothing follows it, because an unfold causes no layout pass and no
+  /// metrics change. Measured on the simulator: opening from book left
+  /// `hinge: fullyOpen` beside `division: active`, which would leave the
+  /// app laying out around a crease that is no longer there. This settles
+  /// it, and only sends when something the layout cares about differs, so
+  /// it costs one extra call per pose change and none while nothing moves.
+  private var displayVerify: DispatchWorkItem?
+  private var lastSentSignature: String?
+
+  private func scheduleDisplayVerify() {
+    displayVerify?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      guard let self, self.displayPushesWanted,
+        let channel = self.displayChannel
+      else { return }
+      let state = self.displayState()
+      let signature = Self.signature(of: state)
+      guard signature != self.lastSentSignature else { return }
+      self.lastSentSignature = signature
+      channel.invokeMethod("displayChanged", arguments: state)
+    }
+    displayVerify = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+  }
+
+  /// What the layout keys off, as one comparable string: the regions with
+  /// their active flags, the bar edge, the orientation and the hinge's
+  /// status. Deliberately not the angle or the update count, which change
+  /// on every handler call and would make every re-read look different.
+  private static func signature(of state: [String: Any]) -> String {
+    var parts: [String] = [
+      state["verticalBarEdge"] as? String ?? "",
+      state["interfaceOrientation"] as? String ?? "",
+      (state["hinge"] as? [String: Any])?["status"] as? String ?? "",
+    ]
+    for region in state["regions"] as? [[String: Any]] ?? [] {
+      parts.append(
+        "\(region["kind"] ?? "")|\(region["x"] ?? "")|\(region["y"] ?? "")"
+          + "|\(region["width"] ?? "")|\(region["height"] ?? "")"
+          + "|\(region["active"] ?? "")")
+    }
+    return parts.joined(separator: ";")
+  }
+
+  // MARK: - Push sources
+
+  private var layoutObserver: DisplayLayoutObserver?
+  private var traitRegistration: Any?
+  private var displayObserverAttempts = 0
+
+  /// Installs the hinge interaction, the trait-change registration and the
+  /// layout observer, once each. Idempotent and safe to call repeatedly:
+  /// it runs at channel registration, on every `displayState`, and
+  /// whenever the app becomes active.
+  private func installDisplayObservers() {
+    guard #available(iOS 27.1, *) else { return }
+    guard let scene = Self.activeScene(),
+      let hostWindow = scene.keyWindow ?? scene.windows.first,
+      let controller = hostWindow.rootViewController
+    else {
+      // The scene is not connected yet. Keep trying for a few seconds;
+      // `applicationDidBecomeActive` is the backstop after that.
+      guard displayObserverAttempts < 40 else { return }
+      displayObserverAttempts += 1
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        self?.installDisplayObservers()
+      }
+      return
+    }
+    installHingeInteraction()
+    installLayoutObserver(in: hostWindow)
+    installTraitObserver(on: controller)
+  }
+
+  /// A window resize (rotation, Split View) reaches Dart as a metrics
+  /// change already, but the reserved regions it implies do not, so the
+  /// layout pass pushes too. Observed rather than subclassed: the
+  /// `FlutterViewController` is built from the storyboard by the implicit
+  /// engine, so there is nothing to subclass from the app delegate. The
+  /// observer is an inert zero-alpha view behind the root view, sized to
+  /// the window by its autoresizing mask, so its `layoutSubviews` runs in
+  /// the same pass as the controller's `viewDidLayoutSubviews`.
+  private func installLayoutObserver(in hostWindow: UIWindow) {
+    guard layoutObserver == nil else { return }
+    let observer = DisplayLayoutObserver(frame: hostWindow.bounds)
+    observer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    observer.isUserInteractionEnabled = false
+    observer.isAccessibilityElement = false
+    observer.accessibilityElementsHidden = true
+    observer.alpha = 0
+    observer.onLayout = { [weak self] in self?.scheduleDisplayPush() }
+    hostWindow.insertSubview(observer, at: 0)
+    layoutObserver = observer
+  }
+
+  /// The traits that decide `verticalBarEdge`, plus both size classes so a
+  /// Split View resize is caught even where the edge itself does not move.
+  @available(iOS 27.1, *)
+  private func installTraitObserver(on controller: UIViewController) {
+    guard traitRegistration == nil else { return }
+    var traits: [any UITraitDefinition.Type] =
+      UITraitCollection.systemTraitsAffectingVerticalBarEdge
+    traits.append(UITraitHorizontalSizeClass.self)
+    traits.append(UITraitVerticalSizeClass.self)
+    traitRegistration = controller.registerForTraitChanges(traits) {
+      [weak self] (_: UIViewController, _: UITraitCollection) in
+      self?.scheduleDisplayPush()
     }
   }
 
@@ -420,6 +596,7 @@ import UserNotifications
       guard let hinge = update.hinge else {
         self.hingeStatusName = "none"
         self.hingeAngle = nil
+        self.scheduleDisplayPush()
         return
       }
       self.hingeStatusName = switch hinge.status {
@@ -429,9 +606,28 @@ import UserNotifications
       default: "unknown"
       }
       self.hingeAngle = Double(hinge.angle)
+      self.scheduleDisplayPush()
     }
     view.addInteraction(interaction)
     hingeInteraction = interaction
+  }
+}
+
+/// An inert view that reports the window's layout passes.
+///
+/// It draws nothing, takes no touches and is not an accessibility element;
+/// it exists only so `layoutSubviews` can tell the app delegate that the
+/// window laid out and the reserved regions may have moved.
+private final class DisplayLayoutObserver: UIView {
+  var onLayout: (() -> Void)?
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    onLayout?()
+  }
+
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    return nil
   }
 }
 

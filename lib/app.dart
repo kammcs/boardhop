@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'auth/auth_bloc.dart';
 import 'auth/auth_service.dart';
 import 'core/config/app_config.dart';
+import 'core/display_environment.dart';
 import 'core/http/ado_client.dart';
 import 'core/notifications/notification_service.dart';
 import 'data/activity_sync.dart';
@@ -300,6 +301,11 @@ class _BoardhopAppState extends State<BoardhopApp> {
   final _light = BoardhopTheme.light();
   final _dark = BoardhopTheme.dark();
 
+  /// The shape of the display, live: one channel listener for the whole
+  /// app, above the router so any page can read it (research/23 §4.2).
+  /// A fold reaches Dart only through its pushes (§9.2).
+  final _display = DisplayEnvironment();
+
   @override
   void initState() {
     super.initState();
@@ -353,6 +359,7 @@ class _BoardhopAppState extends State<BoardhopApp> {
     _taps?.cancel();
     _auth?.cancel();
     _push.dispose();
+    _display.dispose();
     for (final bound in widget.deps.boundAccounts) {
       bound.activitySync.stop();
     }
@@ -378,24 +385,27 @@ class _BoardhopAppState extends State<BoardhopApp> {
         value: _authBloc,
         child: ThemeScope(
           controller: widget.theme,
-          child: Builder(
-            builder: (context) => MaterialApp.router(
-              title: 'Boardhop',
-              debugShowCheckedModeBanner: !AppConfig.demoMode,
-              theme: _light,
-              darkTheme: _dark,
-              themeMode: ThemeScope.of(context).mode,
-              routerConfig: _router,
-              // The snackbar's width is the one component value that
-              // follows the window rather than the widget, and it is read
-              // where the bar is shown, below every route. Applying it
-              // here catches all 21 call sites at once.
-              builder: (context, child) => Theme(
-                data: BoardhopTheme.forWindow(
-                  Theme.of(context),
-                  MediaQuery.sizeOf(context).width,
+          child: DisplayScope(
+            environment: _display,
+            child: Builder(
+              builder: (context) => MaterialApp.router(
+                title: 'Boardhop',
+                debugShowCheckedModeBanner: !AppConfig.demoMode,
+                theme: _light,
+                darkTheme: _dark,
+                themeMode: ThemeScope.of(context).mode,
+                routerConfig: _router,
+                // The snackbar's width is the one component value that
+                // follows the window rather than the widget, and it is read
+                // where the bar is shown, below every route. Applying it
+                // here catches all 21 call sites at once.
+                builder: (context, child) => Theme(
+                  data: BoardhopTheme.forWindow(
+                    Theme.of(context),
+                    MediaQuery.sizeOf(context).width,
+                  ),
+                  child: child ?? const SizedBox.shrink(),
                 ),
-                child: child ?? const SizedBox.shrink(),
               ),
             ),
           ),

@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/display_cutout.dart';
+import '../../core/display_environment.dart';
 import '../../data/models/project.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/write_queue.dart';
@@ -48,10 +47,6 @@ class _ProjectShellState extends State<ProjectShell>
   String get org => widget.org;
   String get project => widget.project;
 
-  /// Where the Dynamic Island is while in landscape (Apple only), so the
-  /// glass rail can hug the other edge; read again after every rotation.
-  CutoutSide _cutout = CutoutSide.unknown;
-
   /// Watches the organization's cached project list so a project that has
   /// gone (research/21 L7) can offer a way out instead of an empty page.
   StreamSubscription<List<Project>>? _projects;
@@ -66,7 +61,6 @@ class _ProjectShellState extends State<ProjectShell>
       _showLaunchNotice();
     });
     _watchProjects();
-    _readCutout();
   }
 
   /// The launch settled for something other than the remembered project
@@ -134,18 +128,6 @@ class _ProjectShellState extends State<ProjectShell>
     } catch (_) {
       return null;
     }
-  }
-
-  @override
-  void didChangeMetrics() => _readCutout();
-
-  Future<void> _readCutout() async {
-    if (defaultTargetPlatform != TargetPlatform.iOS &&
-        defaultTargetPlatform != TargetPlatform.macOS) {
-      return;
-    }
-    final side = await DisplayCutout.side();
-    if (mounted && side != _cutout) setState(() => _cutout = side);
   }
 
   @override
@@ -275,7 +257,11 @@ class _ProjectShellState extends State<ProjectShell>
         onDestinationSelected: (i) => _select(context, i),
         bleedsUnderRail: _bleedsUnderRail(widget.location),
         railOnRight: ThemeScope.of(context).railSide == RailSide.right,
-        cutoutSide: _cutout,
+        // Where the Dynamic Island is while in landscape (Apple only), so
+        // the glass rail can hug the other edge. Kept live for the whole
+        // app by DisplayScope, which hears the Runner's pushes; polling
+        // here would miss a fold entirely (research/23 §9.2).
+        cutoutSide: DisplayScope.of(context).cutoutSide,
       );
     }
     if (context.breakpoint.isCompact) {

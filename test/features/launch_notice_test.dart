@@ -1,3 +1,4 @@
+import 'package:boardhop/core/display_environment.dart';
 import 'package:boardhop/data/models/project.dart';
 import 'package:boardhop/data/repositories/org_repository.dart';
 import 'package:boardhop/data/repositories/project_repository.dart';
@@ -98,7 +99,11 @@ void main() {
           routerConfig: config,
           builder: (context, child) => ThemeScope(
             controller: ThemeController.inMemory(),
-            child: AccountScope(accountId: 'u1', child: child!),
+            // The shell reads the display's shape from here now; a test
+            // has no Runner to ask (research/23 §4.2).
+            child: DisplayScope.override(
+              child: AccountScope(accountId: 'u1', child: child!),
+            ),
           ),
         ),
       ),

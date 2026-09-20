@@ -67,7 +67,7 @@ void main() {
     // Not asked is not the same as nothing in the way.
     expect(r.supported, isFalse);
     expect(r.folds, isFalse);
-    expect(r.hinge, isNull);
+    expect(r.creaseBand, isNull);
   });
 
   test('reserved regions are parsed with their kind and rect', () async {
@@ -82,7 +82,7 @@ void main() {
     expect(r.supported, isTrue);
     expect(r.regions, hasLength(2));
     expect(r.regions.first.kind, ReservedRegionKind.occlusion);
-    expect(r.hinge, const Rect.fromLTWH(0, 430, 900, 14));
+    expect(r.creaseBand, const Rect.fromLTWH(0, 430, 900, 14));
     expect(r.folds, isTrue);
   });
 
@@ -107,7 +107,8 @@ void main() {
     );
     final r = await DisplayCutout.regions();
     expect(r.folds, isTrue, reason: 'the device folds even when open flat');
-    expect(r.hinge, isNull, reason: 'nothing to lay out around right now');
+    expect(r.creaseBand, isNull, reason: 'nothing to lay out around right now');
+    expect(r.activeDivision, isNull);
   });
 
   test('an unrecognised kind is kept, not dropped', () async {
@@ -150,7 +151,10 @@ void main() {
   });
 
   test('a region without margins keeps a zero inset', () async {
-    answer(orientation: 'portrait', regions: [region('occlusion', 0, 0, 10, 10)]);
+    answer(
+      orientation: 'portrait',
+      regions: [region('occlusion', 0, 0, 10, 10)],
+    );
     final r = await DisplayCutout.regions();
     expect(r.regions.single.margins, EdgeInsets.zero);
     expect(r.regions.single.inner, const Rect.fromLTWH(0, 0, 10, 10));
@@ -166,14 +170,17 @@ void main() {
     expect(await DisplayCutout.verticalBarEdge(), BarEdge.unspecified);
   });
 
-  test('no vertical bar trait reads as unspecified, never as an edge', () async {
-    // iOS before 27.1, Android, and the test binding all answer nothing.
-    messenger.setMockMethodCallHandler(
-      channel,
-      (call) async => throw MissingPluginException(),
-    );
-    expect(await DisplayCutout.verticalBarEdge(), BarEdge.unspecified);
-  });
+  test(
+    'no vertical bar trait reads as unspecified, never as an edge',
+    () async {
+      // iOS before 27.1, Android, and the test binding all answer nothing.
+      messenger.setMockMethodCallHandler(
+        channel,
+        (call) async => throw MissingPluginException(),
+      );
+      expect(await DisplayCutout.verticalBarEdge(), BarEdge.unspecified);
+    },
+  );
 
   test('the hinge is read with its status and angle', () async {
     answer(hinge: {'status': 'partiallyOpen', 'angle': 1.57});
