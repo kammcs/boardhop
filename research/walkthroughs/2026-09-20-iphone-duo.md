@@ -43,7 +43,7 @@ was found in phase 4b and fixed in phase 5.
 | **Open, tall, flat** (`medium`) | 669 x 951 | Home and the probe with the bar edge `unspecified` — the glass bar stays along the bottom | `phase2-open-tall-flat-home-{light,dark}`, `phase3-tall-home`, `phase5-tall-diag` |
 | **Open, tall, book** (horizontal crease) | 669 x 951 | the board, Pipelines, a pull request, the standalone work item's composer, `CreasePadding` | `phase3-tall-book-{board,pipelines,pr}`, `phase4b-tall-book-wi`, `phase5-tall-book-diag` |
 | **Closed (cover)**, portrait and landscape | 466 x 678 / 678 x 466 | Home, the board scrolled to its last column, Organizations, Diagnostics, the standalone work item | `phase2-closed-portrait-home-{light,dark}`, `phase2-closed-board-scrolled`, `phase4b-cover-{orgs,diagnostics,wi}`, `phase5-cover-{wi,diag,diag-menu}` |
-| **Split View** | — | **not entered**; see "Still open" | — |
+| **Split View** (left pane, Kelly by hand) | Home, Display probe | 469x669 pt compact, bar edge leading, no leading inset: the bare rail takes its own 72 pt column on the outer edge; content from 88; the divider side reports 8.7 pt; the fold's band is reported inactive and clipped at 455.5 | `split-left-home`, `split-left-probe` |
 
 Regression, unchanged by the whole adaptation: iPhone 17 portrait and landscape and iPad Pro 13"
 portrait and landscape (`phase2-regress-{iphone,ipad}-{portrait,landscape}`), debug logs clean.
@@ -141,7 +141,7 @@ The four that decided the design:
 
 ## Still open
 
-- **Split View was never entered.** It cannot be started from a script: idb's HID input does not
+- **Split View right pane not yet measured** (the left pane was, after Kelly started it by hand; research/23 §9.14). Originally: It cannot be started from a script: idb's HID input does not
   reach the inner panel at all, and although a synthetic `CGEvent` swipe through Device Hub's
   window does open the app switcher, the card would not drag to either edge (research/23 §9.5).
   Device Hub has no Split View button. So the two pane rows of §2, a pane's size class, the

@@ -160,7 +160,7 @@ were identical in every row and `viewInsets` was zero throughout.
 | Open, wide pose, partly folded (book) | **951 x 669** | expanded | 0 / 0 / **84** / 34 | **trailing** | **active**, **vertical**, (455.5, 0) 40 x 669, margins 20 left and right | partiallyOpen, 2.23 |
 | Open, tall pose, flat | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **inactive**, horizontal, (0, 455.5) 669 x 40 | fullyOpen, 3.14 |
 | Open, tall pose, partly folded (book) | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **active**, **horizontal**, (0, 455.5) 669 x 40, margins 20 top and bottom | partiallyOpen, 2.23 |
-| Split View, left pane | not measured | — | — | — | — | — |
+| Split View, left pane (Kelly started it by hand, 2026-09-20, Safari on the right) | 469 x 669 | compact | 0 / 0 / 8.7 / 34 | **leading** | inactive, vertical, clipped to the pane at x 455.5 (13.5 pt of the 40 pt band visible), margins 20 | fullyOpen 3.14 |
 | Split View, right pane | not measured | — | — | — | — | — |
 
 Three corrections to what this table used to predict:
@@ -1083,3 +1083,23 @@ duo_display.dart` learned `barEdge`, `cornerInsets` and the measured `wideCorner
 Changed: `lib/app.dart`, `lib/theme/layout.dart`, `lib/theme/dialogs.dart`,
 `lib/features/projects/project_shell.dart`,
 `lib/features/work_items/form/controls/rich_text_control.dart`.
+
+### 9.14 Split View, left pane (Kelly started it by hand, 2026-09-20)
+
+Kelly put Boardhop on the left and Safari on the right. Measured with the Display probe and
+`simctl pbpaste` (`.shots/duo/split-left.json`, `split-left-home.png`, `split-left-probe.png`):
+
+- Window **469 x 669 pt**, `compact`, `orientation` portrait, `verticalBarEdge` **leading**,
+  `railSide` left, `compactPane` true. Answers 12b appendix question 3: the pane is compact.
+- `padding` **0 / 0 / 8.7 / 34**: iOS reports **no leading inset** for the bar column in a pane
+  (there is no status cluster on that edge; the cluster stays on the display's right, in Safari's
+  column), and 8.7 pt on the divider side. So the shell's bare rail sits in its own 72 pt column
+  on the outer edge with content from 72 + 16 (the corner inset, 16 on the leading edge again).
+  Visually right: the items line up on the pane's outer edge like Safari's on its own.
+- The division region is still reported, **inactive**, clipped to the pane: x 455.5 to 469, so
+  13.5 pt of the 40 pt band fall inside the left pane. `folds` is true, `crease` null. If the
+  device is folded while in Split View the active band will lie across the divider, mostly outside
+  the pane; nothing in the pane should split (each pane is one panel) and `paneWidthFor` will
+  ignore it because 455.5 is above every pane maximum.
+- `pushes` 4 while entering Split View; `metricsChanges` 1 (the resize itself).
+- The right pane is measured when Kelly swaps the sides.
