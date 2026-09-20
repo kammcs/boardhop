@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 
 /// Which side of the screen carries the display cutout (the Dynamic
@@ -13,6 +14,49 @@ enum CutoutSide { left, right, none, unknown }
 /// kind cannot silently become "nothing in the way".
 enum ReservedRegionKind { division, occlusion, unknown }
 
+/// The edge iOS puts its own vertical bar on (`UITraitCollection
+/// .verticalBarEdge`, iOS 27.1).
+///
+/// The trait "reflects the system's preferred edge regardless of whether a
+/// vertical bar is currently visible", so it answers for the glass rail as
+/// well (research/23 D1). [unspecified] is both "this hardware never has
+/// one" and "not in this orientation", and is what every OS before 27.1
+/// and every other platform reports.
+enum BarEdge { leading, trailing, unspecified }
+
+/// How far open the fold is (`UIHinge.status`, iOS 27.1).
+///
+/// [none] is hardware that does not fold, which is not the same as
+/// [unknown]: the latter is a hinge whose position the system cannot read.
+enum HingeStatus { closed, partiallyOpen, fullyOpen, unknown, none }
+
+/// The fold's state: how far open, and by how much in radians when the
+/// platform says.
+class HingeState {
+  const HingeState({
+    this.status = HingeStatus.none,
+    this.angle,
+    this.updates = 0,
+    this.view,
+  });
+
+  final HingeStatus status;
+
+  /// How many hinge updates the platform has delivered, and the view the
+  /// interaction sits on. Diagnostics only: they tell "the system says
+  /// unknown" apart from "no update has arrived yet" (research/23 §9).
+  final int updates;
+  final String? view;
+
+  /// Radians, or null when the platform reports no angle. Apple warns the
+  /// rate and precision are system policy, so nothing lays out from it
+  /// (research/23 D7).
+  final double? angle;
+
+  @override
+  String toString() => 'HingeState($status, angle: $angle)';
+}
+
 /// One rectangle of the display the UI has to keep clear of, in logical
 /// pixels within the Flutter view.
 class ReservedRegion {
@@ -20,17 +64,33 @@ class ReservedRegion {
     required this.kind,
     required this.rect,
     this.active = true,
+    this.margins = EdgeInsets.zero,
+    this.source,
   });
 
   final ReservedRegionKind kind;
+
+  /// The region including its margins, which is what UIKit reports.
   final Rect rect;
+
+  /// The part of [rect] that is margin rather than obstruction: the space
+  /// UIKit keeps clear around the reserved rect for interactive content.
+  final EdgeInsets margins;
 
   /// False for a region that exists but is not currently in force, such as
   /// a hinge on a device that is open flat.
   final bool active;
 
+  /// Which `UIView` answered ("flutterView", "rootView" or "window"), for
+  /// diagnostics. Null anywhere the platform does not say.
+  final String? source;
+
+  /// [rect] with the margins taken off: the obstruction itself.
+  Rect get inner => margins == EdgeInsets.zero ? rect : margins.deflateRect(rect);
+
   @override
-  String toString() => 'ReservedRegion($kind, $rect, active: $active)';
+  String toString() =>
+      'ReservedRegion($kind, $rect, margins: $margins, active: $active)';
 }
 
 /// Everything the platform will say about obstructions in the display.
@@ -67,7 +127,7 @@ class DisplayRegions {
 
 /// Asks iOS about the shape of the display.
 ///
-/// Two questions, one channel (`com.kammcs.boardhop/display`):
+/// Four questions, one channel (`com.kammcs.boardhop/display`):
 ///
 /// * **Where is the cutout?** Flutter's safe-area insets are the same on
 ///   both sides in landscape (59 pt on a Dynamic Island phone, for the
@@ -78,7 +138,13 @@ class DisplayRegions {
 ///   (`reservedRegions(kind:)`), which is how a folding device reports its
 ///   hinge. Boardhop's whole UI is one `UIView` under
 ///   `FlutterViewController`, so the Runner can ask and hand the
-///   rectangles over (research/12b).
+///   rectangles over (research/12b). Each region carries its margins and
+///   whether it is active right now.
+/// * **Where does the system put its vertical bar?** iOS 27.1's
+///   `UITraitCollection.verticalBarEdge`, which is where Boardhop's glass
+///   rail belongs on an iPhone Duo (research/23 D1).
+/// * **How far open is the fold?** `UIHinge.status` through a
+///   `UIHingeInteraction` on the Flutter view.
 ///
 /// On a folding display the orientation no longer settles where the cutout
 /// is — the two halves face different ways and the housing is not at one
@@ -95,6 +161,34 @@ class DisplayCutout {
   /// Which side the cutout is on, or [CutoutSide.unknown] on a folding
   /// display. Kept as its own call for the shell, which wants only this.
   static Future<CutoutSide> side() async => (await regions()).cutoutSide;
+
+  /// The edge iOS wants its vertical bar on, or [BarEdge.unspecified]
+  /// where it wants none (and on every platform without the trait).
+  static Future<BarEdge> verticalBarEdge() async =>
+      switch (await _invoke<String>('verticalBarEdge')) {
+        'leading' => BarEdge.leading,
+        'trailing' => BarEdge.trailing,
+        _ => BarEdge.unspecified,
+      };
+
+  /// The fold's status and angle. [HingeStatus.none] where nothing folds.
+  static Future<HingeState> hinge() async {
+    final raw = await _invoke<Map<dynamic, dynamic>>('hinge');
+    if (raw == null) return const HingeState();
+    final map = raw.cast<String, dynamic>();
+    return HingeState(
+      status: switch (map['status']) {
+        'closed' => HingeStatus.closed,
+        'partiallyOpen' => HingeStatus.partiallyOpen,
+        'fullyOpen' => HingeStatus.fullyOpen,
+        'unknown' => HingeStatus.unknown,
+        _ => HingeStatus.none,
+      },
+      angle: (map['angle'] as num?)?.toDouble(),
+      updates: (map['updates'] as num?)?.toInt() ?? 0,
+      view: map['view'] as String?,
+    );
+  }
 
   /// The display's reserved regions and cutout side in one round trip.
   static Future<DisplayRegions> regions() async {
@@ -134,6 +228,7 @@ class DisplayCutout {
     final x = (map['x'] as num?)?.toDouble();
     final y = (map['y'] as num?)?.toDouble();
     if (x == null || y == null || width == null || height == null) return null;
+    double margin(String key) => (map[key] as num?)?.toDouble() ?? 0;
     return ReservedRegion(
       kind: switch (map['kind']) {
         'division' => ReservedRegionKind.division,
@@ -142,6 +237,13 @@ class DisplayCutout {
       },
       rect: Rect.fromLTWH(x, y, width, height),
       active: map['active'] as bool? ?? true,
+      margins: EdgeInsets.fromLTRB(
+        margin('marginLeft'),
+        margin('marginTop'),
+        margin('marginRight'),
+        margin('marginBottom'),
+      ),
+      source: map['source'] as String?,
     );
   }
 

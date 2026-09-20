@@ -250,6 +250,12 @@ import UserNotifications
   ///   interface orientation can tell.
   /// * `reservedRegions` — the rectangles the UI must keep clear of: a
   ///   folding device's hinge and any camera housing over the display.
+  /// * `verticalBarEdge` — the edge iOS puts its own vertical bar on, which
+  ///   is where the glass rail belongs (research/23 D1).
+  /// * `hinge` — the fold's status and angle, from a `UIHingeInteraction`.
+  ///
+  /// All four are polled by Dart; the push the plan calls for arrives in
+  /// phase 1.
   private func registerDisplayChannel(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "com.kammcs.boardhop/display", binaryMessenger: messenger)
@@ -259,6 +265,10 @@ import UserNotifications
         result(Self.interfaceOrientation())
       case "reservedRegions":
         result(self?.reservedRegions())
+      case "verticalBarEdge":
+        result(self?.verticalBarEdge())
+      case "hinge":
+        result(self?.hingeState())
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -280,58 +290,148 @@ import UserNotifications
     }
   }
 
-  /// The Flutter view's reserved regions, as `[{kind, x, y, width, height,
-  /// active}]` in the view's own coordinates.
+  /// Which view answers the display questions, best first.
   ///
   /// The whole Boardhop UI is one `UIView` under `FlutterViewController`,
-  /// so one view answers for the app (research/12b).
+  /// so that view is the one the layout cares about (research/12b). It is
+  /// not guaranteed to be the view UIKit hangs the regions off, though, so
+  /// the window is asked next and the answer says which one spoke.
+  private func displayViews() -> [(String, UIView)] {
+    var out: [(String, UIView)] = []
+    // Boardhop is scene-based (`UIApplicationSceneManifest` in Info.plist),
+    // where `FlutterAppDelegate.window` can be nil, so the scene's key
+    // window is the one to start from and `window` is only a fallback.
+    let windows = [
+      Self.activeScene()?.keyWindow,
+      Self.activeScene()?.windows.first,
+      window,
+    ].compactMap { $0 }
+    for candidate in windows {
+      if let controller = candidate.rootViewController {
+        out.append(
+          (controller is FlutterViewController ? "flutterView" : "rootView",
+           controller.view))
+      }
+      out.append(("window", candidate))
+    }
+    return out
+  }
+
+  /// The Flutter view's reserved regions, as `[{kind, x, y, width, height,
+  /// active, marginTop, marginLeft, marginBottom, marginRight, source}]` in
+  /// that view's own coordinates (points).
   ///
-  /// **Reached by selector on purpose.** `reservedRegions(kind:)` is iOS
-  /// 27.1. This machine has Xcode 27.0 and the iOS **27.0** SDK, whose
-  /// UIKit headers carry no such symbol (checked 2026-09-13), so a direct
-  /// call would not compile and an `#available` guard would not help.
-  /// Asking the runtime keeps the app building today and lets the real
-  /// answer arrive the first time it runs on an OS that has the API.
-  ///
-  /// **Unverified.** The selector spelling below is from Tech Talk 111461
-  /// and has not been run against a real iPhone Duo or the 27.1 SDK (there
-  /// is no Duo simulator device type in 27.0 either); when the headers
-  /// land, check it and replace this with the typed call. Until then the
-  /// method answers an empty list, which the Dart side reads as "asked,
-  /// nothing reserved".
+  /// `reservedRegions(kind:options:)` is iOS 27.1 and the SDK on this Mac
+  /// is 27.1, so this is the typed call the plan asked for; the old
+  /// selector path passed an `NSNumber` where the API takes a
+  /// `UIViewReservedRegionKind`, so it could never have answered anything.
+  /// `includeInactive` matters: an iPhone Duo lying open flat still has a
+  /// division region, and "this display folds" is what makes a page prefer
+  /// an even number of columns.
   private func reservedRegions() -> [[String: Any]] {
-    guard let view = window?.rootViewController?.view else { return [] }
+    guard #available(iOS 27.1, *) else { return [] }
+    for (source, view) in displayViews() {
+      let regions = Self.regions(of: view, source: source)
+      if !regions.isEmpty { return regions }
+    }
+    return []
+  }
+
+  @available(iOS 27.1, *)
+  private static func regions(of view: UIView, source: String) -> [[String: Any]] {
     var out: [[String: Any]] = []
-    for (kind, name) in [(0, "division"), (1, "occlusion")] {
-      for rect in Self.regions(of: view, kind: kind) {
+    let kinds: [(UIView.ReservedRegion.Kind, String)] = [
+      (.division, "division"), (.occlusion, "occlusion"),
+    ]
+    for (kind, name) in kinds {
+      for region in view.reservedRegions(kind: kind, options: .includeInactive) {
         out.append([
           "kind": name,
-          "x": rect.origin.x,
-          "y": rect.origin.y,
-          "width": rect.size.width,
-          "height": rect.size.height,
-          "active": !rect.isEmpty,
+          "x": region.frame.origin.x,
+          "y": region.frame.origin.y,
+          "width": region.frame.size.width,
+          "height": region.frame.size.height,
+          "active": region.isActive,
+          "marginTop": region.margins.top,
+          "marginLeft": region.margins.left,
+          "marginBottom": region.margins.bottom,
+          "marginRight": region.margins.right,
+          "source": source,
         ])
       }
     }
     return out
   }
 
-  private static func regions(of view: UIView, kind: Int) -> [CGRect] {
-    // Gate the probe on the OS that introduced the API. `#available` is a
-    // runtime check and does not make an absent symbol compile — that is
-    // why the call below still goes through the selector rather than
-    // `view.reservedRegions(kind:)` — but it keeps the app from poking at
-    // a same-named private selector on an older OS, and it is the line to
-    // build the typed call inside once the 27.1 SDK is installed.
-    guard #available(iOS 27.1, *) else { return [] }
-    let selector = NSSelectorFromString("reservedRegionsOfKind:")
-    guard view.responds(to: selector) else { return [] }
-    guard
-      let raw = view.perform(selector, with: NSNumber(value: kind))?
-        .takeUnretainedValue() as? [NSValue]
-    else { return [] }
-    return raw.map { $0.cgRectValue }.filter { !$0.isNull }
+  /// `"leading"`, `"trailing"` or `"unspecified"`.
+  ///
+  /// The trait "reflects the system's preferred edge regardless of whether a
+  /// vertical bar is currently visible", so it is the whole answer for where
+  /// the rail goes; `unspecified` is both "this hardware never has one" and
+  /// "not in this orientation", which is where today's rules stay.
+  private func verticalBarEdge() -> String {
+    guard #available(iOS 27.1, *), let view = displayViews().first?.1 else {
+      return "unspecified"
+    }
+    switch view.traitCollection.verticalBarEdge {
+    case .leading: return "leading"
+    case .trailing: return "trailing"
+    default: return "unspecified"
+    }
+  }
+
+  /// The last hinge update, as `{status, angle}`.
+  ///
+  /// `status` is `closed`, `partiallyOpen`, `fullyOpen`, `unknown`, or
+  /// `none` on hardware that does not fold (the update's `hinge` is nil
+  /// there, and on anything before 27.1 there is no interaction at all).
+  /// The interaction is added to the Flutter view once and kept; its
+  /// handler is the only thing that ever learns the angle.
+  private var hingeInteraction: Any?
+  private var hingeStatusName = "unknown"
+  private var hingeAngle: Double?
+
+  /// How many times the interaction's handler has run, and which view it
+  /// is attached to. Phase 0 needs to tell "the system says unknown" apart
+  /// from "the handler never fired".
+  private var hingeUpdates = 0
+  private var hingeView = "none"
+
+  private func hingeState() -> [String: Any] {
+    guard #available(iOS 27.1, *) else { return ["status": "none"] }
+    installHingeInteraction()
+    var out: [String: Any] = [
+      "status": hingeStatusName,
+      "updates": hingeUpdates,
+      "view": hingeView,
+    ]
+    if let hingeAngle { out["angle"] = hingeAngle }
+    return out
+  }
+
+  @available(iOS 27.1, *)
+  private func installHingeInteraction() {
+    guard hingeInteraction == nil, let candidate = displayViews().first else { return }
+    let (source, view) = candidate
+    hingeView = source
+    let interaction = UIHingeInteraction { [weak self] _, update in
+      guard let self else { return }
+      self.hingeUpdates += 1
+      guard let hinge = update.hinge else {
+        self.hingeStatusName = "none"
+        self.hingeAngle = nil
+        return
+      }
+      self.hingeStatusName = switch hinge.status {
+      case .closed: "closed"
+      case .partiallyOpen: "partiallyOpen"
+      case .fullyOpen: "fullyOpen"
+      default: "unknown"
+      }
+      self.hingeAngle = Double(hinge.angle)
+    }
+    view.addInteraction(interaction)
+    hingeInteraction = interaction
   }
 }
 

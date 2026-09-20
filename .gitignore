@@ -102,3 +102,6 @@ android/keystore.properties
 *.keystore
 **/play-service-account*.json
 /android/fastlane/report.xml
+
+# Compiled helpers from tool/ (tool/duo-pose builds duo-pose.swift here)
+tool/.bin/

@@ -17,6 +17,7 @@ import 'features/dashboards/widgets/chart_card.dart';
 import 'features/diagnostics/dashboard_probe/dashboard_probe_page.dart';
 import 'features/diagnostics/diagnostics_page.dart';
 import 'features/diagnostics/diff_probe/diff_probe_page.dart';
+import 'features/diagnostics/display_probe_page.dart';
 import 'features/diagnostics/board_probe/board_probe_page.dart';
 import 'features/diagnostics/editor_probe_page.dart';
 import 'features/diagnostics/mention_probe_page.dart';
@@ -115,6 +116,10 @@ GoRouter buildRouter(
         GoRoute(
           path: '/diagnostics/wiki',
           builder: (_, _) => const WikiProbePage(),
+        ),
+        GoRoute(
+          path: '/diagnostics/display',
+          builder: (_, _) => const DisplayProbePage(),
         ),
       ],
       GoRoute(path: '/orgs', builder: (_, _) => const OrgPickerPage()),

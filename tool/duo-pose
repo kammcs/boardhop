@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Thin wrapper: compiles tool/duo-pose.swift once into tool/.bin/duo-pose
+# (gitignored) and runs it. See the script's header for what it does.
+#
+#   tool/duo-pose closed | book | open | rotate [n] | list
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+src="$here/duo-pose.swift"
+bin="$here/.bin/duo-pose"
+if [ ! -x "$bin" ] || [ "$src" -nt "$bin" ]; then
+  mkdir -p "$here/.bin"
+  xcrun swiftc -O "$src" -o "$bin"
+fi
+exec "$bin" "$@"

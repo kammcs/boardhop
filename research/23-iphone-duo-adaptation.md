@@ -140,18 +140,43 @@ display into multiple usable regions, excluding the region at the center as the 
 
 ## 2. Layout situations the app must handle
 
-| Situation | Window (pt) | Breakpoint | Vertical bar edge (expected) | Division region |
-|---|---|---|---|---|
-| Closed, portrait (cover) | 466 x 678 | compact | trailing (island runs down the right edge) | none |
-| Closed, landscape (cover) | 678 x 466 | medium | one side | none |
-| Open, wide pose, flat | 951 x 669 | expanded | trailing | inactive, vertical, centre |
-| Open, wide pose, partly folded (laptop or tent) | 951 x 669 | expanded | trailing | **active, horizontal** band across the middle |
-| Open, tall pose, flat | 669 x 951 | medium | unspecified (horizontal bars) | inactive, horizontal |
-| Open, tall pose, partly folded (book) | 669 x 951 | medium | unspecified | **active, vertical** band down the middle |
-| Split View, left pane | about 475 x 669 | compact | **leading** | none in the pane |
-| Split View, right pane | about 475 x 669 | compact | **trailing** | none in the pane |
+**Measured on the Duo simulator on 2026-09-20** (phase 0, §9); every number below came off
+the device through the Display diagnostics page, not from guidance. `padding` and `viewPadding`
+were identical in every row and `viewInsets` was zero throughout.
 
-"Expected" values are from Apple's guidance and one screenshot; phase 0 measures every row.
+| Situation | Window (pt) | Breakpoint | padding l/t/r/b | Vertical bar edge | Division region | Hinge |
+|---|---|---|---|---|---|---|
+| Closed, portrait (cover) | **466 x 678** | compact | 0 / 0 / **84** / 34 | **trailing** | **none reported** | closed, 0.00 |
+| Closed, landscape (cover) | **678 x 466** | medium | 0 / 0 / **84** / 34 | **trailing** | **none reported** | closed, 0.00 |
+| Open, wide pose, flat | **951 x 669** | expanded | 0 / 0 / **84** / 34 | **trailing** | **inactive**, vertical, (455.5, 0) 40 x 669 | fullyOpen, 3.14 |
+| Open, wide pose, partly folded (book) | **951 x 669** | expanded | 0 / 0 / **84** / 34 | **trailing** | **active**, **vertical**, (455.5, 0) 40 x 669, margins 20 left and right | partiallyOpen, 2.23 |
+| Open, tall pose, flat | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **inactive**, horizontal, (0, 455.5) 669 x 40 | fullyOpen, 3.14 |
+| Open, tall pose, partly folded (book) | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **active**, **horizontal**, (0, 455.5) 669 x 40, margins 20 top and bottom | partiallyOpen, 2.23 |
+| Split View, left pane | not measured | — | — | — | — | — |
+| Split View, right pane | not measured | — | — | — | — | — |
+
+Three corrections to what this table used to predict:
+
+- **The crease runs across the *short* axis, not the long one.** In the wide pose the division is
+  a *vertical* band at the horizontal centre; in the tall pose it is *horizontal*. The fold line
+  is always at the middle of the display's longer edge, whatever way up the device is held, and
+  the earlier "horizontal band in the laptop pose" was wrong. The band is 40 pt wide with 20 pt of
+  margin on each side, so **the crease itself is a zero-width line at the exact centre**
+  (x = 475.5 in the wide pose, y = 475.5 in the tall pose) and the 40 pt is entirely the keep-out
+  margin UIKit asks for around it.
+- **The cover display reports a vertical bar edge too** (`trailing`), in both orientations, and
+  reports **no division region at all** — so `folds` is false there and the pre-27.1 cutout answer
+  still applies. D1 holds on the cover.
+- **The tall pose reports `unspecified`**, as expected, so the bottom bar stays there.
+
+The 84 pt right inset (82 pt top in the tall pose) is the stacked status bar, and it shows up in
+`reservedRegions` as an **active occlusion** as well: (867, 0) 84 x 120 in the wide pose,
+(382, 0) 84 x 170 on the cover in portrait, (535, 0) 134 x 82 in the tall pose. Flutter's
+`MediaQuery.padding` already covers it, so the rail's clearance can come from `padding` and needs
+no measured constant (§4.3). A second, **inactive** occlusion is reported where the camera sits on
+the panel that is not in use (58 x 37 in the wide pose).
+
+Split View could not be started from a script (§9, question 2); those two rows are still open.
 
 ## 3. Decisions (Kelly, 2026-09-20)
 
@@ -389,3 +414,147 @@ For each situation in section 2, on the scratch project, light and dark, default
   window), and start Split View by hand if the idb gesture turns out flaky.
 - Confirm the vertical rail on the cover display looks right once phase 2 has a screenshot; if it
   fights the vertical Dynamic Island, D1 narrows to the inner display and Split View.
+
+## 9. Phase 0 findings (2026-09-20)
+
+Measured on the booted iPhone Duo simulator (`58DEB6C0…`, iOS 27.1) with a **debug** build of the
+real app, signed in, on the scratch project "DevOps Mobile App" (D8). What landed: `tool/duo-pose`
+and its wrapper, the `duo` and `DISPLAY` cases in `tool/shot-ios.sh`, the typed Swift calls, the
+Dart wrappers, and a **Display diagnostics page** at `/diagnostics/display` (the phone-link icon on
+the Diagnostics page, `AppConfig.diagnosticsEnabled`). No layout changed.
+
+### 9.1 Which view answers, and the trap that hid every answer
+
+**`FlutterAppDelegate.window` is nil in this app.** Boardhop is scene-based
+(`UIApplicationSceneManifest` in `Info.plist`), so the first typed implementation — which asked
+`window?.rootViewController?.view`, exactly as the old selector code did — answered *nothing at all*
+in every pose: no regions, `unspecified` for the bar edge, and a hinge that never got its
+interaction installed. Going through the active `UIWindowScene`'s `keyWindow` instead fixed all
+three at once. This is the single most important thing phase 1 must not undo.
+
+With that in place, **the `FlutterViewController`'s own view answers every query** (`source` is
+`flutterView` in all 24 regions measured, and the hinge interaction lives there too). The window
+fallback was never needed. Regions come back in the Flutter view's coordinates, which are the
+same as `MediaQuery`'s, so no conversion is needed.
+
+### 9.2 The fold is invisible to Flutter
+
+Folding from Open to Book and back **produced no `didChangeMetrics` at all** (the page's metrics
+counter stayed at 1 across a full open → book → open cycle), and `MediaQuery.size`, `padding` and
+`orientation` were byte-identical in the flat and folded rows. Only the channel sees the fold:
+`hinge.status` goes `fullyOpen` (3.14 rad) → `partiallyOpen` (2.23 rad), and the division region's
+`isActive` flips false → true. Its rect does not move.
+
+So **the pushed `displayChanged` of §4.1 is not an optimisation, it is the only way a fold can
+reach Dart**. Polling on `didChangeMetrics` (what `ProjectShell` does today) would never fire.
+The `UIHingeInteraction` handler is lively — it ran 38 times during one fold — so it is a good
+push source, and coalescing per frame matters.
+
+`MediaQuery.displayFeatures` was **empty in every row**, as expected: nothing in Flutter's iOS
+engine populates it yet (§1.5).
+
+### 9.3 The appendix questions from research/12b
+
+1. **Point sizes.** Inner 951 x 669 (`expanded`) in the wide pose, 669 x 951 (`medium`) in the
+   tall pose; cover 466 x 678 (`compact`) portrait, 678 x 466 (`medium`) landscape; all at
+   `devicePixelRatio` 3.0. The inferred sizes in 12b §3.1 were right. Split View not measured.
+   **`Breakpoint` needs no change.**
+2. **Split View divider.** *Not answered.* Split View could not be started from a script; see §9.4.
+3. **Split View size class.** *Not answered*, same reason.
+4. **`MediaQuery.padding` per pose.** Filled into §2. The shape is the same everywhere: **84 pt on
+   the edge that carries the stacked status bar** (82 pt when it is the top edge in the tall pose),
+   34 pt for the home indicator, 0 elsewhere — including 0 at the top of the *wide* pose, where the
+   status bar is in the top-right corner rather than across the top. `viewPadding` equalled
+   `padding` in every row and `viewInsets` was zero. `SafeArea` therefore handles the asymmetry on
+   its own, and the rail's status-bar clearance can be taken from `padding` (§4.3) rather than a
+   measured constant.
+5. **Does `MediaQuery` update during a fold?** No — see §9.2. It does not update at all. There is
+   nothing to animate from `MediaQuery`; the animation in D7 has to be driven by the channel.
+6. **The editor under a live resize.** Phase 4; not touched.
+7. **What the display channel returns on the inner display.** Everything, once the view lookup is
+   right (§9.1): both region kinds with margins and `isActive`, the bar edge, and a live hinge.
+   The old selector path returned an empty list, which Dart read as "asked, nothing in the way" —
+   the "silently wrong rather than unknown" risk 12b called out was real, and is gone.
+8. **Is a 27.1 rebuild enough for tier 3?** **Yes for the window, no for the crease.** A plain
+   rebuild already fills both panels edge to edge, gets the right safe-area insets, and is handed
+   the reserved regions when asked. What it does *not* get is any reaction to them: Flutter draws
+   straight through the active division band, and nothing in the engine reports the fold. Tier 4
+   is the work in phases 2 and 3.
+9. **Long-press drag across the crease.** Phase 3; not touched.
+10. **Flutter's response to #192515.** Answered in §1.5: still open, with a community engine PR
+    (#193025) and no maintainer review.
+
+### 9.4 Driving the Duo from a script (tooling findings)
+
+- **`tool/duo-pose closed | book | open | rotate [n] | list`** works and is fast (about 1–2 s per
+  pose). Two things the prototype did not hit:
+  `NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dt.Devices")` returns
+  a placeholder whose `processIdentifier` is **-1**, which no accessibility call can use, so the
+  tool drops non-positive pids and falls back to the workspace list and then to `pgrep -x
+  DeviceHub`; and the simulated screen is **in the same accessibility tree** under a group whose
+  subrole is `iOSContentGroup`, so Boardhop's own buttons ("Search", "Wiki") would collide with the
+  chrome — that subtree is skipped. `list` prints: Available, Search, Home, Screenshot, Record,
+  Rotate Right, Closed, Book, Open, Hide Sidebar, Open in New Window.
+- **Rotation.** One `Rotate Right` turns the wide pose into the tall pose; four return. Screenshots
+  follow the rotation on this device (the inner panel captures 2853 x 2007 in the wide pose and
+  2007 x 2853 in the tall one), so `shot-ios.sh` never rotates the Duo's thumbnail.
+- **idb's HID taps only reach the cover panel.** `idb describe` reports the Duo as a single
+  466 x 678 device (the cover), coordinate taps and swipes land there, and **a coordinate tap on
+  the inner panel does nothing at all** — verified against several mappings and against a control
+  tap that did launch the app from the cover's home screen. `idb ui button HOME` works on both.
+- **idb's accessibility taps do reach the inner panel.** `idb ui tap --api ax <label>` matches
+  against `AXLabel` and works on either panel, which is how every step of this walkthrough was
+  driven; `shot-ios.sh` exposes it as `press "<label>"`. `idb ui describe-all` also works on the
+  inner panel and returns frames in the *window's* coordinate space (951 x 669), which is a handy
+  cross-check on a layout.
+- **`xcrun simctl pbpaste <udid>`** reads the device pasteboard, so the diagnostics page's "copy as
+  JSON" is the fastest way to get a whole pose off the device — no scrolling and no screenshot
+  reading. That is how §2 was filled.
+- **Mouse events into Device Hub's window do reach the inner panel**, including drags: a
+  `CGEvent` left-drag over the rendered screen scrolled the page and opened the app switcher. The
+  device screen sits inside the window at a scale that has to be found per window size (it was
+  669 x 470 window points for a 951 x 669 display, so about 0.703, at window offset (379.5, 280.5)
+  in a 1188 x 1023 window). This was a throwaway probe, not committed; if phase 3 needs a real
+  long-press drag across the crease, this is the path to turn into a tool.
+
+### 9.5 Split View: what was tried, and what is left for Kelly
+
+Split View was **not started**, inside the 20 minutes allowed. What was tried, all on the inner
+panel with the app open:
+
+1. `idb ui swipe` and `idb ui tap` gestures — ruled out first: HID input does not reach the inner
+   panel at all (§9.4).
+2. A `CGEvent` swipe up from the bottom edge and hold, through Device Hub's window — **this worked**
+   and opened the app switcher (Boardhop's card plus one other app).
+3. From the switcher, a slow `CGEvent` drag of the Boardhop card to the left edge — no effect.
+4. The same drag with a 1.4 s press before it moved (a long-press then drag) — no effect.
+
+So the switcher is reachable and the card is not draggable by a single synthetic mouse pointer, at
+least not the way it was shaped here; a real Split View start may need a different grab point (the
+card's top handle), a second finger, or simply the trackpad. **Kelly:** start Split View by hand
+once, leave the app in it, and the two pane rows of §2 can be filled with `tool/duo-pose` and the
+diagnostics page in one pass (open the page, press *Copy as JSON*, then
+`xcrun simctl pbpaste 58DEB6C0-6F8A-46A1-AAB5-217C2A2C5B20`). Device Hub has no Split View button
+(`duo-pose list` confirms), so there is nothing to automate against yet.
+
+### 9.6 Screenshots
+
+`.shots/duo/` (gitignored), one pair per row: `<row>-diag-<inner|outer>.png` is the Display
+diagnostics page and `<row>-home.png` is Home on the scratch project, each with a 400 px
+`_s.png` thumbnail. Rows: `closed-portrait`, `closed-landscape`, `open-wide-flat`,
+`open-wide-book`, `open-tall-flat`, `open-tall-book`. Only the active panel is captured: the other
+one is solid black, which is also how `duo-pose` knows a pose has landed.
+
+### 9.7 What phase 1 should change first
+
+1. Keep the scene-based view lookup (§9.1) and keep `source` on each region — it is the only way to
+   tell "nothing is reserved" from "the wrong view was asked".
+2. Push, do not poll (§9.2): the hinge handler, `registerForTraitChanges` and
+   `viewDidLayoutSubviews`, coalesced per frame.
+3. `DisplayRegions.hinge` (the `Rect` getter) now has a `HingeState` beside it with the same name
+   in a different shape. Phase 1's `crease` / `creaseAxis` should take over from the getter so one
+   word does not mean two things.
+4. The crease is a zero-width centre line with a 40 pt keep-out band around it (§2). `halves`
+   should be computed from the *margins*, not from the frame, or each half will lose 20 pt it
+   could have used.
+
