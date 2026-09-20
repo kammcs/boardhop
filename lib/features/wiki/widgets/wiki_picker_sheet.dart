@@ -22,7 +22,7 @@ Future<Wiki?> showWikiPicker(
     projectName: projectName,
   );
   if (!context.breakpoint.isCompact) {
-    return showDialog<Wiki>(
+    return showBoardhopDialog<Wiki>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

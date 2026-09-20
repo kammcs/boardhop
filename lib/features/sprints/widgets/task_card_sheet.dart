@@ -101,7 +101,7 @@ Future<TaskCardAction?> showTaskCardSheet(
     canAssignToMe: canAssignToMe,
   );
   if (!context.breakpoint.isCompact) {
-    return showDialog<TaskCardAction>(
+    return showBoardhopDialog<TaskCardAction>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

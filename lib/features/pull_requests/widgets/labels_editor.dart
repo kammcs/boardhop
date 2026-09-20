@@ -93,7 +93,7 @@ Future<List<String>?> showLabelsEditor(
   required Future<List<String>> Function() suggestions,
 }) {
   if (!context.breakpoint.isCompact) {
-    return showDialog<List<String>>(
+    return showBoardhopDialog<List<String>>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

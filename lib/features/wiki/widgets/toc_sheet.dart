@@ -15,7 +15,7 @@ Future<WikiHeading?> showWikiContents(
 }) {
   final body = WikiContentsSheet(headings: headings, pageTitle: pageTitle);
   if (!context.breakpoint.isCompact) {
-    return showDialog<WikiHeading>(
+    return showBoardhopDialog<WikiHeading>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

@@ -1,5 +1,6 @@
 import 'package:boardhop/auth/auth_bloc.dart';
 import 'package:boardhop/auth/auth_service.dart';
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/core/http/ado_exceptions.dart';
 import 'package:boardhop/data/models/wiki.dart';
 import 'package:boardhop/data/repositories/wiki_repository.dart';
@@ -15,6 +16,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../fixtures/duo_display.dart';
 import 'root_tab_stubs.dart';
 
 class _Wikis extends Mock implements WikiRepository {}
@@ -185,6 +187,7 @@ void main() {
     Size size = phone,
     double devicePixelRatio = 3,
     String query = '',
+    DisplayRegions? regions,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = devicePixelRatio;
@@ -226,22 +229,29 @@ void main() {
     );
     addTearDown(router.dispose);
     await tester.pumpWidget(
-      MultiRepositoryProvider(
-        providers: [
-          ...rootChromeProviders(),
-          RepositoryProvider<WikiRepository>.value(value: wikis),
-          RepositoryProvider<AuthService>.value(value: auth),
-        ],
-        child: BlocProvider<AuthBloc>.value(
-          value: bloc,
-          child: MaterialApp.router(
-            theme: BoardhopTheme.light(),
-            routerConfig: router,
+      Duo.scope(
+        window: size / devicePixelRatio,
+        regions: regions,
+        child: MultiRepositoryProvider(
+          providers: [
+            ...rootChromeProviders(),
+            RepositoryProvider<WikiRepository>.value(value: wikis),
+            RepositoryProvider<AuthService>.value(value: auth),
+          ],
+          child: BlocProvider<AuthBloc>.value(
+            value: bloc,
+            child: MaterialApp.router(
+              theme: BoardhopTheme.light(),
+              routerConfig: router,
+            ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    // creaseInBox reads the transform the last layout left, so a folded
+    // display needs one more frame before the panes move onto it.
+    await tester.pump();
   }
 
   group('what the page opens on', () {
@@ -575,6 +585,52 @@ void main() {
       expect(view.embedded, isTrue);
       expect(view.path, '/Boardhop/Links');
       expect(visited, isEmpty);
+    });
+
+    testWidgets('half folded, the tree pane ends on the crease', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'flutter.wiki_last_path:$org/$project/$wikiId': '/Boardhop',
+      });
+      await pump(
+        tester,
+        size: Duo.wide,
+        devicePixelRatio: 1,
+        regions: Duo.folded(Duo.wideBand),
+      );
+      // 455.5 is outside the tree pane's 280–420 range, so the fold is
+      // ignored and the fraction stands (research/23 D3).
+      final divider = tester.widget<VerticalDivider>(
+        find.byType(VerticalDivider),
+      );
+      expect(divider.width, 1);
+      expect(
+        tester.getTopLeft(find.byType(VerticalDivider)).dx,
+        closeTo(380.4, 1),
+      );
+    });
+
+    testWidgets('a crease inside the pane\'s range takes the divider', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'flutter.wiki_last_path:$org/$project/$wikiId': '/Boardhop',
+      });
+      await pump(
+        tester,
+        size: Duo.wide,
+        devicePixelRatio: 1,
+        regions: Duo.folded(const Rect.fromLTWH(380, 0, 40, 669)),
+      );
+      final divider = tester.widget<VerticalDivider>(
+        find.byType(VerticalDivider),
+      );
+      expect(divider.width, 40);
+      expect(
+        tester.getTopLeft(find.byType(VerticalDivider)).dx,
+        closeTo(380, 0.5),
+      );
     });
 
     testWidgets('a tap selects in the pane and writes ?path=', (tester) async {

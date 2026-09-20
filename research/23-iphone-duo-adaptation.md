@@ -702,3 +702,108 @@ Left for later: **Split View is still unstarted** (§9.5), so a pane is covered 
 at 475 x 669 — the rail centers in the reserved column there too, or in its own width where nothing
 is reserved. `DisplayEnvironment.compactPane` is now unused by the shell: the system's column
 answers the narrow-window question on its own, so the tighter margin it was for never shipped.
+
+### 9.10 Phase 3 landed (2026-09-20)
+
+4.4 is built and verified on the Duo simulator with a **debug** build, signed in, on the scratch
+project (D8). What landed: a crease vocabulary in `lib/theme/layout.dart` (`creaseInBox`,
+`isVerticalCrease`, `paneWidthFor`, `paneDividerWidth`, `CreasePadding`, `ColumnSnapPhysics`, and
+`SideBySide`'s crease split), `lib/theme/dialogs.dart` with `dialogAlignmentFor` and
+`showBoardhopDialog`, the four master/detail screens and the side-by-side diff on the fold, the
+Kanban board and the sprint taskboard clear of the band, fourteen dialog helpers plus the work item
+form and the type chooser through the wrapper, `CreasePadding` around every shell page, and
+`tool/duo-drag` for long-press drags on the inner panel. Tests: `test/theme/layout_test.dart` grew
+fifteen, `test/theme/dialogs_test.dart` is new (seven), and the wiki tree, root-tab, diff and board
+tests gained a folded pose each, from the new `test/fixtures/duo_display.dart`.
+
+**The crease is not at the page's centre, and that is the whole point.** The band is at
+(455.5, 0) 40 x 669 in **window** coordinates, but the shell keeps 84 pt for the system's bar
+column, so a pane splitting its own 867 pt box in half would miss the fold by 42 pt. Every helper
+takes the band through `creaseInBox`, which converts it with the box's own `RenderBox`. That reads
+the transform the **last** layout left, so the first layout of a box answers null and asks for one
+more frame; from then on it is current, and because reading `DisplayScope` subscribes the box to it,
+a fold rebuilds the box on its own. Every widget test here pumps twice for the same reason.
+
+Measured on the device in the wide book pose, all through `idb ui describe-all`:
+
+- **Work list and detail:** the list pane is **455.5** wide — the band's leading edge, not
+  `0.42 * 867 = 364` — and the detail pane's placeholder centres at 681.25, the centre of
+  495.5…867. The `VerticalDivider` is given the band's 40 pt, so its hairline lands on the crease
+  and the 20 pt margins stay empty.
+- **Home and the PR overview (`SideBySide`):** the end column starts at exactly **495.5** and is
+  358 wide. Flat, both pages are one column — `ContentColumn` gives 840, under the 880 threshold —
+  so the fold is what puts them side by side. That needed `creaseMinColumn` **320**, not half of
+  `twoColumnMin`: the fold's halves of that box are about 442 and 358, because the crease is not
+  centred in the content (above).
+- **The new work item form:** opened from the Work bar's `+`, its fields start at **539.5**,
+  entirely on the trailing panel.
+- **The board:** the first column runs 135.5…455.5 and the second 495.5…815.5 — one card wall per
+  panel, the band empty between them.
+
+**Snapping alone was not enough for the boards.** A `ScrollPhysics` that rounds a fling to a lattice
+of column boundaries leaves the board straddling the fold at rest, because the resting offset is
+zero and zero is where the list starts. So the **leading padding** grows until a boundary lands on
+the band unscrolled (135.5 pt here, which is `495.5 - 1 * pitch`), and zero is then a lattice point.
+The gap between **every** pair of columns becomes the band's 40 pt rather than only the pair nearest
+the fold: the pitch has to stay uniform for the lattice and for the drag auto-scroll's column
+arithmetic, and a board that re-spaced itself as it scrolled would jump under the finger.
+
+**A popup menu needs the half's edges, not the button's.** Constraining the type chooser's width to
+one half did nothing: Flutter aligns a popup menu with whichever of `position`'s edges has less room
+beyond it, so a `+` sitting 85 pt past the crease got a menu hung off *its* right edge, back across
+the fold. Passing the **half's** left and right in `position` makes the same rule pin the menu
+inside the half, on either side of the crease. `showBoardhopDialog` has the matching problem and
+solves it by padding: it asks `showDialog` for `useSafeArea: false` and pads the route's box down to
+the half already intersected with the system's insets, so a dialog on the leading panel does not
+lose 84 pt to a bar column that is nowhere near it.
+
+**What `CreasePadding` does, and does not.** With an active **horizontal** crease it grows
+`MediaQuery.padding` — the inset a null-padding `ListView` consumes, that `scrollEndPadding` takes,
+and that every bottom-anchored control already reads — to the band's near edge: the bottom inset
+when the band is in the lower part of the box, the top inset when it is in the upper. Content at
+rest and anything anchored to an edge then clears the fold. A list long enough to scroll still
+travels **through** the band on its way past; nothing short of snapping every row could stop that,
+and snapping a reading list would be worse than the fold. It also only wraps pages inside the shell,
+so a pushed route (a work item, a pull request) is not covered.
+
+Three things could not be verified on the device, with the reason:
+
+- **The board's snap after a fling.** Flutter's `ScrollBehavior.dragDevices` on iOS is touch and
+  stylus only, so a synthetic **mouse** drag does not scroll anything — it does drive
+  `LongPressDraggable`, which is why the drag test below worked. idb's HID input does not reach the
+  inner panel at all (§9.4), so there is no way to fling it. `ColumnSnapPhysics.snap` is unit-tested
+  and the at-rest geometry is measured above.
+- **`CreasePadding`'s effect**, for the same reason: extra bottom padding never moves top-aligned
+  content, and the end of a list cannot be scrolled to. The pose itself is clean
+  (`phase3-tall-book-*`) and the behaviour is covered by three widget tests.
+- **Split View**, still unstarted (§9.5).
+
+**A long-press drag across the fold works.** `tool/duo-drag holddrag` moved work item 15546 from
+New to Active across the band and back again (the second attempt needed a retry — the first move's
+rev had not been re-read, and the board said so and reloaded, which is the intended behaviour).
+The proxy stayed under the pointer throughout. The scratch board is back as it was.
+
+`tool/duo-pose` was fixed first: after Device Hub is relaunched the Duo shows inside its browser
+window, whose title is then "Device Hub", so matching on `hasPrefix("iPhone Duo")` found nothing.
+It now searches **every** window of the process for one carrying the pose buttons, with the title
+as a fast path only, and the walk is depth-bounded at 16 because the tree has recursive nodes.
+`list`, `book`, `open` and `rotate` all verified again, about 1.5 s each.
+
+`tool/duo-drag` is new (§4.6). The accessibility tree is **not** the way to find the rendered
+screen: Device Hub exposes it as an `iOSContentGroup` with the app's own elements under it, but
+those frames are in an internal space — the group reads 626 x 890 at (285, 655) for a 951 x 669
+display on a 1728 x 1117 desktop — and clicking there does nothing. Measuring the picture does
+work: the hub paints the device on a flat dark canvas, so a `screencapture` of its window has one
+bright rectangle in it, checked against the panel's aspect ratio and refused when it does not match.
+That check fires often enough (Home's two columns, any dark page) that the reliable path is to
+measure once and pin it: on this Mac `DUO_OX=959 DUO_OY=323 DUO_SC=0.6756`, which is what the whole
+walkthrough used. Device Hub is brought to the front on every call — a synthetic click only reaches
+the front window, and `screencapture -R` captures the desktop, so a terminal over the hub would be
+measured instead of it.
+
+**Verified, light and dark** (`.shots/duo/phase3-*`, each with a 400 px thumbnail): wide flat as the
+control (`phase3-wide-flat-{home,pr}`), wide book (`phase3-wide-book-{work,home2,pr,board3,form,
+typechooser2,drag,drag-back2}`), wide book in dark (`phase3-wide-book-dark`), tall book
+(`phase3-tall-book-{board,pipelines,pr}`), and the restored state (`phase3-restored`). A full
+circuit — wide flat, wide book, tall book, tall flat, dialogs, two drags — logged **no exception
+and no overflow at all**. The Duo is left open, base rotation, light.

@@ -195,14 +195,20 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
           );
           if (!wide) return ContentColumn(child: list);
           final file = _openFile;
+          // Half folded, the split goes on the fold (research/23 D3).
+          final band = creaseInBox(context, constraints);
+          final paneWidth = paneWidthFor(
+            maxWidth: constraints.maxWidth,
+            fraction: 0.38,
+            min: 300,
+            max: 420,
+            creaseBand: band,
+          );
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: (constraints.maxWidth * 0.38).clamp(300, 420),
-                child: list,
-              ),
-              const VerticalDivider(width: 1),
+              SizedBox(width: paneWidth, child: list),
+              VerticalDivider(width: paneDividerWidth(band, paneWidth)),
               Expanded(
                 child: file == null
                     ? Center(

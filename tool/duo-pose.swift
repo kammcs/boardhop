@@ -6,12 +6,21 @@
 // `com.apple.dt.Devices`, process `DeviceHub`), and there is no `simctl`,
 // `devicectl`, defaults key or darwin notification that changes a foldable's
 // pose (all checked 2026-09-20, research/23 §1.1). AppleScript's System
-// Events cannot see Device Hub at all. The raw Accessibility API can: the
-// window titled "iPhone Duo – iOS 27.1" carries `AXButton`s whose
-// `AXDescription` is `Closed`, `Book`, `Open`, `Rotate Right` (plus Home,
-// Screenshot, Record), and `AXPress` on them drives the device. That is the
-// control path Kelly settled on (D9): press by accessibility name, never by
-// coordinates, so it survives the window being moved or resized.
+// Events cannot see Device Hub at all. The raw Accessibility API can: a
+// window carries `AXButton`s whose `AXDescription` is `Closed`, `Book`,
+// `Open`, `Rotate Right` (plus Home, Screenshot, Record), and `AXPress` on
+// them drives the device. That is the control path Kelly settled on (D9):
+// press by accessibility name, never by coordinates, so it survives the
+// window being moved or resized.
+//
+// **The window is found by its buttons, not by its title** (phase 2, 2026-09-20):
+// after Device Hub is relaunched the Duo shows inside Device Hub's browser
+// window, whose title is then "Device Hub", and a `hasPrefix("iPhone Duo")`
+// match found nothing at all. Every window of the process is searched instead
+// (a title starting with "iPhone Duo" is still taken first, because it is one
+// lookup rather than a walk), and the first one carrying a pose button wins.
+// The walk is **depth-bounded**: the tree has recursive `AXApplication` nodes
+// under it and an unbounded walk never returns.
 //
 // After a pose press the tool waits (up to ~8 s) until a
 // `simctl io <udid> screenshot` of the display that pose activates stops
@@ -53,7 +62,12 @@ func string(_ element: AXUIElement, _ name: String) -> String {
 /// whose subrole is `iOSContentGroup`, so Boardhop's own buttons ("Wiki",
 /// "Search", a repository tile) would otherwise show up here and a name could
 /// collide with a pose button. That subtree is skipped.
-func buttons(_ element: AXUIElement) -> [(String, AXUIElement)] {
+///
+/// The walk stops at `maxDepth`. Device Hub's tree contains `AXApplication`
+/// nodes that point back up it, so an unbounded walk hangs; 16 is deeper than
+/// any real chrome button has been seen (the pose buttons sit at about 6).
+func buttons(_ element: AXUIElement, maxDepth: Int = 16) -> [(String, AXUIElement)] {
+  if maxDepth <= 0 { return [] }
   if string(element, kAXSubroleAttribute) == "iOSContentGroup" { return [] }
   var found: [(String, AXUIElement)] = []
   if string(element, kAXRoleAttribute) == "AXButton" {
@@ -61,10 +75,14 @@ func buttons(_ element: AXUIElement) -> [(String, AXUIElement)] {
     found.append((label.isEmpty ? string(element, kAXTitleAttribute) : label, element))
   }
   for child in (attr(element, kAXChildrenAttribute) as? [AXUIElement]) ?? [] {
-    found.append(contentsOf: buttons(child))
+    found.append(contentsOf: buttons(child, maxDepth: maxDepth - 1))
   }
   return found
 }
+
+/// The pose buttons this tool presses; a window carrying one of them is the
+/// window the Duo is shown in, whatever it is called.
+let poseButtons: Set<String> = ["Closed", "Book", "Open", "Rotate Right"]
 
 func fail(_ message: String, code: Int32 = 2) -> Never {
   FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -97,7 +115,10 @@ func deviceHubPid() -> pid_t? {
   return pid
 }
 
-/// Device Hub's "iPhone Duo …" window, or a hint about what is missing.
+/// The Device Hub window the Duo is shown in: the one carrying the pose
+/// buttons. Its title is "iPhone Duo – iOS 27.1" when the device has a window
+/// of its own and "Device Hub" when it is shown inside the browser window, so
+/// the title is only a fast path and never the test.
 func duoWindow() -> AXUIElement {
   guard let pid = deviceHubPid() else {
     fail(
@@ -105,22 +126,22 @@ func duoWindow() -> AXUIElement {
         + "Open it from Xcode > Window > Device Hub and show the iPhone Duo.")
   }
   let element = AXUIElementCreateApplication(pid)
-  guard let windows = attr(element, kAXWindowsAttribute) as? [AXUIElement] else {
+  guard let windows = attr(element, kAXWindowsAttribute) as? [AXUIElement], !windows.isEmpty
+  else {
     fail(
       "duo-pose: Device Hub exposes no windows. Grant this terminal "
         + "Accessibility permission (System Settings > Privacy & Security > Accessibility).")
   }
-  guard
-    let window = windows.first(where: {
-      string($0, kAXTitleAttribute).hasPrefix("iPhone Duo")
-    })
-  else {
-    let titles = windows.map { "'\(string($0, kAXTitleAttribute))'" }.joined(separator: ", ")
-    fail(
-      "duo-pose: no 'iPhone Duo' window in Device Hub (saw: \(titles.isEmpty ? "none" : titles)). "
-        + "Open the Duo simulator there and leave the window on screen.")
+  let ordered =
+    windows.filter { string($0, kAXTitleAttribute).hasPrefix("iPhone Duo") }
+    + windows.filter { !string($0, kAXTitleAttribute).hasPrefix("iPhone Duo") }
+  for window in ordered {
+    if buttons(window).contains(where: { poseButtons.contains($0.0) }) { return window }
   }
-  return window
+  let titles = windows.map { "'\(string($0, kAXTitleAttribute))'" }.joined(separator: ", ")
+  fail(
+    "duo-pose: no Device Hub window carries the pose buttons (saw: \(titles)). "
+      + "Open the iPhone Duo in Device Hub and leave its window on screen.")
 }
 
 // MARK: - Simulator

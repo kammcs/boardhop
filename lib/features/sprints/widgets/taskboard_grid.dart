@@ -105,6 +105,10 @@ class _TaskboardGridState extends State<TaskboardGrid>
   double _columnWidth = 320;
   double _padLeft = Spacing.lg;
 
+  /// The gap between two columns, grown to the keep-out band on an active
+  /// vertical crease so a fold never falls through a cell (research/23 D3).
+  double _gapWidth = _gap;
+
   /// Cells, `[row][column]`, rebuilt each frame from [TaskboardGrid.rows]
   /// and `columnOf`. Cheap (a sprint is tens of tasks) and it keeps the
   /// grid free of any cached placement that could go stale under a move.
@@ -221,15 +225,31 @@ class _TaskboardGridState extends State<TaskboardGrid>
           final inset = MediaQuery.paddingOf(context);
           _padLeft = Spacing.lg + inset.left;
           final padRight = Spacing.lg + inset.right;
+          final band = creaseInBox(context, constraints);
+          final onCrease = isVerticalCrease(band);
+          _gapWidth = onCrease ? band!.width : _gap;
+          final pitch = _columnWidth + _gapWidth;
+          if (onCrease) {
+            // As on the Kanban board: the leading padding grows until a
+            // column boundary lands on the band with the grid unscrolled,
+            // and zero is then one of the snap lattice's rest positions.
+            final steps = ((band!.right - _padLeft) / pitch).floor();
+            if (steps >= 0) _padLeft = band.right - steps * pitch;
+          }
           final viewport = constraints.maxWidth;
           final gridWidth =
               _padLeft +
-              widget.columns.length * (_columnWidth + _gap) -
-              _gap +
+              widget.columns.length * pitch -
+              _gapWidth +
               padRight;
           return SingleChildScrollView(
             controller: _horizontal,
             scrollDirection: Axis.horizontal,
+            // A column boundary rests on the crease, as on the Kanban
+            // board, so the fold falls in the gap between two columns.
+            physics: onCrease
+                ? ColumnSnapPhysics(pitch: pitch, origin: _padLeft - band!.right)
+                : null,
             child: SizedBox(
               width: gridWidth < viewport ? viewport : gridWidth,
               child: Column(
@@ -275,7 +295,7 @@ class _TaskboardGridState extends State<TaskboardGrid>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var c = 0; c < widget.columns.length; c++) ...[
-              if (c > 0) const SizedBox(width: _gap),
+              if (c > 0) SizedBox(width: _gapWidth),
               SizedBox(
                 width: _columnWidth,
                 child: Material(
@@ -365,7 +385,7 @@ class _TaskboardGridState extends State<TaskboardGrid>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (var c = 0; c < widget.columns.length; c++) ...[
-                    if (c > 0) const SizedBox(width: _gap),
+                    if (c > 0) SizedBox(width: _gapWidth),
                     SizedBox(width: _columnWidth, child: _cell(r, c)),
                   ],
                 ],

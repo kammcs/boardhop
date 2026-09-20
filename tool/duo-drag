@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Thin wrapper: compiles tool/duo-drag.swift once into tool/.bin/duo-drag
+# (gitignored) and runs it. See the script's header for what it does.
+#
+#   tool/duo-drag click X Y | press X Y [ms] | drag X1 Y1 X2 Y2 [ms] |
+#                  holddrag X1 Y1 X2 Y2 [ms] | where
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+src="$here/duo-drag.swift"
+bin="$here/.bin/duo-drag"
+if [ ! -x "$bin" ] || [ "$src" -nt "$bin" ]; then
+  mkdir -p "$here/.bin"
+  xcrun swiftc -O "$src" -o "$bin"
+fi
+exec "$bin" "$@"

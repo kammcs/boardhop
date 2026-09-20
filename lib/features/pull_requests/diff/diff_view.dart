@@ -616,10 +616,35 @@ class _DiffViewState extends State<DiffView> {
     );
   }
 
+  /// Narrowest a pane may become before the crease is ignored: a gutter
+  /// and a few characters of code are not a diff.
+  static const double _minHalf = 180;
+
+  /// Where the side-by-side split falls, in the view's own coordinates,
+  /// and how wide the gap at it is. Half and nothing, except on an active
+  /// vertical crease, where the two panes land on the two panels and the
+  /// keep-out band is the gap between them (research/23 D3).
+  double _splitAt = 0;
+  double _splitGap = 0;
+
+  /// One pane's width, for a card that has to lay its own text out.
+  double _halfWidth(bool left, double viewportWidth) =>
+      left ? _splitAt : viewportWidth - _splitAt - _splitGap;
+
   @override
   Widget build(BuildContext context) {
     final list = LayoutBuilder(
       builder: (context, constraints) {
+        final band = widget.sideBySide
+            ? creaseInBox(context, constraints)
+            : null;
+        final onCrease =
+            band != null &&
+            isVerticalCrease(band) &&
+            band.left > _minHalf &&
+            constraints.maxWidth - band.right > _minHalf;
+        _splitAt = onCrease ? band.left : constraints.maxWidth / 2;
+        _splitGap = onCrease ? band.width : 0;
         final rows = DismissKeyboardOnDrag(
           child: SuperListView.builder(
             controller: _vertical,
@@ -653,11 +678,13 @@ class _DiffViewState extends State<DiffView> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
+          SizedBox(
+            width: _splitAt,
             child: row.left == null
                 ? const _BlankHalf()
                 : _lineView(row.left!, half: true, left: true),
           ),
+          SizedBox(width: _splitGap),
           Expanded(
             child: row.right == null
                 ? const _BlankHalf()
@@ -673,7 +700,9 @@ class _DiffViewState extends State<DiffView> {
         thread: row.thread,
         gutterWidth: _wraps ? Spacing.lg : _gutterWidth,
         horizontal: _wraps ? null : _horizontal,
-        viewportWidth: widget.sideBySide ? viewportWidth / 2 : viewportWidth,
+        viewportWidth: widget.sideBySide
+            ? _halfWidth(row.leftSide, viewportWidth)
+            : viewportWidth,
         canAct: widget.canAct,
         busy: widget.posting,
         mentions: widget.mentions,
@@ -715,7 +744,9 @@ class _DiffViewState extends State<DiffView> {
         anchor: row.anchor,
         gutterWidth: _wraps ? Spacing.lg : _gutterWidth,
         horizontal: _wraps ? null : _horizontal,
-        viewportWidth: widget.sideBySide ? viewportWidth / 2 : viewportWidth,
+        viewportWidth: widget.sideBySide
+            ? _halfWidth(row.anchor.leftSide, viewportWidth)
+            : viewportWidth,
         posting: widget.posting,
         mentions: widget.mentions,
         attachments: widget.uploads,
@@ -737,7 +768,11 @@ class _DiffViewState extends State<DiffView> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: left ? child : const SizedBox.shrink()),
+        SizedBox(
+          width: _splitAt,
+          child: left ? child : const SizedBox.shrink(),
+        ),
+        SizedBox(width: _splitGap),
         Expanded(child: left ? const SizedBox.shrink() : child),
       ],
     );

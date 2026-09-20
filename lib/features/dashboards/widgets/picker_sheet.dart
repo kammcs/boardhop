@@ -43,7 +43,7 @@ Future<DashboardPicked?> showDashboardPicker(
     projectName: projectName,
   );
   if (!context.breakpoint.isCompact) {
-    return showDialog<DashboardPicked>(
+    return showBoardhopDialog<DashboardPicked>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

@@ -484,14 +484,20 @@ class _WikiTreePageState extends State<WikiTreePage> with ReloadOnReturn {
               child: ContentColumn(child: _scroller(theme)),
             );
             if (!wide || wiki == null) return tree;
+            // Half folded, the split goes on the fold (research/23 D3).
+            final band = creaseInBox(context, constraints);
+            final paneWidth = paneWidthFor(
+              maxWidth: constraints.maxWidth,
+              fraction: 0.4,
+              min: 280,
+              max: 420,
+              creaseBand: band,
+            );
             return Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  width: (constraints.maxWidth * 0.4).clamp(280.0, 420.0),
-                  child: tree,
-                ),
-                const VerticalDivider(width: 1),
+                SizedBox(width: paneWidth, child: tree),
+                VerticalDivider(width: paneDividerWidth(band, paneWidth)),
                 Expanded(
                   child: _selected == null
                       ? Center(

@@ -21,7 +21,7 @@ Future<int?> pickWorkItemToLink(
   Set<int> linked = const {},
 }) {
   if (!context.breakpoint.isCompact) {
-    return showDialog<int>(
+    return showBoardhopDialog<int>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

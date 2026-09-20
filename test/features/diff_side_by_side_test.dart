@@ -1,9 +1,11 @@
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/features/pull_requests/diff/diff_model.dart';
 import 'package:boardhop/features/pull_requests/diff/diff_view.dart';
 import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../fixtures/duo_display.dart';
 import 'diff_page_harness.dart';
 
 /// R16's side-by-side layout: the original on the left, the new file on the
@@ -17,29 +19,36 @@ void main() {
     WidgetTester tester, {
     bool sideBySide = true,
     List<dynamic> threads = const [],
+    Size window = const Size(2400, 1600),
+    double pixelRatio = 2,
+    DisplayRegions? regions,
   }) async {
-    tester.view.physicalSize = const Size(2400, 1600);
-    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = window;
+    tester.view.devicePixelRatio = pixelRatio;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: BoardhopTheme.light(),
-        home: StatefulBuilder(
-          builder: (context, setState) => Scaffold(
-            body: DiffView(
-              diff: LineDiff.compute(kOneOld, kOneNew),
-              oldRuns: const [],
-              newRuns: const [],
-              sideBySide: sideBySide,
-              canAct: true,
-              threads: threads.cast(),
-              composer: composer,
-              onGutterTap: (anchor) => setState(() {
-                tapped = anchor;
-                composer = anchor;
-              }),
-              onCancelComposer: () => setState(() => composer = null),
-              onPost: (_, _) async {},
+      Duo.scope(
+        window: window / pixelRatio,
+        regions: regions,
+        child: MaterialApp(
+          theme: BoardhopTheme.light(),
+          home: StatefulBuilder(
+            builder: (context, setState) => Scaffold(
+              body: DiffView(
+                diff: LineDiff.compute(kOneOld, kOneNew),
+                oldRuns: const [],
+                newRuns: const [],
+                sideBySide: sideBySide,
+                canAct: true,
+                threads: threads.cast(),
+                composer: composer,
+                onGutterTap: (anchor) => setState(() {
+                  tapped = anchor;
+                  composer = anchor;
+                }),
+                onCancelComposer: () => setState(() => composer = null),
+                onPost: (_, _) async {},
+              ),
             ),
           ),
         ),
@@ -135,5 +144,61 @@ void main() {
   testWidgets('a phone opens unified', (tester) async {
     await pumpDiffPage(tester);
     expect(tester.widget<DiffView>(find.byType(DiffView)).sideBySide, isFalse);
+  });
+
+  testWidgets('half folded, the two panes land on the two panels', (
+    tester,
+  ) async {
+    // The Duo's inner display in the book pose: the split goes on the
+    // fold, with the 40 pt keep-out band as the gap between the panes
+    // (research/23 D3), not down the middle of the box.
+    await pump(
+      tester,
+      window: Duo.wide,
+      pixelRatio: 1,
+      regions: Duo.folded(Duo.wideBand),
+    );
+    final pairs = tester.widgetList<Row>(
+      find.descendant(
+        of: find.byType(IntrinsicHeight),
+        matching: find.byType(Row),
+      ),
+    );
+    expect(pairs, isNotEmpty);
+    final gutters = tester.widgetList<SizedBox>(
+      find.descendant(
+        of: find.byType(IntrinsicHeight).first,
+        matching: find.byType(SizedBox),
+      ),
+    );
+    expect(
+      gutters.any((box) => box.width == Duo.wideBand.width),
+      isTrue,
+      reason: 'the gap between the panes is the keep-out band',
+    );
+    expect(
+      gutters.any((box) => box.width == Duo.wideBand.left),
+      isTrue,
+      reason: 'the left pane ends where the band begins',
+    );
+  });
+
+  testWidgets('flat, the split is still down the middle', (tester) async {
+    await pump(
+      tester,
+      window: Duo.wide,
+      pixelRatio: 1,
+      regions: Duo.flat(Duo.wideBand),
+    );
+    final gutters = tester.widgetList<SizedBox>(
+      find.descendant(
+        of: find.byType(IntrinsicHeight).first,
+        matching: find.byType(SizedBox),
+      ),
+    );
+    // Half the box, not the band's edge: an inactive division is not a
+    // fold (research/23 section 2).
+    expect(gutters.any((box) => box.width == Duo.wide.width / 2), isTrue);
+    expect(gutters.any((box) => box.width == Duo.wideBand.left), isFalse);
   });
 }

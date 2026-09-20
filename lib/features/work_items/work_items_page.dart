@@ -292,14 +292,21 @@ class _WorkItemsPageState extends State<WorkItemsPage> {
           final list = _list(context);
           if (!wide) return list;
           final theme = Theme.of(context);
+          // Half folded, the split goes on the fold (research/23 D3) and
+          // the divider fills the keep-out band.
+          final band = creaseInBox(context, constraints);
+          final paneWidth = paneWidthFor(
+            maxWidth: constraints.maxWidth,
+            fraction: 0.42,
+            min: 320,
+            max: 480,
+            creaseBand: band,
+          );
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: (constraints.maxWidth * 0.42).clamp(320, 480),
-                child: list,
-              ),
-              const VerticalDivider(width: 1),
+              SizedBox(width: paneWidth, child: list),
+              VerticalDivider(width: paneDividerWidth(band, paneWidth)),
               Expanded(
                 child: _selectedId == null
                     ? Center(

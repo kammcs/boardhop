@@ -48,7 +48,7 @@ Future<PrCompletionOptions?> showCompletionSheet(
   // From medium up a centered dialog, like every other picker (iPad
   // walkthrough); a phone keeps the sheet.
   if (!context.breakpoint.isCompact) {
-    return showDialog<PrCompletionOptions>(
+    return showBoardhopDialog<PrCompletionOptions>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

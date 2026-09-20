@@ -3,6 +3,7 @@ library;
 
 export 'boardhop_colors.dart';
 export 'boardhop_theme.dart';
+export 'dialogs.dart';
 export 'layout.dart';
 export 'theme_controller.dart';
 export 'tokens.dart';

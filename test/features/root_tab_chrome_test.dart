@@ -1,5 +1,6 @@
 import 'package:boardhop/auth/auth_bloc.dart';
 import 'package:boardhop/auth/auth_service.dart';
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/core/routes.dart';
 import 'package:boardhop/data/models/git_repository.dart';
 import 'package:boardhop/data/models/pipeline.dart';
@@ -24,6 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../fixtures/duo_display.dart';
 import 'root_tab_stubs.dart';
 
 class _AuthService extends Mock implements AuthService {}
@@ -120,6 +122,7 @@ void main() {
     required Widget Function() page,
     required List<RepositoryProvider<Object>> repositories,
     Size size = const Size(402, 1600),
+    DisplayRegions? regions,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -134,25 +137,32 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(
-      MultiRepositoryProvider(
-        providers: [
-          ...rootChromeProviders(
-            projects: stubProjects([const Project(id: 'p1', name: _project)]),
-          ),
-          ...repositories,
-        ],
-        child: BlocProvider<AuthBloc>.value(
-          value: auth,
-          child: MaterialApp.router(
-            theme: BoardhopTheme.light(),
-            routerConfig: router,
-            builder: (context, child) =>
-                AccountScope(accountId: 'u1', child: child!),
+      Duo.scope(
+        window: size,
+        regions: regions,
+        child: MultiRepositoryProvider(
+          providers: [
+            ...rootChromeProviders(
+              projects: stubProjects([const Project(id: 'p1', name: _project)]),
+            ),
+            ...repositories,
+          ],
+          child: BlocProvider<AuthBloc>.value(
+            value: auth,
+            child: MaterialApp.router(
+              theme: BoardhopTheme.light(),
+              routerConfig: router,
+              builder: (context, child) =>
+                  AccountScope(accountId: 'u1', child: child!),
+            ),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
+    // creaseInBox reads the transform the last layout left, so a folded
+    // display needs one more frame before the panes move onto it.
+    await tester.pump();
   }
 
   void expectChrome() {
@@ -275,6 +285,48 @@ void main() {
         size: const Size(1024, 1366),
       );
       expect(titleName(), findsOneWidget);
+    });
+  });
+
+  group('the master/detail pane on a fold (research/23 D3)', () {
+    Future<void> pumpWork(WidgetTester tester, {DisplayRegions? regions}) =>
+        pumpTab(
+          tester,
+          path: Routes.workItems('u1', _org, _project),
+          page: () => const WorkItemsPage(org: _org, project: _project),
+          repositories: [
+            RepositoryProvider<WorkItemRepository>.value(
+              value: stubWorkItems(),
+            ),
+          ],
+          size: Duo.wide,
+          regions: regions,
+        );
+
+    testWidgets('the list pane ends on the crease and the divider fills '
+        'the band', (tester) async {
+      await pumpWork(tester, regions: Duo.folded(Duo.wideBand));
+      final divider = tester.widget<VerticalDivider>(
+        find.byType(VerticalDivider),
+      );
+      expect(divider.width, Duo.wideBand.width);
+      expect(
+        tester.getTopLeft(find.byType(VerticalDivider)).dx,
+        closeTo(Duo.wideBand.left, 0.5),
+      );
+    });
+
+    testWidgets('flat, the pane keeps its fraction', (tester) async {
+      await pumpWork(tester, regions: Duo.flat(Duo.wideBand));
+      final divider = tester.widget<VerticalDivider>(
+        find.byType(VerticalDivider),
+      );
+      expect(divider.width, 1);
+      // 42 % of the window, clamped to 480.
+      expect(
+        tester.getTopLeft(find.byType(VerticalDivider)).dx,
+        closeTo(399.42, 1),
+      );
     });
   });
 }

@@ -805,7 +805,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
     final form = _form;
     if (form == null || !form.isDirty) return true;
     if (widget.isEdit) {
-      final leave = await showDialog<bool>(
+      final leave = await showBoardhopDialog<bool>(
         context: context,
         builder: (context) => AlertDialog.adaptive(
           title: const Text('Discard your changes?'),
@@ -826,7 +826,7 @@ class _WorkItemFormPageState extends State<WorkItemFormPage> {
       );
       return leave ?? false;
     }
-    final choice = await showDialog<_DraftChoice>(
+    final choice = await showBoardhopDialog<_DraftChoice>(
       context: context,
       builder: (context) => AlertDialog.adaptive(
         title: const Text('Keep this work item as a draft?'),

@@ -219,7 +219,7 @@ Future<ReviewerPick?> pickReviewer(
   Set<String> existing = const {},
 }) {
   if (!context.breakpoint.isCompact) {
-    return showDialog<ReviewerPick>(
+    return showBoardhopDialog<ReviewerPick>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

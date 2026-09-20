@@ -78,6 +78,10 @@ import '../shared/widgets/glass_navigation_rail.dart';
 /// * The rail never spans an active horizontal crease: with one it centers
 ///   in the lower half, the half nearer the hands ([creaseBand]).
 ///
+/// Every page is wrapped in a [CreasePadding], which keeps content at rest
+/// out of an active **horizontal** crease band (research/23 D3). A vertical
+/// crease is the panes' own business ([paneWidthFor], [SideBySide]).
+///
 /// Every move between those places is animated ([Durations.normal],
 /// [Motion.standard], research/23 D7): the rail's box is an
 /// [AnimatedPositioned] and the page's gutter an [AnimatedPadding], so a
@@ -214,6 +218,15 @@ class GlassShellLayout extends StatelessWidget {
     );
   }
 
+  /// The page, kept clear of an active **horizontal** crease.
+  ///
+  /// Wrapped here rather than in each page so nothing below has to know
+  /// about the fold: [CreasePadding] only changes `MediaQuery.padding`,
+  /// which every list and every bottom-anchored control in the app already
+  /// reads. It sits *inside* each plan's own media query, so it grows from
+  /// the gutter the bar or the rail has already claimed.
+  Widget get _page => CreasePadding(child: body);
+
   /// The page's box, shortened by the keyboard.
   ///
   /// The bar is drawn outside this, from the full-height stack, so it stays
@@ -346,7 +359,7 @@ class GlassShellLayout extends StatelessWidget {
                     : math.max(inset.bottom, barGutterFor(context)),
               ),
             ),
-            child: body,
+            child: _page,
           ),
         ),
       ),
@@ -413,7 +426,7 @@ class GlassShellLayout extends StatelessWidget {
                   right: onRight ? gutter : inset.right,
                 ),
               ),
-              child: body,
+              child: _page,
             )
           : SafeArea(
               top: false,
@@ -426,7 +439,7 @@ class GlassShellLayout extends StatelessWidget {
                   left: onRight ? 0 : math.max(0, gutter - inset.left),
                   right: onRight ? math.max(0, gutter - inset.right) : 0,
                 ),
-                child: body,
+                child: _page,
               ),
             ),
     );

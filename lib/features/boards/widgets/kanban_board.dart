@@ -111,11 +111,15 @@ class KanbanBoard<T extends Object> extends StatefulWidget {
 
 class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>>
     with DragSession<KanbanBoard<T>> {
+  /// The gap between two columns at rest. On an active vertical crease it
+  /// grows to the keep-out band, so wherever the board comes to rest no
+  /// card straddles the fold (research/23 D3).
   static const _gap = Spacing.md;
 
   final _horizontal = ScrollController();
   final Map<String, ScrollController> _vertical = {};
   double _columnWidth = 280;
+  double _gapWidth = _gap;
   double _headerHeight = kBoardHeaderHeight;
 
   ScrollController _verticalFor(String id) =>
@@ -148,7 +152,8 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>>
     // Which column the pointer is over, so the right column's own list
     // scrolls. Assumes uniform column widths, which is what this board has.
     final column =
-        ((local.dx + _horizontal.offset - Spacing.lg) / (_columnWidth + _gap))
+        ((local.dx + _horizontal.offset - Spacing.lg) /
+                (_columnWidth + _gapWidth))
             .floor();
     if (column < 0 || column >= widget.columns.length) return;
     DragSession.dragScrollBy(
@@ -197,18 +202,44 @@ class _KanbanBoardState<T extends Object> extends State<KanbanBoard<T>>
           // on Apple tablets (either side): columns rest clear of it and
           // scroll under it.
           final inset = MediaQuery.paddingOf(context);
+          final band = creaseInBox(context, constraints);
+          final onCrease = isVerticalCrease(band);
+          // The band becomes the gap between *every* pair of columns, not
+          // only the pair the fold happens to fall between: the pitch has
+          // to stay uniform for the snap lattice below and for the drag
+          // auto-scroll's column arithmetic, and a board that re-spaced
+          // itself as it scrolled would jump under the finger.
+          _gapWidth = onCrease ? band!.width : _gap;
+          final pitch = _columnWidth + _gapWidth;
+          var padLeft = Spacing.lg + inset.left;
+          if (onCrease) {
+            // Snapping alone would leave the board straddling the fold until
+            // the reader flung it: at rest the scroll offset is zero, which
+            // is where the list starts, not where a boundary happens to
+            // fall. So the **leading padding** is grown until a boundary
+            // lands on the band with the board unscrolled — 135.5 pt on the
+            // Duo's inner display, which puts one column on each panel — and
+            // the lattice below then has zero as one of its rest positions.
+            final steps = ((band!.right - padLeft) / pitch).floor();
+            if (steps >= 0) padLeft = band.right - steps * pitch;
+          }
           return ListView.builder(
             controller: _horizontal,
             scrollDirection: Axis.horizontal,
+            // Every rest position keeps a column boundary on the crease, so
+            // the fold stays in the gap however far the board is scrolled.
+            physics: onCrease
+                ? ColumnSnapPhysics(pitch: pitch, origin: padLeft - band!.right)
+                : null,
             padding: EdgeInsets.fromLTRB(
-              Spacing.lg + inset.left,
+              padLeft,
               Spacing.sm,
               Spacing.lg + inset.right,
               Spacing.sm,
             ),
             itemCount: widget.columns.length,
             itemBuilder: (context, c) => Padding(
-              padding: const EdgeInsets.only(right: _gap),
+              padding: EdgeInsets.only(right: _gapWidth),
               child: SizedBox(width: _columnWidth, child: _column(c)),
             ),
           );

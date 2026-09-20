@@ -41,7 +41,7 @@ Future<SprintPickerResult?> showSprintPicker(
     teams: teams,
   );
   if (!context.breakpoint.isCompact) {
-    return showDialog<SprintPickerResult>(
+    return showBoardhopDialog<SprintPickerResult>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

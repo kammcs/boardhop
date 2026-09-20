@@ -1,7 +1,10 @@
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/theme/layout.dart';
 import 'package:boardhop/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../fixtures/duo_display.dart';
 
 void main() {
   test('content column follows the window up to the wide cap', () {
@@ -133,6 +136,258 @@ void main() {
     test('chart insets leave the last x label room for its own half', () {
       expect(chartInsets(1).right, greaterThan(Spacing.sm));
       expect(chartInsets(1.6).right, greaterThan(chartInsets(1).right));
+    });
+  });
+
+  // ------------------------------------------------------- the crease
+  //
+  // research/23 D3: half folded, the display is two regions and the
+  // layout's boundaries land on the fold.
+
+  group('paneWidthFor', () {
+    test('follows the fraction when nothing is folded', () {
+      expect(
+        paneWidthFor(maxWidth: 867, fraction: 0.42, min: 320, max: 480),
+        closeTo(364.14, 0.01),
+      );
+      // Clamped at both ends.
+      expect(
+        paneWidthFor(maxWidth: 600, fraction: 0.42, min: 320, max: 480),
+        320,
+      );
+      expect(
+        paneWidthFor(maxWidth: 2000, fraction: 0.42, min: 320, max: 480),
+        480,
+      );
+    });
+
+    test('takes the band\'s leading edge when the crease is in range', () {
+      // The Duo's wide pose as a page sees it: the shell keeps 84 pt for
+      // the system's bar column, so the crease is at 455.5 of 867 — not at
+      // the box's own centre.
+      const band = Rect.fromLTWH(455.5, 0, 40, 669);
+      expect(
+        paneWidthFor(
+          maxWidth: 867,
+          fraction: 0.42,
+          min: 320,
+          max: 480,
+          creaseBand: band,
+        ),
+        455.5,
+      );
+    });
+
+    test('ignores a crease outside the pane\'s range', () {
+      // A 200 pt list pane is worse than a divider off the fold.
+      const band = Rect.fromLTWH(200, 0, 40, 669);
+      expect(
+        paneWidthFor(
+          maxWidth: 867,
+          fraction: 0.42,
+          min: 320,
+          max: 480,
+          creaseBand: band,
+        ),
+        closeTo(364.14, 0.01),
+      );
+    });
+
+    test('ignores a horizontal crease', () {
+      const band = Rect.fromLTWH(0, 455.5, 669, 40);
+      expect(isVerticalCrease(band), isFalse);
+      expect(
+        paneWidthFor(
+          maxWidth: 867,
+          fraction: 0.42,
+          min: 320,
+          max: 480,
+          creaseBand: band,
+        ),
+        closeTo(364.14, 0.01),
+      );
+    });
+
+    test('the divider fills the band only when the pane is on it', () {
+      const band = Rect.fromLTWH(455.5, 0, 40, 669);
+      expect(paneDividerWidth(band, 455.5), 40);
+      expect(paneDividerWidth(band, 364.14), 1);
+      expect(paneDividerWidth(null, 455.5), 1);
+    });
+  });
+
+  group('SideBySide on a crease', () {
+    Future<void> pumpCrease(
+      WidgetTester tester, {
+      required Size window,
+      DisplayRegions? regions,
+    }) async {
+      tester.view.physicalSize = window;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        Duo.scope(
+          window: window,
+          regions: regions,
+          child: MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                children: const [
+                  SideBySide(start: [Text('start')], end: [Text('end')]),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      // creaseInBox reads the transform the last layout left, so the first
+      // build of a box answers null and asks for another frame.
+      await tester.pump();
+    }
+
+    testWidgets('the boundary and the gap land on the fold', (tester) async {
+      await pumpCrease(
+        tester,
+        window: Duo.wide,
+        regions: Duo.folded(Duo.wideBand),
+      );
+      final start = tester.getTopLeft(find.text('start'));
+      final end = tester.getTopLeft(find.text('end'));
+      expect(start.dy, end.dy);
+      // The end column starts on the far side of the keep-out band.
+      expect(end.dx, closeTo(Duo.wideBand.right, 0.5));
+      expect(start.dx, 0);
+    });
+
+    testWidgets('a display lying flat keeps today\'s split', (tester) async {
+      // 951 is over twoColumnMin, so this is the ordinary flex split: two
+      // equal columns with a Spacing.lg gap, not the fold's.
+      await pumpCrease(
+        tester,
+        window: Duo.wide,
+        regions: Duo.flat(Duo.wideBand),
+      );
+      final end = tester.getTopLeft(find.text('end'));
+      expect(end.dx, closeTo((951 + Spacing.lg) / 2, 1));
+    });
+
+    testWidgets('a horizontal crease leaves it alone', (tester) async {
+      await pumpCrease(
+        tester,
+        window: Duo.tall,
+        regions: Duo.folded(Duo.tallBand),
+      );
+      // 669 is under twoColumnMin: stacked, as on any medium window.
+      final start = tester.getTopLeft(find.text('start'));
+      final end = tester.getTopLeft(find.text('end'));
+      expect(start.dx, end.dx);
+      expect(end.dy, greaterThan(start.dy));
+    });
+  });
+
+  group('CreasePadding', () {
+    /// The bottom inset the page below a [CreasePadding] is handed, in a
+    /// box [height] tall with a band at [bandTop].
+    Future<EdgeInsets> insetsFor(
+      WidgetTester tester, {
+      required Size window,
+      required Rect band,
+      EdgeInsets padding = EdgeInsets.zero,
+    }) async {
+      tester.view.physicalSize = window;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      late EdgeInsets seen;
+      await tester.pumpWidget(
+        Duo.scope(
+          window: window,
+          regions: Duo.folded(band),
+          child: MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(size: window, padding: padding),
+              child: CreasePadding(
+                child: Builder(
+                  builder: (context) {
+                    seen = MediaQuery.paddingOf(context);
+                    return const SizedBox.expand();
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return seen;
+    }
+
+    testWidgets('a band at the centre ends the content above it', (
+      tester,
+    ) async {
+      final inset = await insetsFor(
+        tester,
+        window: Duo.tall,
+        band: Duo.tallBand,
+        padding: Duo.tallInsets,
+      );
+      // 951 - 455.5: the content's end rests on the fold's near edge.
+      expect(inset.bottom, closeTo(495.5, 0.5));
+      expect(inset.top, Duo.tallInsets.top);
+    });
+
+    testWidgets('a band near the top starts the content below it', (
+      tester,
+    ) async {
+      final inset = await insetsFor(
+        tester,
+        window: Duo.tall,
+        band: const Rect.fromLTWH(0, 40, 669, 40),
+      );
+      expect(inset.top, 80);
+      expect(inset.bottom, 0);
+    });
+
+    testWidgets('a vertical crease changes nothing', (tester) async {
+      final inset = await insetsFor(
+        tester,
+        window: Duo.wide,
+        band: Duo.wideBand,
+        padding: Duo.wideInsets,
+      );
+      expect(inset, Duo.wideInsets);
+    });
+  });
+
+  group('ColumnSnapPhysics', () {
+    test('rounds to the nearest rest position', () {
+      // A 280 pt column with the 40 pt band as its gap, and a boundary on
+      // the crease when the offset is 16 - 495.5.
+      const physics = ColumnSnapPhysics(pitch: 320, origin: -479.5);
+      // The lattice is … -159.5, 160.5, 480.5 … : the offsets at which a
+      // column boundary lands on the crease.
+      expect(physics.snap(150, min: 0, max: 2000), closeTo(160.5, 0.01));
+      expect(physics.snap(300, min: 0, max: 2000), closeTo(160.5, 0.01));
+      expect(physics.snap(400, min: 0, max: 2000), closeTo(480.5, 0.01));
+      // Below the first rest position inside the extent it clamps rather
+      // than scrolling backwards off the start.
+      expect(physics.snap(0, min: 0, max: 2000), 0);
+      // Every rest position is a whole number of pitches from the origin.
+      for (final target in [77.0, 420.0, 1999.0]) {
+        final snapped = physics.snap(target, min: 0, max: 4000);
+        final steps = (snapped - physics.origin) / physics.pitch;
+        expect(steps, closeTo(steps.roundToDouble(), 1e-9));
+      }
+    });
+
+    test('never leaves the scrollable\'s own extent', () {
+      const physics = ColumnSnapPhysics(pitch: 320, origin: -479.5);
+      expect(physics.snap(-500, min: 0, max: 640), 0);
+      expect(physics.snap(5000, min: 0, max: 640), 640);
+    });
+
+    test('a degenerate pitch is a no-op', () {
+      const physics = ColumnSnapPhysics(pitch: 0, origin: 0);
+      expect(physics.snap(123, min: 0, max: 2000), 123);
     });
   });
 }

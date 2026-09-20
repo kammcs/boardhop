@@ -473,7 +473,7 @@ Future<AddLinkResult?> showAddLinkSheet(
 }) {
   const sheet = _AddLinkSheet();
   if (!context.breakpoint.isCompact) {
-    return showDialog<AddLinkResult>(
+    return showBoardhopDialog<AddLinkResult>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

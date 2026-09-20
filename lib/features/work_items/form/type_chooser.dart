@@ -130,13 +130,26 @@ Future<TypeChoice?> showTypeChooser(
       topLeft.dy -
       MediaQuery.viewPaddingOf(context).bottom -
       Spacing.lg;
+  // Half folded, the menu stays on the panel its `+` is on (research/23 D3).
+  //
+  // A width that cannot reach across the fold is not enough: Flutter aligns a
+  // popup menu with whichever of `position`'s two edges has less room beyond
+  // it, so a `+` that sits 85 pt past the crease — the Work bar's, measured on
+  // the device — gets a menu hung off *its* right edge, back over the fold.
+  // Giving it the **half's** edges instead of the button's makes the same rule
+  // pin the menu inside the half, on either side of the crease.
+  final half = dialogAlignmentFor(context, near: topLeft);
+  final edges = half?.half;
   return showMenu<TypeChoice>(
     context: context,
-    constraints: BoxConstraints(maxHeight: math.max(160, room)),
+    constraints: BoxConstraints(
+      maxHeight: math.max(160, room),
+      maxWidth: half?.constraints.maxWidth ?? double.infinity,
+    ),
     position: RelativeRect.fromLTRB(
-      topLeft.dx,
+      edges?.left ?? topLeft.dx,
       topLeft.dy,
-      overlay.size.width - bottomRight.dx,
+      overlay.size.width - (edges?.right ?? bottomRight.dx),
       0,
     ),
     items: _menuItems(context, model, templates, drafts, onDeleteDraft),

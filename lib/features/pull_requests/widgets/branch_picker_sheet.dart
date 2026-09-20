@@ -18,7 +18,7 @@ Future<String?> pickBranch(
   String? current,
 }) {
   if (!context.breakpoint.isCompact) {
-    return showDialog<String>(
+    return showBoardhopDialog<String>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

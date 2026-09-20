@@ -26,7 +26,7 @@ Future<WikiPageLink?> showWikiPagePicker(
 }) {
   final body = WikiPagePickerSheet(source: source);
   if (!context.breakpoint.isCompact) {
-    return showDialog<WikiPageLink>(
+    return showBoardhopDialog<WikiPageLink>(
       context: context,
       builder: (context) => Dialog(
         child: ConstrainedBox(

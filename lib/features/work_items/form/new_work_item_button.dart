@@ -33,6 +33,7 @@ Future<int?> openWorkItemForm(
   String? relation,
   String? templateId,
   bool resumeDraft = false,
+  Offset? near,
 }) {
   if (context.breakpoint.isCompact) {
     final base = projectRoute(context, org, project);
@@ -51,8 +52,11 @@ Future<int?> openWorkItemForm(
       Uri(path: '$base/work-items/new', queryParameters: query).toString(),
     );
   }
-  return showDialog<int>(
+  return showBoardhopDialog<int>(
     context: context,
+    // Half folded, the form opens on the half the `+` is on, not across
+    // the fold (research/23 D3).
+    near: near,
     // The account's repositories are provided by the `/a/:account` shell
     // route, so the dialog has to live in the navigator below it; the root
     // navigator is above them and `context.read` there throws.
@@ -242,6 +246,9 @@ class _NewWorkItemButtonState extends State<NewWorkItemButton> {
         relation: draft?.prefill['rel'],
         templateId: choice.template?.id ?? draft?.prefill['template'],
         resumeDraft: draft != null,
+        near: anchor != null && anchor.attached
+            ? anchor.localToGlobal(anchor.size.center(Offset.zero))
+            : null,
       );
       if (!mounted) return;
       widget.onCreated?.call(id);

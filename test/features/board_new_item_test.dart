@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/data/models/board.dart';
 import 'package:boardhop/data/models/work_item.dart';
 import 'package:boardhop/data/models/work_item_form.dart';
@@ -13,6 +14,8 @@ import 'package:boardhop/features/work_items/form/work_item_form_state.dart';
 import 'package:boardhop/theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../fixtures/duo_display.dart';
 
 const _laneField = 'WEF_6f9b8d1c_Kanban.Lane';
 
@@ -158,6 +161,70 @@ void main() {
       expect(find.text('New item'), findsOneWidget);
       await tester.tap(find.text('New item'));
       expect(tapped, 0);
+    });
+  });
+
+  group('the card wall on a fold (research/23 D3)', () {
+    /// The Duo's inner display in the wide pose: 951 pt of window, of which
+    /// the shell leaves 867 to the page, and a 40 pt keep-out band whose far
+    /// edge is at 495.5.
+    Future<void> pumpBoard(
+      WidgetTester tester, {
+      DisplayRegions? regions,
+    }) async {
+      tester.view.physicalSize = Duo.wide;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        Duo.scope(
+          window: Duo.wide,
+          regions: regions,
+          child: MaterialApp(
+            theme: BoardhopTheme.light(),
+            home: Scaffold(
+              body: KanbanBoard<String>(
+                columns: const [
+                  KanbanColumnData<String>(id: 'c0', title: 'New', cards: ['a']),
+                  KanbanColumnData<String>(id: 'c1', title: 'Doing', cards: ['b']),
+                  KanbanColumnData<String>(id: 'c2', title: 'Done', cards: ['c']),
+                ],
+                keyOf: (c) => c,
+                cardBuilder: (context, card, dragging) => Text(card),
+                onMove: (_, _, _, _, _) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // creaseInBox reads the transform the last layout left.
+      await tester.pump();
+    }
+
+    testWidgets('a column boundary rests on the band, unscrolled', (
+      tester,
+    ) async {
+      await pumpBoard(tester, regions: Duo.folded(Duo.wideBand));
+      final first = tester.getRect(find.text('New'));
+      final second = tester.getRect(find.text('Doing'));
+      // The first column is pushed right so its trailing edge meets the
+      // band, and the second starts on the far side of it.
+      expect(first.left, greaterThan(100));
+      expect(second.left, greaterThan(Duo.wideBand.right));
+      // One column's width apart: the gap between them is the band.
+      expect(
+        second.left - first.left,
+        closeTo(320 + Duo.wideBand.width, 1),
+      );
+    });
+
+    testWidgets('flat, the wall starts at the page gutter', (tester) async {
+      await pumpBoard(tester, regions: Duo.flat(Duo.wideBand));
+      final first = tester.getRect(find.text('New'));
+      final second = tester.getRect(find.text('Doing'));
+      expect(first.left, lessThan(40));
+      // The ordinary Spacing.md gap.
+      expect(second.left - first.left, closeTo(320 + 12, 1));
     });
   });
 
