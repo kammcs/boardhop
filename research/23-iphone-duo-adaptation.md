@@ -2,9 +2,17 @@
 
 Planned with Kelly on 2026-09-20, the day after Xcode 27.1 and the iPhone Duo simulator landed
 on the Mac. `research/12b-iphone-duo-and-flutter.md` (2026-09-12) is the background: it predates
-the SDK and the simulator and is corrected here where the two disagree. Decisions in section 3;
-the build plan in section 5; state in NEXT-STEPS item 32. **Nothing in this document has been
-built yet**: Kelly asked for the plan first.
+the SDK and the simulator and is corrected here where the two disagree (its own addendum points
+back). Decisions in section 3; the build plan in section 5; state in NEXT-STEPS item 32.
+
+**Built and verified on the simulator the same day**, in six commits — `f1137de` phase 0
+(measurement and tooling), `4c07c65` phase 1 (the channel and `DisplayScope`), `c61300c` phase 2
+(the rail on the system's edge), `f7275a5` phase 3 (the crease as a layout line), `608dc47`
+phase 4 (corner clearance, the editor under a live resize), `0654052` phase 4b (the chrome above
+the router, dialogs that follow a fold), and phase 5 for the documents and the two fixes those
+phases left. What each one found and landed is section 9; the walkthrough report is
+`research/walkthroughs/2026-09-20-iphone-duo.md`. Nothing has been seen on hardware, and Split
+View has never been entered (section 8).
 
 ## 1. What the SDK and the simulator show (verified 2026-09-20)
 
@@ -361,33 +369,44 @@ Dispatcher mode: one Opus subagent per phase with the brief below; the top level
 runs `flutter analyze` and `flutter test`, reads the diff and the screenshots, checks staged
 files for secrets, and commits with the trailer. Subagents never commit.
 
-**Phase 0, measure (half a day).** Land `tool/duo-pose` (4.6) first and the `duo` and `DISPLAY`
-cases in `tool/shot-ios.sh`. A temporary diagnostics row (behind `AppConfig.diagnosticsEnabled`)
+**Phase 0, measure — landed (`f1137de`).** Land `tool/duo-pose` (4.6) first and the `duo` and
+`DISPLAY` cases in `tool/shot-ios.sh`. A temporary diagnostics row (behind `AppConfig.diagnosticsEnabled`)
 prints `MediaQuery.size`, `padding` per edge, `viewPadding`, `displayFeatures`, the raw channel
 answers and `verticalBarEdge` for every row of section 2, driven pose by pose with `duo-pose`,
 including both Split View sides. Output: section 2 filled with measured numbers, the 12b appendix
 answered (questions 1, 3, 4, 5, 7, 8; question 2 by trying to drag the divider), screenshots to
-Kelly. No layout changes.
+Kelly. No layout changes. Findings in §9.1 to §9.7.
 
-**Phase 1, channel and model (one day).** 4.1 and 4.2: typed `reservedRegions`, `verticalBarEdge`,
-`hinge`, `displayChanged` push, `DisplayEnvironment` and `DisplayScope`, tests. Verified by the
-diagnostics row updating live while Kelly folds.
+**Phase 1, channel and model — landed (`4c07c65`, §9.8).** 4.1 and 4.2: typed
+`reservedRegions`, `verticalBarEdge`, `hinge`, `displayChanged` push, `DisplayEnvironment` and
+`DisplayScope`, tests. Verified by the diagnostics row updating live while Kelly folds.
 
-**Phase 2, the rail (one day).** 4.3: `GlassShellLayout` on the system edge, Settings switch
-hidden, compact-pane margin, status-bar clearance, animation, tests. Verified: every row of
-section 2, light and dark, both Split View sides, the rail never under the vertical status bar or
-across a crease.
+**Phase 2, the rail — landed (`c61300c`, §9.9).** 4.3: `GlassShellLayout` on the system edge,
+Settings switch hidden, compact-pane margin, status-bar clearance, animation, tests. Verified:
+every row of section 2, light and dark, the rail never under the vertical status bar or across a
+crease — but **not** the two Split View sides, which could not be entered (§9.5).
 
-**Phase 3, hinge-aware layouts (two days).** 4.4 in this order: `SideBySide`, the four
-master/detail screens, dialogs and pickers, `CreasePadding`, boards. Verified per screen in the
-book and laptop poses with scratch data; drag across the crease on the Kanban board.
+**Phase 3, hinge-aware layouts — landed (`f7275a5`, §9.10).** 4.4 in this order: `SideBySide`,
+the four master/detail screens, dialogs and pickers, `CreasePadding`, boards. Verified per screen
+in the book and laptop poses with scratch data; drag across the crease on the Kanban board.
 
-**Phase 4, the editor (half a day to a day).** 4.5, with the result written to the spikes README.
+**Phase 4, corner clearance and the editor — landed (`608dc47`, §9.11 and §9.12).** 4.5, with
+the result written to the spikes README as F6 — and, unplanned, the corner-adapted clearance
+Kelly asked for when she saw the picker's icon in the curve. The three things it left open closed
+as **phase 4b** (`0654052`, §9.13): `WindowChrome` above the router, dialogs that follow a fold,
+and the rich text editor's own dialog.
 
-**Phase 5, documents (half a day).** DESIGN.md gains the hinge and bar-edge rules (and the stale
-960 in section 6 becomes 880); research/12b gets a "verified 2026-09" addendum pointing here;
-NEXT-STEPS item 32 records what landed; CLAUDE.md's Xcode paragraph and the simulator commands
-are updated; a `research/walkthroughs/` report with the screenshots.
+**Phase 5, documents — landed.** DESIGN.md gained the fold and bar-edge rules in sections 6 and
+7, the Duo poses in the section 9 checklist, and 880 in place of the stale 960; research/12b
+gained a "Verified 2026-09-20" addendum pointing here; CLAUDE.md gained an iPhone Duo bullet with
+the commands; the walkthrough report is `research/walkthroughs/2026-09-20-iphone-duo.md`;
+NEXT-STEPS item 32 records what landed. Two fixes left by phase 4b landed with it: the standalone
+`WorkItemDetailPage` takes the `SafeArea(top: false, bottom: false)` convention (the embedded pane
+is untouched), and the Diagnostics index folds its probes into an overflow menu on a compact
+width. Verified on the cover and in the wide and tall poses,
+`.shots/duo/phase5-{cover-wi,cover-diag,cover-diag-menu,wide-diag,tall-book-diag,wi-open}`; the
+comments now end at 382 on the cover, where the column starts, and a full circuit logs no
+exception. 1957 tests green.
 
 ## 6. Acceptance
 
@@ -418,12 +437,22 @@ For each situation in section 2, on the scratch project, light and dark, default
 
 ## 8. Needs from Kelly
 
-- Done 2026-09-20: signed in on the Duo simulator; the fold and rotate controls are driven by
-  `duo-pose` (section 1.1), so nothing is needed from Kelly for the poses.
-- Keep Device Hub open with the Duo window during walkthroughs (the accessibility path needs the
-  window), and start Split View by hand if the idb gesture turns out flaky.
-- Confirm the vertical rail on the cover display looks right once phase 2 has a screenshot; if it
-  fights the vertical Dynamic Island, D1 narrows to the inner display and Split View.
+Done on 2026-09-20 and no longer needed: the sign-in, the poses (`duo-pose` drives them), and
+the cover rail, which Kelly reviewed mid-phase-2 and turned into D10 and D11. What is left:
+
+- **Start Split View by hand, once.** It cannot be started from a script (§9.5) and Device Hub has
+  no button for it. With the app left in a pane, the two pane rows of section 2, a pane's size
+  class and the corner insets of its inner edge fill in one pass — open `/diagnostics/display`,
+  press *Copy as JSON*, then
+  `xcrun simctl pbpaste 58DEB6C0-6F8A-46A1-AAB5-217C2A2C5B20`.
+- **A physical device**, when it ships on 2026-10-23, for the two things a simulator cannot
+  answer: the board's snap after a real fling (synthetic mouse drags do not scroll on iOS, §9.10)
+  and how a long-press drag across the crease *feels* over a real fold.
+- Keep Device Hub open with the Duo showing during a walkthrough; the accessibility path needs the
+  window.
+- **Optional, a decision rather than a need:** in the tall pose iOS reports no vertical bar edge,
+  so no corner clearance is applied and a back arrow sits at x = 4 beside a 16 pt corner (§9.13).
+  Widening the rule to every pose that reports a corner would move that arrow and nothing else.
 
 ## 9. Phase 0 findings (2026-09-20)
 

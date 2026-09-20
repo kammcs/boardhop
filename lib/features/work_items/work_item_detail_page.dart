@@ -853,6 +853,16 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
         ),
       );
 
+  /// The standalone route's own side insets. This page is pushed over the
+  /// project shell, so nothing above it has spent the display's side
+  /// padding: on an iPhone Duo's cover that is the 84 pt column the stacked
+  /// status bar lives in, on an iPhone in landscape the 59 dp of island and
+  /// corners. Embedded in the shell's detail pane the shell has already
+  /// done it, and a second `SafeArea` there would inset the pane twice.
+  Widget _standaloneInset(Widget child) => widget.embedded
+      ? child
+      : SafeArea(top: false, bottom: false, child: child);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -931,74 +941,81 @@ class _WorkItemDetailPageState extends State<WorkItemDetailPage>
               ],
             ),
           ),
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_refreshing || _writing) const LinearProgressIndicator(),
-              if (_error != null)
-                ListTile(
-                  leading: Icon(Icons.error_outline, color: scheme.error),
-                  title: Text(_error!),
-                ),
-              Expanded(
-                child: item == null
-                    ? (_error == null
-                          ? const Center(
-                              child: CircularProgressIndicator.adaptive(),
-                            )
-                          : const SizedBox.shrink())
-                    : TabBarView(
-                        controller: _tabs,
-                        children: [
-                          _tabBody(
-                            children: [
-                              _Header(
-                                item: item,
-                                visuals: _visuals,
-                                onStateTap: _writing
-                                    ? null
-                                    : () => _changeState(item),
-                                onAssignTap: _writing
-                                    ? null
-                                    : () => _changeAssignment(item),
-                              ),
-                              _Facts(item: item),
-                              ..._fields(item),
-                            ],
-                          ),
-                          _tabBody(children: _related(item)),
-                          _tabBody(
-                            children: [
-                              // The tab's own label and badge say
-                              // "Comments (12)", so no heading repeats it;
-                              // the key is what a `?comment=` anchor aims
-                              // at until the card itself is built.
-                              Padding(
-                                key: _discussionKey,
-                                padding: const EdgeInsets.fromLTRB(
-                                  Spacing.lg,
-                                  Spacing.lg,
-                                  Spacing.lg,
-                                  0,
+          // The project shell insets its own pages; the standalone route is
+          // pushed over it and insets itself (DESIGN §7). On the Duo's cover
+          // that is the 84 pt column the stacked status bar sits in, and on
+          // an iPhone in landscape the 59 dp of island and corners. The
+          // embedded pane keeps the shell's insets and is untouched.
+          body: _standaloneInset(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_refreshing || _writing) const LinearProgressIndicator(),
+                if (_error != null)
+                  ListTile(
+                    leading: Icon(Icons.error_outline, color: scheme.error),
+                    title: Text(_error!),
+                  ),
+                Expanded(
+                  child: item == null
+                      ? (_error == null
+                            ? const Center(
+                                child: CircularProgressIndicator.adaptive(),
+                              )
+                            : const SizedBox.shrink())
+                      : TabBarView(
+                          controller: _tabs,
+                          children: [
+                            _tabBody(
+                              children: [
+                                _Header(
+                                  item: item,
+                                  visuals: _visuals,
+                                  onStateTap: _writing
+                                      ? null
+                                      : () => _changeState(item),
+                                  onAssignTap: _writing
+                                      ? null
+                                      : () => _changeAssignment(item),
                                 ),
-                                child: _Discussion(
-                                  comments: _comments,
-                                  headers: _headers,
-                                  attachments: _inlineAttachments,
-                                  onOpenMention: _openMention,
-                                  keyFor: (id) => _commentKeys.putIfAbsent(
-                                    id,
-                                    GlobalKey.new,
+                                _Facts(item: item),
+                                ..._fields(item),
+                              ],
+                            ),
+                            _tabBody(children: _related(item)),
+                            _tabBody(
+                              children: [
+                                // The tab's own label and badge say
+                                // "Comments (12)", so no heading repeats it;
+                                // the key is what a `?comment=` anchor aims
+                                // at until the card itself is built.
+                                Padding(
+                                  key: _discussionKey,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    Spacing.lg,
+                                    Spacing.lg,
+                                    Spacing.lg,
+                                    0,
                                   ),
-                                  highlighted: _highlighted,
+                                  child: _Discussion(
+                                    comments: _comments,
+                                    headers: _headers,
+                                    attachments: _inlineAttachments,
+                                    onOpenMention: _openMention,
+                                    keyFor: (id) => _commentKeys.putIfAbsent(
+                                      id,
+                                      GlobalKey.new,
+                                    ),
+                                    highlighted: _highlighted,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-              ),
-            ],
+                              ],
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
           ),
         );
       },

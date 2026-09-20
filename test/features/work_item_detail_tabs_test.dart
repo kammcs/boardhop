@@ -174,9 +174,13 @@ void main() {
     double textScale = 1,
     bool embedded = false,
     bool settle = true,
+    double rightPadding = 0,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = devicePixelRatio;
+    tester.view.padding = FakeViewPadding(
+      right: rightPadding * devicePixelRatio,
+    );
     addTearDown(tester.view.reset);
     final auth = AuthBloc(_AuthService());
     addTearDown(auth.close);
@@ -486,5 +490,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('Post comment'), findsOneWidget);
     expect(controller(tester).index, 2);
+  });
+
+  /// The standalone route is pushed over the project shell, so nothing
+  /// above it spends the display's side insets. On the iPhone Duo's cover
+  /// that is the 84 pt column the stacked status bar sits in, and the
+  /// comments ran under it (research/23 §9.13). The embedded pane is inside
+  /// the shell's own SafeArea and must not be inset a second time.
+  testWidgets('the standalone route clears the display\'s side inset', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      size: const Size(1398, 2034),
+      rightPadding: 84,
+      settle: false,
+    );
+
+    expect(tester.getRect(find.byType(TabBarView)).right, closeTo(382, 0.5));
+  });
+
+  testWidgets('the embedded pane is not inset twice', (tester) async {
+    await pump(
+      tester,
+      size: const Size(1398, 2034),
+      rightPadding: 84,
+      embedded: true,
+      settle: false,
+    );
+
+    expect(tester.getRect(find.byType(TabBarView)).right, closeTo(466, 0.5));
   });
 }

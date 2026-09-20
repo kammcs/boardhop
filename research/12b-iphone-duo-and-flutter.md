@@ -6,6 +6,64 @@
 
 ---
 
+## Verified 2026-09-20 — read this first
+
+Xcode 27.1 and the iPhone Duo simulator landed on the Mac on 2026-09-19, and everything this
+document could only infer has now been measured on the device and built against.
+**[research/23-iphone-duo-adaptation.md](23-iphone-duo-adaptation.md) is the authority** where
+the two disagree: §1 for the SDK and the simulator, §2 for the measured table of every pose, §3
+for Kelly's decisions, §9 for what each phase found and landed (six commits, 2026-09-20). This
+document stays as the record of what could be known before the hardware existed.
+
+**The appendix questions.** 1 answered (23 §9.3.1 — the inferred point sizes were right, and
+`Breakpoint` needed no change); **2 and 3 still open** — Split View could not be started from a
+script and has never been entered (23 §9.5), so the fixed-50/50 claim of §1.5 and a pane's size
+class remain unverified; 4 answered (23 §2 and §9.3.4); 5 answered, and the answer is "not at
+all" (below); 6 answered — the WebView survives folding, unfolding and rotation with one build
+and one `onInit` (23 §9.12, spikes F6); 7 answered (23 §9.1 and §9.3.7); 8 answered (23 §9.3.8);
+9 answered — a long-press drag across the band moved a card and the proxy stayed under the
+pointer (23 §9.10); 10 answered (23 §1.5 — #192515 is still open with a community engine PR).
+
+**What the simulator disproved.**
+
+- **The crease runs across the *short* axis.** The division region is a **vertical** band at the
+  horizontal centre in the wide pose and a **horizontal** one in the tall pose — always across
+  the middle of the display's longer edge — so the "horizontal band in the laptop pose" this
+  document's posture reading implied is backwards. The band is 40 pt wide with 20 pt of margin
+  each side, which makes the crease itself a **zero-width line** at the exact centre (23 §2).
+- **The asymmetry §3.2 expected is real, and it is 84 pt.** iOS stacks the status bar in one
+  corner and reports the whole column as `MediaQuery.padding` on that edge: 84 pt trailing in
+  every pose but the tall one, where it is 82 pt on top, plus 34 pt for the home indicator and
+  **zero everywhere else** — including zero at the top of the wide pose. `SafeArea` does handle
+  it per edge, as §3.2 predicted; what it cannot handle is the rounded corner on an edge whose
+  inset is genuinely zero (23 §9.11).
+- **A 27.1 rebuild reaches tier 3 by itself, and stops there.** §3.8 was right that the SDK bump
+  is the whole of tier 3: the app filled both panels edge to edge with the right insets and no
+  code change. It buys no reaction to the fold — Flutter draws straight through the active
+  division band — so everything past tier 3 was the work in phases 2 and 3 (23 §9.3.8).
+- **`FlutterAppDelegate.window` is nil in this app.** §3.3's plan — replace the orientation
+  channel with `reservedRegions` — was right, but the window lookup the old selector code used
+  answers *nothing at all* in a scene-based app (Boardhop has a `UIApplicationSceneManifest`):
+  no regions, `unspecified` for the bar edge, no hinge. The active `UIWindowScene`'s `keyWindow`,
+  and in practice the `FlutterViewController`'s own view, answers every query (23 §9.1). §3.3's
+  "silently wrong rather than unknown" risk was real, and is gone.
+- **The fold is invisible to `MediaQuery`.** Question 5 assumed the choice was between a smooth
+  update and a snap. Neither: folding produced **no `didChangeMetrics` at all**, and `size`,
+  `padding` and `orientation` were byte-identical flat and folded. Only the channel sees it —
+  `UIHingeInteraction`'s status and the division region's `isActive` — so the pushed
+  `displayChanged` is not an optimisation but the only path, and `MediaQuery.displayFeatures` is
+  still empty in every pose (23 §9.2).
+- **§3.1's near miss was fixed, and then overtaken.** `ContentColumn.twoColumnMin` is **880**
+  now, but `ContentColumn` gives 840 on the inner display, so the wide pose is still one column
+  when the device is flat; it is the **fold** that puts Home and the PR overview side by side,
+  with each column needing only `SideBySide.creaseMinColumn` (320) (23 §9.10).
+- **§3.4 was right that Flutter gets no system bar, and wrong that this leaves the app out.**
+  `UITraitCollection.verticalBarEdge` is a trait, reported to any app whatever draws its bars, so
+  Boardhop reads it over the channel and puts its **own** rail on the edge iOS names — inside the
+  84 pt column, bare, centred under the status cluster (23 D1, D10, D11).
+
+---
+
 ## Executive summary
 
 1. **The product is real and the name is confirmed: "iPhone Duo."** Announced 2026-09-09, pre-orders 2026-10-16, on sale 2026-10-23, from $1,999. 5.4-inch outer display, 7.6-inch inner display. It ships on **iOS 27.1**, not iOS 26.x — the premise in the brief that this is an iOS 26.x feature set is wrong, and the version gap matters because the app-compatibility tiers are keyed to the SDK version.

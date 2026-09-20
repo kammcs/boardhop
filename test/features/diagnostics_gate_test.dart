@@ -2,8 +2,10 @@ import 'package:boardhop/app.dart';
 import 'package:boardhop/auth/auth_bloc.dart';
 import 'package:boardhop/auth/auth_service.dart';
 import 'package:boardhop/core/config/app_config.dart';
+import 'package:boardhop/features/diagnostics/diagnostics_page.dart';
 import 'package:boardhop/features/orgs/org_picker_page.dart';
 import 'package:boardhop/router.dart';
+import 'package:boardhop/theme/boardhop_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,5 +52,47 @@ void main() {
         reason: path,
       );
     }
+  });
+
+  /// The Diagnostics index's app bar overflowed by 52 pt on the iPhone
+  /// Duo's cover — 379.7 pt of bar for a back arrow, eight probe icons and
+  /// Copy report (research/23 §9.13). On a compact width the probes fold
+  /// into one menu; the Display probe, the one a pose check needs, stays an
+  /// icon at every width.
+  Widget diagnostics() =>
+      MaterialApp(theme: BoardhopTheme.light(), home: const DiagnosticsPage());
+
+  testWidgets('a compact app bar folds the probes into a menu', (tester) async {
+    tester.view.physicalSize = const Size(1398, 2034);
+    tester.view.devicePixelRatio = 3;
+    tester.view.padding = const FakeViewPadding(right: 252);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(diagnostics());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byIcon(Icons.science_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.phonelink_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.view_kanban_outlined), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.science_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Board probe (F4)'), findsOneWidget);
+    expect(find.text('Wiki probe (W-B)'), findsOneWidget);
+  });
+
+  testWidgets('a wide app bar keeps every probe an icon', (tester) async {
+    tester.view.physicalSize = const Size(2853, 2007);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(diagnostics());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byIcon(Icons.science_outlined), findsNothing);
+    expect(find.byIcon(Icons.view_kanban_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.phonelink_outlined), findsOneWidget);
   });
 }

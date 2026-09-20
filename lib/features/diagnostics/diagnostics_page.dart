@@ -42,6 +42,46 @@ class _Check {
 }
 
 class _DiagnosticsPageState extends State<DiagnosticsPage> {
+  /// The probe pages this one links to, in the order they were built. The
+  /// Display probe is not here: it stays an icon at every width.
+  static const _probes = <({String tooltip, IconData icon, String route})>[
+    (
+      tooltip: 'Editor probe (F3)',
+      icon: Icons.edit_note,
+      route: '/diagnostics/editor',
+    ),
+    (
+      tooltip: 'Board probe (F4)',
+      icon: Icons.view_kanban_outlined,
+      route: '/diagnostics/board',
+    ),
+    (
+      tooltip: 'Diff probe (F5)',
+      icon: Icons.difference_outlined,
+      route: '/diagnostics/diff',
+    ),
+    (
+      tooltip: 'Mention probe (M-B)',
+      icon: Icons.alternate_email,
+      route: '/diagnostics/mention',
+    ),
+    (
+      tooltip: 'Sprint widgets probe (P-B)',
+      icon: Icons.timelapse,
+      route: '/diagnostics/sprint',
+    ),
+    (
+      tooltip: 'Dashboard widgets probe (D-B)',
+      icon: Icons.dashboard_outlined,
+      route: '/diagnostics/dashboard',
+    ),
+    (
+      tooltip: 'Wiki probe (W-B)',
+      icon: Icons.menu_book_outlined,
+      route: '/diagnostics/wiki',
+    ),
+  ];
+
   final List<_Check> _checks = <_Check>[];
   bool _running = false;
   final _orgController = TextEditingController(text: 'puremedia');
@@ -398,41 +438,36 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
       appBar: AppBar(
         title: const Text('Diagnostics (spikes F1, F2)'),
         actions: [
-          IconButton(
-            tooltip: 'Editor probe (F3)',
-            icon: const Icon(Icons.edit_note),
-            onPressed: () => context.push('/diagnostics/editor'),
-          ),
-          IconButton(
-            tooltip: 'Board probe (F4)',
-            icon: const Icon(Icons.view_kanban_outlined),
-            onPressed: () => context.push('/diagnostics/board'),
-          ),
-          IconButton(
-            tooltip: 'Diff probe (F5)',
-            icon: const Icon(Icons.difference_outlined),
-            onPressed: () => context.push('/diagnostics/diff'),
-          ),
-          IconButton(
-            tooltip: 'Mention probe (M-B)',
-            icon: const Icon(Icons.alternate_email),
-            onPressed: () => context.push('/diagnostics/mention'),
-          ),
-          IconButton(
-            tooltip: 'Sprint widgets probe (P-B)',
-            icon: const Icon(Icons.timelapse),
-            onPressed: () => context.push('/diagnostics/sprint'),
-          ),
-          IconButton(
-            tooltip: 'Dashboard widgets probe (D-B)',
-            icon: const Icon(Icons.dashboard_outlined),
-            onPressed: () => context.push('/diagnostics/dashboard'),
-          ),
-          IconButton(
-            tooltip: 'Wiki probe (W-B)',
-            icon: const Icon(Icons.menu_book_outlined),
-            onPressed: () => context.push('/diagnostics/wiki'),
-          ),
+          // Eight probes, a Copy report and a back arrow do not fit a
+          // compact app bar: on the iPhone Duo's cover, 379.7 pt wide, the
+          // row overflowed by 52 pt (research/23 §9.13). The Display probe
+          // is the one that has to stay reachable in every pose, so it
+          // keeps its icon and the rest fold into an overflow menu.
+          if (!context.breakpoint.isCompact)
+            for (final probe in _probes)
+              IconButton(
+                tooltip: probe.tooltip,
+                icon: Icon(probe.icon),
+                onPressed: () => context.push(probe.route),
+              )
+          else
+            PopupMenuButton<String>(
+              tooltip: 'Probes',
+              offset: kTrailingMenuOffset,
+              icon: const Icon(Icons.science_outlined),
+              onSelected: context.push,
+              itemBuilder: (context) => [
+                for (final probe in _probes)
+                  PopupMenuItem(
+                    value: probe.route,
+                    child: ListTile(
+                      leading: Icon(probe.icon),
+                      title: Text(probe.tooltip),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+              ],
+            ),
           IconButton(
             tooltip: 'Display probe (Duo)',
             icon: const Icon(Icons.phonelink_outlined),
