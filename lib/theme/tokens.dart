@@ -40,6 +40,15 @@ abstract final class Durations {
   static const Duration slow = Duration(milliseconds: 360);
 }
 
+/// How motion eases, beside how long it takes.
+abstract final class Motion {
+  /// The curve a piece of chrome moves on when the window itself changes
+  /// shape — the glass rail sliding from the bottom of the screen to the
+  /// edge iOS asks for as an iPhone Duo is folded or turned (research/23
+  /// D7). Symmetric, so the same move back reads as a reversal.
+  static const Curve standard = Curves.easeInOutCubic;
+}
+
 /// Minimum touch target on both platforms.
 const double kMinTapTarget = 48;
 

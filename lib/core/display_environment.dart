@@ -233,6 +233,20 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
     return band.height > band.width ? Axis.vertical : Axis.horizontal;
   }
 
+  /// The occlusions in force right now, in window coordinates: on an
+  /// iPhone Duo the stacked status bar in the corner of the bar edge
+  /// (84 x 120 in the wide pose, 84 x 170 on the cover, research/23 §2).
+  ///
+  /// `MediaQuery.padding` reports the same 84 pt, but only as "this much
+  /// of that side", which is why the rail takes the rectangle instead: it
+  /// says how far **down** the corner reaches, and so how much of the edge
+  /// the rail can still have (research/23 §4.3). Inactive regions are left
+  /// out, so the camera on the panel that is not in use is not in the way.
+  List<Rect> get occlusions => [
+    for (final r in _regions.regions)
+      if (r.kind == ReservedRegionKind.occlusion && r.active) r.rect,
+  ];
+
   /// The display can fold, whether or not it is folded now. An iPhone Duo
   /// lying flat still reports its division, which is how a page decides to
   /// prefer an even number of columns.

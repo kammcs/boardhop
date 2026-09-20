@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app.dart';
+import '../../core/display_environment.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../theme/theme.dart';
 import 'push_prefs_section.dart';
@@ -66,7 +67,9 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
               ),
-              if (!context.breakpoint.isCompact && _hasGlassRail(context))
+              if (!context.breakpoint.isCompact &&
+                  _hasGlassRail(context) &&
+                  !_systemPicksRailSide(context))
                 SwitchListTile(
                   value: controller.railSide == RailSide.right,
                   onChanged: (v) => controller.setRailSide(
@@ -150,3 +153,11 @@ bool _hasGlassRail(BuildContext context) {
   final platform = Theme.of(context).platform;
   return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
 }
+
+/// iOS names the edge its own vertical bar belongs on (an iPhone Duo's
+/// inner display, its cover, a Split View pane), and the rail follows it:
+/// the switch would be a control over nothing, so it is not offered
+/// (research/23 D6). Everywhere else — an iPad, an iPhone in landscape —
+/// it still chooses.
+bool _systemPicksRailSide(BuildContext context) =>
+    DisplayScope.maybeOf(context)?.railSide(Directionality.of(context)) != null;

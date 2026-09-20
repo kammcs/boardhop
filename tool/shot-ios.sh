@@ -82,7 +82,7 @@ fi
 
 name=$1; shift
 mkdir -p "$SHOT_DIR"
-shoot() { xcrun simctl io "$UDID" screenshot "${SHOT_ARGS[@]}" "$1" >/dev/null 2>&1; }
+shoot() { xcrun simctl io "$UDID" screenshot "${SHOT_ARGS[@]+"${SHOT_ARGS[@]}"}" "$1" >/dev/null 2>&1; }
 
 if [ "$DUO" = 1 ]; then
   # The Duo's frame follows both the pose and the rotation, and idb

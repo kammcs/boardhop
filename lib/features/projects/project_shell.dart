@@ -237,6 +237,10 @@ class _ProjectShellState extends State<ProjectShell>
     );
     final platform = Theme.of(context).platform;
     if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
+      // The shape of the display, kept live for the whole app by
+      // DisplayScope, which hears the Runner's pushes; polling here would
+      // miss a fold entirely (research/23 §9.2).
+      final display = DisplayScope.of(context);
       // Apple devices get the floating glass chrome at every width: a
       // rail beside the page in landscape (on the side chosen in
       // Settings > Appearance, right by default) and a bar along the
@@ -258,10 +262,17 @@ class _ProjectShellState extends State<ProjectShell>
         bleedsUnderRail: _bleedsUnderRail(widget.location),
         railOnRight: ThemeScope.of(context).railSide == RailSide.right,
         // Where the Dynamic Island is while in landscape (Apple only), so
-        // the glass rail can hug the other edge. Kept live for the whole
-        // app by DisplayScope, which hears the Runner's pushes; polling
-        // here would miss a fold entirely (research/23 §9.2).
-        cutoutSide: DisplayScope.of(context).cutoutSide,
+        // the glass rail can hug the other edge.
+        cutoutSide: display.cutoutSide,
+        // Where iOS puts its own vertical bar, which is where the rail
+        // belongs whatever the orientation (research/23 D1); null on every
+        // display that asks for none, where the rules above stand. With it
+        // come the corner the stacked status bar occupies on that edge,
+        // and the fold.
+        systemRailSide: display.railSide(Directionality.of(context)),
+        occlusions: display.occlusions,
+        creaseBand: display.creaseBand,
+        creaseAxis: display.creaseAxis,
       );
     }
     if (context.breakpoint.isCompact) {

@@ -4,6 +4,23 @@ import 'package:flutter/material.dart' hide Durations;
 
 import '../../../theme/tokens.dart';
 
+/// How a [GlassNavigationRail] is dressed.
+enum GlassRailChrome {
+  /// The floating Liquid Glass pill: blurred, tinted, a hairline and a
+  /// shadow, over the page. Everywhere the system asks for no vertical bar
+  /// of its own — an iPad, an iPhone in landscape, the bar along the
+  /// bottom in portrait.
+  pill,
+
+  /// Bare destinations, no container at all: the rail is *inside* the
+  /// column iOS has already reserved on the bar edge (an iPhone Duo's
+  /// inner display and cover, a Split View pane), lined up under the
+  /// stacked status cluster the way Apple's own vertical tab bar is. A
+  /// pill there was too wide for the column and did not line up with it
+  /// (Kelly, 2026-09-20). The selected destination keeps its capsule.
+  bare,
+}
+
 /// One entry of a [GlassNavigationRail].
 class GlassRailDestination {
   const GlassRailDestination({
@@ -41,6 +58,7 @@ class GlassNavigationRail extends StatelessWidget {
     required this.onDestinationSelected,
     this.spread = false,
     this.axis = Axis.vertical,
+    this.chrome = GlassRailChrome.pill,
   });
 
   final List<GlassRailDestination> destinations;
@@ -56,6 +74,38 @@ class GlassNavigationRail extends StatelessWidget {
   /// holds it to at least 80% of the screen, centered); when false it is
   /// only as long as its destinations.
   final bool spread;
+
+  /// The glass pill, or bare destinations in the system's own bar column.
+  final GlassRailChrome chrome;
+
+  /// What the destinations keep between them with no container to space
+  /// them inside: Apple's vertical tab bar stacks its items with air, not
+  /// edge to edge.
+  static const double bareGap = Spacing.lg;
+
+  /// Length of a bare column of [count] destinations at the text size in
+  /// force, which is what the shell centers in the column.
+  static double bareLengthFor(BuildContext context, int count) =>
+      count <= 0 ? 0 : count * itemLengthFor(context) + (count - 1) * bareGap;
+
+  /// What a vertical rail of [count] destinations needs, and so the least
+  /// the shell may hold it to: below this its destinations overflow, which
+  /// a window can reach on its own (the Duo reports a window about 140 pt
+  /// tall for a frame while it switches panels).
+  static double lengthFor(
+    BuildContext context,
+    int count,
+    GlassRailChrome chrome,
+  ) => switch (chrome) {
+    GlassRailChrome.bare => bareLengthFor(context, count),
+    GlassRailChrome.pill =>
+      count <= 0 ? 0 : count * itemLengthFor(context) + 2 * Spacing.sm,
+  };
+
+  /// One destination's length down a vertical rail: its own padding, the
+  /// icon, the gap and the label line.
+  static double itemLengthFor(BuildContext context) =>
+      2 * itemPadY + iconBox + iconGap + labelLineFor(context);
 
   /// Width of one destination and so of a vertical rail at the ordinary
   /// text size.
@@ -138,6 +188,9 @@ class GlassNavigationRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Nothing behind the destinations: no blur, no tint, no hairline, no
+    // shadow. The column they sit in is the system's own.
+    if (chrome == GlassRailChrome.bare) return _destinations(context);
     // A bar along the bottom is a true pill, like Apple's floating tab
     // bar; a tall rail beside the page keeps the softer rounded rect (a
     // pill's semicircular ends read wrong down a whole screen).
@@ -195,46 +248,58 @@ class GlassNavigationRail extends StatelessWidget {
               padding: axis == Axis.vertical
                   ? const EdgeInsets.symmetric(vertical: Spacing.sm)
                   : const EdgeInsets.all(barInset),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Along the bottom the destinations share the bar's
-                  // width, so the selected capsule is a tab-shaped
-                  // stadium (72 x 50 on an iPhone 17, Apple's own
-                  // proportion) rather than the near-circular blob a
-                  // 72 pt slot gave. It is also what keeps four items at
-                  // a large text scale from overflowing a narrow bar; the
-                  // label scales down inside its item.
-                  var itemWidth = widthFor(context);
-                  if (axis == Axis.horizontal &&
-                      constraints.maxWidth.isFinite &&
-                      destinations.isNotEmpty) {
-                    itemWidth = constraints.maxWidth / destinations.length;
-                  }
-                  return Flex(
-                    direction: axis,
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: spread
-                        ? MainAxisAlignment.spaceEvenly
-                        : MainAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < destinations.length; i++)
-                        _GlassRailItem(
-                          destination: destinations[i],
-                          selected: i == selectedIndex,
-                          width: itemWidth,
-                          axis: axis,
-                          onTap: () => onDestinationSelected(i),
-                        ),
-                    ],
-                  );
-                },
-              ),
+              child: _destinations(context),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+extension on GlassNavigationRail {
+  /// The destinations themselves, the one piece both chromes share.
+  Widget _destinations(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      // Along the bottom the destinations share the bar's width, so the
+      // selected capsule is a tab-shaped stadium (72 x 50 on an iPhone 17,
+      // Apple's own proportion) rather than the near-circular blob a 72 pt
+      // slot gave. It is also what keeps four items at a large text scale
+      // from overflowing a narrow bar; the label scales down inside its
+      // item.
+      var itemWidth = GlassNavigationRail.widthFor(context);
+      if (axis == Axis.horizontal &&
+          constraints.maxWidth.isFinite &&
+          destinations.isNotEmpty) {
+        itemWidth = constraints.maxWidth / destinations.length;
+      }
+      final bare = chrome == GlassRailChrome.bare;
+      return Flex(
+        direction: axis,
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: spread
+            ? MainAxisAlignment.spaceEvenly
+            : MainAxisAlignment.center,
+        children: [
+          for (var i = 0; i < destinations.length; i++) ...[
+            // Air between bare destinations; the pill spaces its own.
+            if (bare && i > 0)
+              const SizedBox(
+                height: GlassNavigationRail.bareGap,
+                width: GlassNavigationRail.bareGap,
+              ),
+            _GlassRailItem(
+              destination: destinations[i],
+              selected: i == selectedIndex,
+              width: itemWidth,
+              axis: axis,
+              onTap: () => onDestinationSelected(i),
+            ),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 class _GlassRailItem extends StatelessWidget {

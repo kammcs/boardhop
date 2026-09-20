@@ -201,6 +201,16 @@ Split View could not be started from a script (§9, question 2); those two rows 
 - **D8 Verification is live.** Kelly signed in on the Duo simulator; every check uses the
   puremedia scratch project "DevOps Mobile App". The demo build is only a fallback for the store
   screenshots.
+- **D10 Bare rail inside the system's column** (Kelly, 2026-09-20, after the first phase 2 build):
+  on an edge iOS names, the glass pill goes: "it makes it too wide and the icons are not aligning
+  properly under the combo status icon like it does on the Apple-made apps". The destinations sit
+  bare inside the 84 pt column iOS reserves, centred on the status cluster's x, stacked with
+  `Spacing.lg` and centred below the cluster; only the selected capsule keeps its glass. The pill
+  stays wherever the edge is unspecified. Content width: 867 pt inner, 382 pt cover.
+- **D11 A sharp fade before the column** (Kelly, same day): content under the column read as
+  clutter on the Boards card wall, so every page under a system edge fades to transparent on a
+  `Spacing.md` cliff ending at the column's inner boundary (`ShaderMask`, `dstIn`); bleeding
+  pages still scroll under it so the last column reaches the visible area.
 - **D9 Poses are driven through the Accessibility API, not screen taps** (Kelly, 2026-09-20:
   find a software path before committing to taps; section 1.1 found one). A `tool/duo-pose`
   helper presses Device Hub's Closed, Book, Open and Rotate Right buttons by accessibility name.
@@ -612,3 +622,83 @@ rows of §2 and the `compactPane` behaviour are covered by unit tests at 475 x 6
 device. `halves` is computed from the margins, as §9.7 asked, so the two halves meet on the crease
 line and neither loses the 20 pt keep-out; keeping content out of the band is `CreasePadding`'s job
 in phase 3.
+
+### 9.9 Phase 2 landed (2026-09-20)
+
+4.3 is built and verified on the Duo simulator with a **debug** build, signed in, on the scratch
+project (D8). What landed: `GlassShellLayout` rebuilt around one plan (a rail box and a page) with
+the system's bar edge as its first input, `GlassNavigationRail` given a **`chrome`** of
+`pill` or `bare`, `ProjectShell` passing `railSide`, `occlusions`, `creaseBand` and `creaseAxis`
+from `DisplayScope`, `DisplayEnvironment.occlusions`, the Settings switch hidden where iOS names
+the edge, `Motion.standard` (`Curves.easeInOutCubic`) beside `Durations` in `lib/theme/tokens.dart`,
+and twelve new widget tests (ten in `test/features/glass_shell_layout_test.dart`, which is
+nineteen now, and `test/features/settings_rail_switch_test.dart`).
+
+**The rail is inside the system's column, not beside it (Kelly, mid-phase).** The first build put
+the glass pill on the system edge with its 24 pt margin, and Kelly rejected it from the screenshots:
+the pill is too wide for the column iOS reserves and its icons do not line up under the stacked
+status cluster the way Apple's own vertical tab bar does. The rule is now:
+
+- The rail sits **in** the reserved column — the 84 pt `MediaQuery.padding` already reports on that
+  edge — and the page keeps **no gutter beyond that inset**. Measured on the device:
+  **867 pt of content on the inner display** (951 - 84) and **382 on the cover** (466 - 84); the
+  glass pill left 839 and 366.
+- `GlassRailChrome.bare` drops the container: no `BackdropFilter`, no tint, no hairline, no shadow.
+  Bare destinations, icon over label, stacked with `Spacing.lg` between them and centered in what
+  is left below the cluster. The **selected destination keeps its capsule** of brighter glass
+  behind icon and label; nothing is signalled by color.
+- The column is centered on the **status cluster's own x** (the active occlusion's centre) and
+  starts below it. `idb ui describe-all` on the inner display reads back
+  `x 873 w 72` for all four destinations — centre **909**, exactly the cluster's centre and the
+  reserved column's — at `y 253.5 / 319.5 / 385.5 / 451.5`, a 66 pt pitch (50 pt item + 16 pt gap),
+  so the column runs 253.5 to 501.5 and is centered in the 120 to 635 strip below the cluster.
+  The 80 % height rule is the pill's and does not apply here.
+- The pill is untouched everywhere the edge is unspecified: the bottom bar in portrait, the rail in
+  landscape on an iPad or an iPhone, the Settings switch, `bleedsUnderRail`, `_keyboardSafe`.
+
+**And the page fades out at the column (Kelly, same day, after the Boards shots).** With no glass
+behind the glyphs, content passing under them read as clutter — badly on the cover, where a Kanban
+column is wide enough to run under the rail at rest. Every page under a system edge is now wrapped
+in a `ShaderMask` (`BlendMode.dstIn`, `GlassShellLayout.columnFade`): whole across the page, a
+cliff `Spacing.md` wide, nothing from the column's inner boundary on — 867 pt on the inner display,
+382 on the cover, the same number the page's gutter uses, so the cliff sits exactly where the
+column starts. The mask wraps the page body only, so the Scaffold's overlays (a floating snackbar,
+a sheet) are untouched, and a `ShaderMask` takes no taps, so a sideways scroller still scrolls
+under the column: verified on the cover that the board's **last column comes fully into the visible
+area** at the end of its scroll (`.shots/duo/phase2-closed-board-scrolled.png`), because the column
+is its end padding. Before and after: `.shots/duo/kelly-boards-{closed-portrait,open-wide}-post.png`
+and the same names with `-fade`. The app bar's own trailing pill ends at 855 on the inner display,
+12 pt clear of the cliff, so nothing of it is lost.
+
+**Verified, light and dark** (`.shots/duo/phase2-*`, each with a 400 px thumbnail): closed portrait
+and closed landscape on the cover, open wide flat, open wide book, open tall flat, open tall book,
+plus Work (master/detail) and the Kanban board in the wide pose. The bar edge is `trailing` in
+every pose but the tall one, where it is `unspecified` and the glass bar stays along the bottom, in
+the lower half already. Regression: iPhone 17 portrait and landscape and iPad Pro 13" portrait
+(`phase2-regress-*`) are unchanged, and their debug logs are clean.
+
+Three findings:
+
+- **A window about 140 pt tall exists.** The debug log caught `A RenderFlex overflowed by 77 pixels`
+  from the vertical rail at startup: for a frame the Duo reports a landscape window far shorter than
+  the rail's own 216 pt, and four fifths of that is less than its destinations need. It is not new
+  — the same maths applied before phase 2 — but it is now fixed: `GlassNavigationRail.lengthFor`
+  gives the shell the rail's own length and the box is never shorter, overhanging the window
+  instead of squeezing. A full pose circuit (wide, book, tall book, tall, cover, back) now logs
+  **no exception at all**.
+- **The board's bleed is harder to read under a bare rail.** A sideways scroller still gets the
+  column as `MediaQuery` padding and slides under it, but with no glass behind the glyphs the
+  labels sit straight on the cards. It reads well enough on the inner display and badly on the
+  **cover**, where a column of the Kanban board is wide enough to run under the rail at rest
+  (`.shots/duo/kelly-boards-closed-portrait-post.png`). Kelly's answer was the fade above rather
+  than stopping the bleed, so a horizontal scroll still reaches the last column.
+- **Animation is by box, not by content.** The rail's `AnimatedPositioned` would hand a
+  four-item bar every width between the bottom bar and a 72 pt column, so the rail is laid out at
+  the size it is **heading for** (`_RailSlot`, an `OverflowBox`) and glides. The page's gutter is
+  an `AnimatedPadding` on the same duration and curve. Because the shell's own tests pump twice
+  in one test, the harness now settles between pumps; the nine phase-1 assertions are unchanged.
+
+Left for later: **Split View is still unstarted** (§9.5), so a pane is covered only by widget tests
+at 475 x 669 — the rail centers in the reserved column there too, or in its own width where nothing
+is reserved. `DisplayEnvironment.compactPane` is now unused by the shell: the system's column
+answers the narrow-window question on its own, so the tighter margin it was for never shipped.
