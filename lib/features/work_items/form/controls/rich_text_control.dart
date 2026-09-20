@@ -213,22 +213,30 @@ Future<RichTextResult?> openRichTextEditor(
       MaterialPageRoute(fullscreenDialog: true, builder: (_) => editor),
     );
   }
-  return showDialog<RichTextResult>(
+  // Through the wrapper, so that on a half-folded display the editor
+  // opens on one half and **moves** to one if the fold happens while it is
+  // already open (research/23 D3, phase 4B). It used to call `showDialog`
+  // directly, which was the one dialog in the app the fold did not reach.
+  return showBoardhopDialog<RichTextResult>(
     context: context,
-    builder: (context) {
-      final size = MediaQuery.sizeOf(context);
-      return Dialog(
-        insetPadding: const EdgeInsets.all(Spacing.xl),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 900,
-            maxHeight: size.height * 0.9,
+    builder: (context) => LayoutBuilder(
+      builder: (context, constraints) {
+        // The box the wrapper has given us — the window, or one half of a
+        // folded display — not the whole window, which on a fold would be
+        // twice the room there is.
+        final height = constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : MediaQuery.sizeOf(context).height;
+        return Dialog(
+          insetPadding: const EdgeInsets.all(Spacing.xl),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 900, maxHeight: height * 0.9),
+            child: editor,
           ),
-          child: editor,
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 }
 

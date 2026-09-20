@@ -941,3 +941,116 @@ when the fold happens while it is already open: `showBoardhopDialog` settles the
 the route is shown, and `openRichTextEditor` does not go through it at all. Both are phase 3's
 scope, not a phase 4 regression; §7 is the place for them.
 
+### 9.13 Phase 4b landed: the chrome above the router, the dialogs that follow a fold (2026-09-20)
+
+The three things §9.11 and §9.12 left open, closed together.
+
+**1. Every route outside the project shell.** The shell hands its pages a corner-adapted
+`MediaQuery.padding` and wraps them in a `CreasePadding`; a route that is not in the shell — the
+Organizations screen, the project list, the launch flow, Settings, every `/diagnostics/*` page —
+and a route pushed **over** the shell — the standalone work item, the pull request and its file
+diff, a wiki page, the chart focus view — got neither, so its back arrow sat in the curve at
+x = 4 and its content ran through the fold. `WindowChrome` (`lib/theme/layout.dart`) now does both
+once, in `MaterialApp.builder`, above the router, so a route added later cannot forget it.
+
+Which leaves not insetting the shell's own pages twice, and the brief's suggestion — a marker the
+shell provides, checked by the wrapper — **cannot work**: `MaterialApp.builder`'s child *is* the
+Navigator, so every route, shell included, is below the wrapper and nothing below can be asked.
+The question is turned round instead. `WindowChrome` publishes the padding it found before it
+touched it (a private `_WindowPadding` inherited widget) and `ProjectShell.build` takes it back
+with `WindowChrome.unwrap`, so the rail's column, the fade and the bottom bar are computed from
+exactly the numbers iOS reports, as before. That also keeps Android's Material shell and the tall
+pose's bottom bar untouched: without the unwrap, a `CreasePadding` applied above the router would
+have handed the shell a 495.5 pt bottom inset in the tall book pose and floated the glass dock
+half way up the window.
+
+The corner clearance follows the shell's rule exactly (`GlassShellLayout._corneredInset`): **only
+where iOS names a vertical bar edge**, and there only on the top and the side away from that bar.
+Every other device — every iPhone and iPad — keeps the padding iOS reports to the point, because
+the corner-adapted region answers on them too (it is iOS 26 API, §9.11) and taking it would move
+every page in the app sideways for a curve the layout has always cleared. In the Duo's **tall**
+pose the bar edge is `unspecified` (§2), so nothing changes there either and a back arrow still
+sits at x = 4 with a 16 pt corner beside it — the same as the shell's pages in that pose, so it is
+phase 4A's scope, not a phase 4b regression.
+
+**2. Dialogs that are open when the fold happens.** `showBoardhopDialog` settled the placement when
+the route was shown. It is built inside the route now, in a `_DialogPlacement` that reads
+`DisplayScope` and moves on `Durations.normal` / `Motion.standard`. The half it moves *to* is still
+the one it was opened on: `near`, or the opening widget's box, read **at show time** while that
+widget is still on screen and handed back on every rebuild as `nearBox` — inside the route
+`context` is the dialog's own full-window box and would answer nothing.
+
+The move is an `AnimatedPadding`, not the `AnimatedAlign` the plan named, because position and size
+change together: a dialog that fills what it is given — the rich text editor — has to be *resized*
+to the half, and an `Align` can only slide it. The same padding is the safe area when nothing is
+folded, which is what `useSafeArea: true` used to put there once and for all; `showDialog` is now
+always asked for `useSafeArea: false`, and the flat case is pixel-identical to before (the existing
+test still measures the dialog's centre at (951 − 84) / 2).
+
+`openRichTextEditor` goes through the wrapper too — it was the one dialog in the app calling
+`showDialog` directly — and its `maxHeight` comes from a `LayoutBuilder` on the box it is given
+rather than from `MediaQuery.sizeOf`, which on a fold would be twice the room there is. The
+`RichTextEditor` instance is built once outside the builder, so a fold hands the element the
+identical widget and the WebView is never recreated (the F3 rule, §9.12).
+
+**Measured on the device**, debug build, signed in, scratch project (D8), light, all through
+`idb ui describe-all`:
+
+| Where | Before | After |
+|---|---|---|
+| Display probe, wide, back arrow / body | 4 / 0 | **20 / 16** (body 851 wide) |
+| Diagnostics index, wide | — | 20 / 16, body 851 |
+| Organizations ("Accounts"), wide | — | title 32, body 16, 851 wide |
+| Pull request file diff, wide | — | back 20, body 21.5 |
+| Standalone work item, wide | — | back 20, tabs from 16 |
+| Same pages on the **cover** | — | back 6.3, body **2.3**, 379.7 wide |
+| Tall book, standalone work item's comment composer | y = 861 | **y = 399.5** (bottom 447.5, band top 455.5) |
+
+The 16 and the 2.3 are §9.11's measured corner-adapted insets read back through a page that never
+sees them, and 20 = 16 + the `AppBar`'s own 4 pt around its leading icon.
+`phase4b-corner-{before,after}.png` are the same crop of the Display probe's top-left corner from
+the phase 4 build and this one: the chevron and the card move right by exactly 48 px (16 pt at @3x).
+The composer's 399.5 is `951 − 495.5 − 48 − 8`, the `CreasePadding` bottom inset (`951 − 455.5`)
+working on a route the shell never wrapped.
+
+**The dialogs, on the device.** The new work item form was opened flat and **then** folded: it
+walked onto the trailing half (fields from 539.5, the half being 495.5…867 less `Spacing.xl` and
+the `Dialog`'s own inset). Unfolded again it walked back to the centre. The description editor was
+then opened flat and folded with it open: it went to the **leading** half (80…343.5), because the
+description card it was opened from is 377.5 pt wide — small enough to count as a control — and
+sits there. Both dialogs on screen at once, one per panel, neither across the band
+(`phase4b-wide-book-editor.png`). Pressing Cancel and Close afterwards round-tripped normally, so
+the editor was live, not a stale picture.
+
+**Shots** (`.shots/duo/`, each with a 400 px thumbnail): `phase4b-wide-{orgs,diagnostics,probe,
+prdiff,wi-standalone,form,flat-form,flat-editor}`, `phase4b-wide-book-{form,editor}`,
+`phase4b-tall-book-wi`, `phase4b-cover-{orgs,diagnostics,wi}`, `phase4b-corner-{before,after}` and
+`phase4b-restored`. The walkthrough — wide flat, wide book, tall flat, tall book, the cover, two
+dialogs through a fold and back — logged **one** exception, and it is not this phase's: the
+**Diagnostics index's own app bar overflows on the cover**, 431.7 pt of back arrow and eight probe
+icons in 379.7 pt. It overflowed by 49.7 before this change and by 52 after it (the 2.3 pt corner),
+on a page that only exists in a debug build; moving the probes into an overflow menu is the fix and
+is not part of this phase. A second, clean run then repeated the whole circuit without the cover's
+diagnostics index — the shell, the work item form dialog folded and unfolded, the Display probe
+(outside the shell) folded and unfolded, and wide flat / wide book / tall flat / tall book / back —
+and logged **no exception and no overflow at all**.
+
+**One thing seen and not fixed, with the reason.** `WorkItemDetailPage` has no
+`SafeArea(top: false, bottom: false)` of its own — it was written as a shell page, and the shell's
+SafeArea covered it. Opened as the **standalone** route over the shell it therefore ignores the
+84 pt bar column and its comments run under the stacked status bar on the cover
+(`phase4b-cover-wi.png`). That predates this phase (the standalone route has never been inside the
+shell's SafeArea) and it is a per-page fix, not one the wrapper can make: a page that *does* bleed
+sideways on purpose must keep bleeding. Same for the missing column fade there, which is the
+shell's and stays the shell's.
+
+Tests: `test/theme/window_chrome_test.dart` is new (seven — the corner on either edge, no system
+edge, the crease, a flat display, and the shell's unwrap for both), `test/theme/dialogs_test.dart`
+grew one that folds and unfolds under an open dialog and checks it is still in flight half way
+through the motion, and `test/features/rich_text_dialog_test.dart` is new (three). `test/fixtures/
+duo_display.dart` learned `barEdge`, `cornerInsets` and the measured `wideCorner`.
+1953 tests green, `flutter analyze` clean.
+
+Changed: `lib/app.dart`, `lib/theme/layout.dart`, `lib/theme/dialogs.dart`,
+`lib/features/projects/project_shell.dart`,
+`lib/features/work_items/form/controls/rich_text_control.dart`.

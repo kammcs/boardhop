@@ -226,8 +226,16 @@ class _ProjectShellState extends State<ProjectShell>
     }
   }
 
+  /// The shell insets its own pages, so it takes back the window's raw
+  /// padding from [WindowChrome] above the router: the rail's column, its
+  /// fade and the bottom bar are computed from the numbers iOS reports,
+  /// not from the clearance that wrapper adds for the routes outside here
+  /// (research/23 §9.13).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      WindowChrome.unwrap(context, child: Builder(builder: _buildShell));
+
+  Widget _buildShell(BuildContext context) {
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

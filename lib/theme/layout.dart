@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../core/display_environment.dart';
+import 'theme_controller.dart' show RailSide;
 import 'tokens.dart';
 
 /// Width classes following Material 3 window size classes. Phones are
@@ -270,6 +271,98 @@ double paneDividerWidth(Rect? creaseBand, double paneWidth) =>
     isVerticalCrease(creaseBand) && (creaseBand!.left - paneWidth).abs() < 0.5
     ? creaseBand.width
     : 1;
+
+/// The two things the project shell gives its pages, given to every route
+/// that is **not** inside it (research/23 §9.11, phase 4B).
+///
+/// A page in the shell is handed a `MediaQuery.padding` widened to clear
+/// the display's rounded corner, and is wrapped in a [CreasePadding]. A
+/// route outside the shell — the Organizations screen, the launch flow,
+/// Settings, every `/diagnostics/*` page — and a route pushed **over** the
+/// shell — a work item, a pull request and its diff, a wiki page — used to
+/// lay out against the raw padding instead, so on an iPhone Duo its back
+/// arrow sat in the curve of the corner at x = 0 and its content ran
+/// through the fold.
+///
+/// This goes in `MaterialApp.builder`, above the router, so a new route
+/// cannot forget it. Which leaves the problem of not insetting the shell's
+/// own pages twice, and the shell is *below* here — it cannot be asked.
+/// So the question is turned round: this wrapper records what the padding
+/// was before it touched it, and the shell takes that back with
+/// [WindowChrome.unwrap]. The shell's rail, its bar column and its fade
+/// are then computed from exactly the numbers they were computed from
+/// before, and nothing inside it changes.
+///
+/// The corner clearance follows the shell's rule
+/// (`GlassShellLayout._corneredInset`): only where iOS asks for a vertical
+/// bar — an iPhone Duo's panels and a Split View pane — and there only on
+/// the top and the side away from that bar, because the bar's own column
+/// already clears the corner several times over. Every other device keeps
+/// the padding iOS reports, to the point.
+class WindowChrome extends StatelessWidget {
+  const WindowChrome({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final display = DisplayScope.maybeOf(context);
+    if (display == null) return child;
+    final mq = MediaQuery.of(context);
+    final direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
+    final padding = _cornered(display, mq.padding, direction);
+    return _WindowPadding(
+      padding: mq.padding,
+      child: MediaQuery(
+        data: mq.copyWith(padding: padding),
+        child: CreasePadding(child: child),
+      ),
+    );
+  }
+
+  static EdgeInsets _cornered(
+    DisplayEnvironment display,
+    EdgeInsets padding,
+    TextDirection direction,
+  ) {
+    final rail = display.railSide(direction);
+    if (rail == null) return padding;
+    final clear = display.chromeInsets(padding);
+    final onRight = rail == RailSide.right;
+    return padding.copyWith(
+      top: clear.top,
+      left: onRight ? clear.left : padding.left,
+      right: onRight ? padding.right : clear.right,
+    );
+  }
+
+  /// What `MediaQuery.padding` was before [WindowChrome] widened it, or
+  /// null with no [WindowChrome] above (a widget test, and Android's
+  /// Material shell).
+  static EdgeInsets? rawPaddingOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_WindowPadding>()?.padding;
+
+  /// Hands [child] the window's own padding back, for the one widget that
+  /// insets its pages itself: the project shell.
+  static Widget unwrap(BuildContext context, {required Widget child}) {
+    final raw = rawPaddingOf(context);
+    if (raw == null) return child;
+    final mq = MediaQuery.of(context);
+    if (mq.padding == raw) return child;
+    return MediaQuery(data: mq.copyWith(padding: raw), child: child);
+  }
+}
+
+/// Carries the untouched `MediaQuery.padding` down past [WindowChrome]'s
+/// own override.
+class _WindowPadding extends InheritedWidget {
+  const _WindowPadding({required this.padding, required super.child});
+
+  final EdgeInsets padding;
+
+  @override
+  bool updateShouldNotify(_WindowPadding old) => old.padding != padding;
+}
 
 /// Pads a page so its content does not come to rest inside an active
 /// **horizontal** crease band (the laptop and tent poses).

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:boardhop/core/display_cutout.dart';
 import 'package:boardhop/theme/dialogs.dart';
-import 'package:boardhop/theme/tokens.dart';
+import 'package:boardhop/theme/tokens.dart' as tokens;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,7 +83,7 @@ void main() {
       expect(trailing.alignment.x, greaterThan(0));
       // The stacked status bar's 84 pt is off the trailing half, and the
       // margin off both.
-      expect(trailing.half.right, closeTo(951 - 84 - Spacing.xl, 0.01));
+      expect(trailing.half.right, closeTo(951 - 84 - tokens.Spacing.xl, 0.01));
     });
 
     testWidgets('falls back to the half the caller sits on', (tester) async {
@@ -158,6 +158,85 @@ void main() {
       expect(box.left, greaterThanOrEqualTo(Duo.creaseLine));
       // Clear of the system's bar column on that edge.
       expect(box.right, lessThanOrEqualTo(951 - 84));
+    });
+
+    testWidgets('follows a fold that happens while it is open', (
+      tester,
+    ) async {
+      // The whole point of phase 4B: the placement used to be settled when
+      // the route was shown, so a dialog that was already open when the
+      // Duo was folded stayed across the fold.
+      tester.view.physicalSize = Duo.wide;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final regions = ValueNotifier<DisplayRegions>(Duo.flat(Duo.wideBand));
+      addTearDown(regions.dispose);
+      late BuildContext buttonContext;
+      await tester.pumpWidget(
+        ValueListenableBuilder<DisplayRegions>(
+          valueListenable: regions,
+          builder: (context, value, _) => Duo.scope(
+            window: Duo.wide,
+            regions: value,
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(padding: Duo.wideInsets),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: Align(
+                  alignment: Alignment.centerRight,
+                  child: Builder(
+                    builder: (context) {
+                      buttonContext = context;
+                      return const SizedBox(width: 48, height: 48);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      unawaited(
+        showBoardhopDialog<void>(
+          context: buttonContext,
+          near: const Offset(800, 300),
+          builder: (_) => const Dialog(
+            child: SizedBox(width: 400, height: 200, child: Text('picker')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Flat: centred in the window beside the 84 pt bar column, across
+      // the fold line.
+      expect(
+        tester.getRect(find.byType(Dialog)).center.dx,
+        closeTo((951 - 84) / 2, 1),
+      );
+
+      regions.value = Duo.folded(Duo.wideBand);
+      await tester.pump();
+      // Mid-flight: the move is animated on the theme's standard motion
+      // (research/23 D7), so it has not arrived yet.
+      await tester.pump(tokens.Durations.normal ~/ 2);
+      final moving = tester.getRect(find.byType(Dialog));
+      expect(moving.left, greaterThan(0));
+      expect(moving.left, lessThan(Duo.creaseLine));
+
+      await tester.pumpAndSettle();
+      final settled = tester.getRect(find.byType(Dialog));
+      expect(settled.left, greaterThanOrEqualTo(Duo.creaseLine));
+      expect(settled.right, lessThanOrEqualTo(951 - 84));
+
+      // And back again when it is unfolded under the same dialog.
+      regions.value = Duo.flat(Duo.wideBand);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byType(Dialog)).center.dx,
+        closeTo((951 - 84) / 2, 1),
+      );
     });
 
     testWidgets('a dialog opened on the leading half stays there', (

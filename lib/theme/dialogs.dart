@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+// The theme's own motion tokens, not Flutter's `Durations`.
+import 'package:flutter/material.dart' hide Durations;
 
 import '../core/display_environment.dart';
 import 'tokens.dart';
@@ -40,16 +41,35 @@ class DialogHalf {
   Offset get anchor => half.center;
 }
 
+/// The box of the widget a dialog is being opened from, in window
+/// coordinates, or null when it has not been laid out.
+Rect? openerBoxOf(BuildContext context) {
+  final object = context.findRenderObject();
+  if (object is RenderBox && object.attached && object.hasSize) {
+    return object.localToGlobal(Offset.zero) & object.size;
+  }
+  return null;
+}
+
 /// The half of a folded display a dialog opened from [near] belongs on, or
 /// null when nothing is folded and dialogs centre on the window as before.
 ///
 /// [near] is the point the dialog was opened from, in window coordinates.
-/// Without one the calling widget's own box is used when it is small enough
-/// to be a control — a toolbar button knows which half it is on, a whole
-/// page does not — and failing that the **trailing** half for a vertical
-/// crease and the **lower** half for a horizontal one, the halves nearer
-/// the hands.
-DialogHalf? dialogAlignmentFor(BuildContext context, {Offset? near}) {
+/// Without one [nearBox] is used, or the calling widget's own box, when it
+/// is small enough to be a control — a toolbar button knows which half it
+/// is on, a whole page does not — and failing that the **trailing** half
+/// for a vertical crease and the **lower** half for a horizontal one, the
+/// halves nearer the hands.
+///
+/// [nearBox] is that box measured somewhere else: [showBoardhopDialog]
+/// reads it while the opening widget is still on screen and hands it back
+/// on every rebuild inside the route, where `context` is the dialog's own
+/// full-window box and would answer nothing.
+DialogHalf? dialogAlignmentFor(
+  BuildContext context, {
+  Offset? near,
+  Rect? nearBox,
+}) {
   final environment = DisplayScope.maybeOf(context);
   final axis = environment?.creaseAxis;
   if (environment == null || axis == null) return null;
@@ -59,9 +79,8 @@ DialogHalf? dialogAlignmentFor(BuildContext context, {Offset? near}) {
 
   var spot = near;
   if (spot == null) {
-    final object = context.findRenderObject();
-    if (object is RenderBox && object.attached && object.hasSize) {
-      final box = object.localToGlobal(Offset.zero) & object.size;
+    final box = nearBox ?? openerBoxOf(context);
+    if (box != null) {
       final extent = axis == Axis.vertical ? box.width : box.height;
       final window = axis == Axis.vertical ? size.width : size.height;
       if (extent <= window / 2) spot = box.center;
@@ -110,6 +129,21 @@ DialogHalf? dialogAlignmentFor(BuildContext context, {Offset? near}) {
 /// iPhone Duo, and a Duo lying flat — it is [showDialog] unchanged, right
 /// down to `useSafeArea`.
 ///
+/// **The placement is live** (phase 4B). It used to be settled here, when
+/// the route was shown, so a dialog that was already open when the device
+/// was folded stayed across the fold. It is built inside the route now,
+/// from [DisplayScope], and moves on the theme's standard motion when the
+/// display changes shape under it. The half it moves *to* is still the one
+/// it was opened on: [near], or the opening widget's box read here, while
+/// that widget is still on screen.
+///
+/// The box is moved by padding rather than by an alignment, because both
+/// have to change at once: a dialog that fills what it is given — the rich
+/// text editor — must be resized to the half, not only slid onto it, and
+/// an `Align` can only slide. The same padding is the safe area when
+/// nothing is folded, which is what `useSafeArea: true` would have put
+/// here once and for all.
+///
 /// Bottom sheets are left alone: they only appear at a compact width,
 /// where the window is one half already.
 Future<T?> showBoardhopDialog<T>({
@@ -119,30 +153,51 @@ Future<T?> showBoardhopDialog<T>({
   bool barrierDismissible = true,
   bool useRootNavigator = true,
 }) {
-  final placement = dialogAlignmentFor(context, near: near);
-  if (placement == null) {
-    return showDialog<T>(
-      context: context,
-      builder: builder,
-      barrierDismissible: barrierDismissible,
-      useRootNavigator: useRootNavigator,
-    );
-  }
+  // Read while the opening widget is still on screen; inside the route
+  // `context` is the dialog's own full-window box, which says nothing
+  // about which half the caller was on.
+  final opener = near == null ? openerBoxOf(context) : null;
+  final placement = dialogAlignmentFor(context, near: near, nearBox: opener);
   return showDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     useRootNavigator: useRootNavigator,
-    // The insets carry the system's padding already; a SafeArea on top of
-    // them would take the Duo's 84 pt bar column off the *leading* half as
-    // well, which is nowhere near it.
+    // The safe area is part of the placement below, which can change; this
+    // one cannot, and a SafeArea on top of a half's insets would take the
+    // Duo's 84 pt bar column off the *leading* half as well, which is
+    // nowhere near it.
     useSafeArea: false,
-    anchorPoint: placement.anchor,
-    builder: (context) => Padding(
-      padding: placement.insets,
-      child: ConstrainedBox(
-        constraints: placement.constraints,
-        child: builder(context),
-      ),
-    ),
+    // Only read once by `DisplayFeatureSubScreen`, and only where the
+    // engine reports display features at all — never on iOS today
+    // (flutter/flutter#192515).
+    anchorPoint: placement?.anchor,
+    builder: (context) =>
+        _DialogPlacement(near: near, nearBox: opener, builder: builder),
   );
+}
+
+/// Keeps a dialog on one half of a folded display, and moves it there if
+/// the display folds while it is open.
+class _DialogPlacement extends StatelessWidget {
+  const _DialogPlacement({this.near, this.nearBox, required this.builder});
+
+  final Offset? near;
+  final Rect? nearBox;
+  final WidgetBuilder builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final placement = dialogAlignmentFor(context, near: near, nearBox: nearBox);
+    return AnimatedPadding(
+      duration: Durations.normal,
+      curve: Motion.standard,
+      // Folded: the half, the system's insets already taken off it.
+      // Flat: the safe area, exactly where `showDialog` would have put it.
+      padding: placement?.insets ?? MediaQuery.paddingOf(context),
+      child: ConstrainedBox(
+        constraints: placement?.constraints ?? const BoxConstraints(),
+        child: Builder(builder: builder),
+      ),
+    );
+  }
 }

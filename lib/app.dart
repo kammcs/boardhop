@@ -404,7 +404,14 @@ class _BoardhopAppState extends State<BoardhopApp> {
                     Theme.of(context),
                     MediaQuery.sizeOf(context).width,
                   ),
-                  child: child ?? const SizedBox.shrink(),
+                  // Corner clearance and crease padding for every route
+                  // that is not inside the project shell, which insets its
+                  // own pages and takes the raw padding back here
+                  // (research/23 §9.13). Above the router so a new route
+                  // cannot forget it.
+                  child: WindowChrome(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),

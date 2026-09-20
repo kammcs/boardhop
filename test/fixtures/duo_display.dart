@@ -29,6 +29,11 @@ abstract final class Duo {
   /// The crease line itself: the band's centre.
   static const creaseLine = 475.5;
 
+  /// What the corner-adapted safe area answers on the inner display in the
+  /// wide pose (research/23 §9.11): 16 pt on the leading edge, where
+  /// `padding` is zero and the corner is rounded all the same.
+  static const wideCorner = EdgeInsets.fromLTRB(16, 0, 84, 34);
+
   static const _margins20 = EdgeInsets.all(20);
 
   /// A folded display. [band] is the keep-out band in window coordinates.
@@ -59,12 +64,20 @@ abstract final class Duo {
 
   /// Wraps [child] in a [DisplayScope] reporting [regions] and a window of
   /// [window]; `null` regions is a display that does not fold at all.
+  ///
+  /// [barEdge] is where iOS asks for its vertical bar — `trailing` on both
+  /// of the Duo's panels — and [cornerInsets] what the corner-adapted safe
+  /// area answers there.
   static Widget scope({
     required Widget child,
     DisplayRegions? regions,
     Size window = wide,
+    BarEdge barEdge = BarEdge.unspecified,
+    EdgeInsets cornerInsets = EdgeInsets.zero,
   }) => DisplayScope.override(
     regions: regions ?? const DisplayRegions(),
+    barEdge: barEdge,
+    cornerInsets: cornerInsets,
     window: window,
     child: child,
   );
