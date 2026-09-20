@@ -23,20 +23,44 @@ This confirms the 12b point sizes (they were inferred from a blog). The inner di
 `expanded` in the wide pose (951) and `medium` in the tall pose (669); the cover is `compact`;
 a 50/50 Split View pane is about 475 x 669, `compact`. `Breakpoint` needs no change.
 
-The profile has no hinge or posture entry; `xcrun simctl` has no fold, hinge or posture command
-(checked `simctl help`, `simctl ui`, `simctl io`, the CoreSimulator and Simulator private
-frameworks). Xcode 27 replaced Simulator.app with **Device Hub**
-(`/Applications/Xcode.app/Contents/Applications/DeviceHub.app`); its binary carries no fold
-strings either, and CoreDevice mentions only a hinge-angle *stream* for physical devices. Folding,
-rotating and Split View therefore happen in Device Hub's window, driven by Kelly, until a CLI turns up.
+**Driving the fold from software (settled 2026-09-20).** There is no documented command:
+`xcrun simctl` has no fold, hinge or posture verb (`simctl help`, `simctl ui`, `simctl io`
+checked, and the `simctl`, CoreSimulator and SimulatorKit binaries carry no hinge strings);
+`xcrun devicectl` sees the Duo simulator but CoreDevice's only hinge action is
+`com.apple.coredevice.action.streamhingeangle`, a read stream served by the in-guest
+`dtdeviceinfod`; there is no darwin notification, no defaults key and no CoreMotion file to write.
+The pose buttons live in Device Hub's `CoreDevicePopDeviceKitExtension` plugin (`FoldableDevice`,
+`HingeController`, `_transmitHinge`), which also carries an internal action bar
+(`com.apple.dt.coredevicepop.useInternalV68ActionBar`: hinge slider, tabletop, more poses) that
+was not tried. Xcode 27 replaced Simulator.app with **Device Hub** (bundle `com.apple.dt.Devices`,
+process `DeviceHub`), which AppleScript's System Events cannot see at all (no menu bar, no
+windows, unix id 0), but the **Accessibility API sees it directly**: `AXUIElementCreateApplication(pid)`
+lists the window "iPhone Duo – iOS 27.1" with buttons whose `AXDescription` is **Rotate Right,
+Closed, Book, Open** (plus Home, Screenshot, Record) and `AXPress` works on each. Verified with a
+20-line Swift tool: Closed switched the active panel to the cover (screenshot of display 1
+1398x2034, display 3 black), Book and Open switched it back to the inner display, Rotate Right
+turned the inner screenshot to 2007x2853 and four presses returned it. That is the control path:
+a press by accessibility name, no coordinates, no screen taps, and it survives window moves. It
+needs Accessibility permission for the terminal (already granted on this Mac) and Device Hub
+running with the Duo window open. Split View has no button; it is an in-guest gesture and is
+driven with idb taps like any other UI, or by Kelly.
 
-### 1.2 The app today on the inner display
+### 1.2 The app today on the Duo
 
 A debug build with Xcode 27.1 (iOS 27.1 SDK) launches **edge to edge** on the inner display with
-no code change: the sign-in page fills 951 x 669 and iOS stacks the status bar (time above the
-Wi-Fi glyph) vertically in the top-right corner. That answers 12b appendix question 8: the
-rebuild alone reaches tier 3. The Duo simulator is not signed in, so the shell, the rail and the
-pages have not been seen there yet.
+no code change: the page fills 951 x 669 and iOS stacks the status bar (time above the Wi-Fi
+glyph) vertically in the top-right corner. That answers 12b appendix question 8: the rebuild
+alone reaches tier 3. Kelly signed in during the planning session, so the shell was seen in three
+poses:
+
+- **Open, wide pose:** the glass rail floats on the right (Kelly's default) with its top level
+  with the vertical status bar and clear of it by about 40 pt; the app bar keeps its actions.
+- **Book (partly folded, wide pose):** the screenshot is identical to Open. The simulator does
+  not paint a crease and the app has no crease input yet, so nothing moves; phase 0 measures
+  whether the division region reports active here.
+- **Closed (cover):** compact portrait, bottom glass bar, `medium`-style app bar collapsed to
+  icons. The vertical status bar sits on the **right edge about 60 to 120 pt from the top**,
+  over the page header's trailing side. The Dynamic Island shows no cutout in the simulator.
 
 ### 1.3 The iOS 27.1 APIs, exact spellings from the SDK headers
 
@@ -149,9 +173,13 @@ display into multiple usable regions, excluding the region at the center as the 
   iOS reports an edge and keeps working where it reports none (iPad and iPhone landscape).
 - **D7 Layout changes animate** over the theme's standard duration: the rail slides between
   edges, panes ease to the crease. The hinge angle is not used for effects.
-- **D8 Verification is live.** Kelly signs in on the Duo simulator first; every check uses the
-  puremedia scratch project "DevOps Mobile App". Kelly folds, rotates and starts Split View from
-  Device Hub when asked; the demo build is only a fallback for the store screenshots.
+- **D8 Verification is live.** Kelly signed in on the Duo simulator; every check uses the
+  puremedia scratch project "DevOps Mobile App". The demo build is only a fallback for the store
+  screenshots.
+- **D9 Poses are driven through the Accessibility API, not screen taps** (Kelly, 2026-09-20:
+  find a software path before committing to taps; section 1.1 found one). A `tool/duo-pose`
+  helper presses Device Hub's Closed, Book, Open and Rotate Right buttons by accessibility name.
+  Split View is started in the guest with idb, or by Kelly if the gesture proves unreliable.
 
 ## 4. Design
 
@@ -263,7 +291,20 @@ research/spikes/results/README.md under a new F-number.
   landscape-native (2853 x 2007), so the thumbnail mapping treats it like `ROT=none` in the wide
   pose and derives the tall pose from the image reading taller than wide. idb `describe` on the
   Duo is checked in phase 0 for which display it reports and taps into.
-- Sign-in, folding, rotation and Split View are Kelly's, from Device Hub (D8).
+- `tool/duo-pose.swift` (compiled once to `tool/.bin/duo-pose`, gitignored): `duo-pose closed |
+  book | open | rotate [n] | list`. It finds the Device Hub process by bundle id
+  `com.apple.dt.Devices`, takes its window whose title starts with "iPhone Duo", walks the
+  accessibility tree for the `AXButton` with the wanted `AXDescription` and performs `AXPress`,
+  then waits until `simctl io … screenshot` of the expected display stops being black (Closed
+  activates display 1, Book and Open display 3). `list` prints the buttons it can see, which is
+  the check to run when a Device Hub update renames them. Exit 2 when the window is missing, with
+  the hint to open the Duo in Device Hub. Requires Accessibility permission for the terminal
+  (System Settings > Privacy & Security > Accessibility; granted on this Mac).
+- Screenshots follow the rotation on the Duo (after one Rotate Right the inner display
+  captures 2007x2853), unlike the iPhone 17 whose raw frame stays portrait-native, so
+  `shot-ios.sh` treats the Duo's `ROT` as none and reads orientation from the image.
+- Split View is an in-guest gesture (app switcher, drag to a side); phase 0 records the idb tap
+  sequence that starts it, and Kelly does it by hand if the sequence is flaky.
 - CLAUDE.md gets a Duo paragraph under iOS simulators once phase 0 settles the commands.
 
 ### 4.7 Tests
@@ -285,12 +326,13 @@ Dispatcher mode: one Opus subagent per phase with the brief below; the top level
 runs `flutter analyze` and `flutter test`, reads the diff and the screenshots, checks staged
 files for secrets, and commits with the trailer. Subagents never commit.
 
-**Phase 0, measure (half a day).** Kelly signs in on the Duo. A temporary diagnostics row (behind
-`AppConfig.diagnosticsEnabled`) prints `MediaQuery.size`, `padding` per edge, `viewPadding`,
-`displayFeatures`, the raw channel answers and `verticalBarEdge` for every row of section 2,
-including both Split View sides; `tool/shot-ios.sh` gains the `duo` case and `DISPLAY`. Output:
-section 2 filled with measured numbers, the 12b appendix answered (questions 1, 3, 4, 5, 7, 8;
-question 2 by trying to drag the divider), screenshots to Kelly. No layout changes.
+**Phase 0, measure (half a day).** Land `tool/duo-pose` (4.6) first and the `duo` and `DISPLAY`
+cases in `tool/shot-ios.sh`. A temporary diagnostics row (behind `AppConfig.diagnosticsEnabled`)
+prints `MediaQuery.size`, `padding` per edge, `viewPadding`, `displayFeatures`, the raw channel
+answers and `verticalBarEdge` for every row of section 2, driven pose by pose with `duo-pose`,
+including both Split View sides. Output: section 2 filled with measured numbers, the 12b appendix
+answered (questions 1, 3, 4, 5, 7, 8; question 2 by trying to drag the divider), screenshots to
+Kelly. No layout changes.
 
 **Phase 1, channel and model (one day).** 4.1 and 4.2: typed `reservedRegions`, `verticalBarEdge`,
 `hinge`, `displayChanged` push, `DisplayEnvironment` and `DisplayScope`, tests. Verified by the
@@ -341,8 +383,9 @@ For each situation in section 2, on the scratch project, light and dark, default
 
 ## 8. Needs from Kelly
 
-- Sign in on the Duo simulator (Entra browser sign-in), before phase 0.
-- Tell the agent how Device Hub folds, rotates and starts Split View on the Duo (menu or
-  on-screen control), or drive it when asked; the agent found no CLI.
+- Done 2026-09-20: signed in on the Duo simulator; the fold and rotate controls are driven by
+  `duo-pose` (section 1.1), so nothing is needed from Kelly for the poses.
+- Keep Device Hub open with the Duo window during walkthroughs (the accessibility path needs the
+  window), and start Split View by hand if the idb gesture turns out flaky.
 - Confirm the vertical rail on the cover display looks right once phase 2 has a screenshot; if it
   fights the vertical Dynamic Island, D1 narrows to the inner display and Split View.
