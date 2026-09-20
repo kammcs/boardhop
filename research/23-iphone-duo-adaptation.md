@@ -1113,4 +1113,8 @@ Kelly put Boardhop on the left and Safari on the right. Measured with the Displa
   backend (`idb ui tap --api ax`, `describe-all`) sees only the leading app in Split View, so the
   right pane was driven with `tool/duo-drag click` (mapping `DUO_OX=877 DUO_OY=315 DUO_SC=0.7003`).
   Both panes verified by eye: the rail on each pane's outer edge, D1 holds in Split View.
-- Question 2 of 12b (is the divider draggable) is still Kelly's to answer by trying it.
+- **Question 2 of 12b answered by Kelly (2026-09-20): the divider does not drag.** There are no
+  other size steps, Split View is only an equal side-by-side, and there is no above/below
+  arrangement in either orientation. So a pane is always 469 x 669 pt in the wide pose (and
+  side by side in the tall pose too, each pane 334.5 wide at most, a compact window either way),
+  and the widget tests at 469/475 x 669 are the whole Split View geometry.

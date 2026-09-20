@@ -141,7 +141,7 @@ The four that decided the design:
 
 ## Still open
 
-- **Split View: both panes measured** after Kelly started it by hand (research/23 §9.14); only the divider-drag question stays open. Originally: It cannot be started from a script: idb's HID input does not
+- **Split View: both panes measured** after Kelly started it by hand (research/23 §9.14); Kelly confirmed the divider does not drag (equal side-by-side only, no above/below in either orientation). Originally: It cannot be started from a script: idb's HID input does not
   reach the inner panel at all, and although a synthetic `CGEvent` swipe through Device Hub's
   window does open the app switcher, the card would not drag to either edge (research/23 §9.5).
   Device Hub has no Split View button. So the two pane rows of §2, a pane's size class, the

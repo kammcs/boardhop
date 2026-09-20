@@ -16,7 +16,7 @@ for Kelly's decisions, §9 for what each phase found and landed (six commits, 20
 document stays as the record of what could be known before the hardware existed.
 
 **The appendix questions.** 1 answered (23 §9.3.1 — the inferred point sizes were right, and
-`Breakpoint` needed no change); **2 and 3 still open** — Split View could not be started from a
+`Breakpoint` needed no change); **2 and 3 answered on 2026-09-20 (research/23 §9.14: the divider does not drag, equal side-by-side only; a pane is compact)** — Split View could not be started from a
 script and has never been entered (23 §9.5), so the fixed-50/50 claim of §1.5 and a pane's size
 class remain unverified; 4 answered (23 §2 and §9.3.4); 5 answered, and the answer is "not at
 all" (below); 6 answered — the WebView survives folding, unfolding and rotation with one build
