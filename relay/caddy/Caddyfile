@@ -35,3 +35,92 @@ boardhop.relay.kammcs.com {
 		}
 	}
 }
+
+# The boardhop.dev marketing site, served as static files from /srv/site.
+# Source and deploy script: website/ in this repo. It shares the box with the
+# relay because it is a megabyte of files with no backend; it shares nothing
+# else — no route here reaches the relay container.
+#
+# SITE_DOMAIN comes from /srv/relay/.env via compose. The default is a
+# .localhost name on purpose: Caddy issues those an internal certificate and
+# never asks Let's Encrypt for one, so an unconfigured box sits quiet instead
+# of hammering ACME for a hostname that does not resolve.
+#
+# Certificates: nothing to do. Caddy takes a Let's Encrypt certificate for
+# whatever SITE_DOMAIN says, over HTTP-01 on port 80, using the account in the
+# global block at the top of this file — the same path the relay's own
+# certificate came from. This matters more than usual here because .dev is on
+# the HSTS preload list: browsers will not talk to it over plain HTTP at all,
+# so there is no unencrypted fallback to limp along on.
+#
+# The one prerequisite is DNS: the A record has to point at this box *before*
+# the first request, or the challenge fails and Caddy backs off and retries.
+# A wildcard would need the DNS-01 challenge and a provider plugin in the
+# image; a couple of named hosts like these do not.
+# www redirects to the apex so there is one canonical address. Its own
+# certificate, its own ACME challenge; Caddy handles both without being asked.
+{$SITE_ALIAS:boardhop-site-www.localhost} {
+	redir https://{$SITE_DOMAIN:boardhop-site.localhost}{uri} permanent
+}
+
+{$SITE_DOMAIN:boardhop-site.localhost} {
+	encode zstd gzip
+
+	# Written by website/deploy.sh: a basic_auth block when SITE_USER and
+	# SITE_PASSWORD were given, an empty file otherwise. It always exists,
+	# because importing a missing file is a hard adapt error.
+	import /etc/caddy/site-extra/auth.caddyfile
+
+	root * /srv/site
+	file_server
+
+	header {
+		# Until the site is announced, keep it out of the indexes. This is the
+		# header and not a robots.txt Disallow on purpose: a crawler told not
+		# to fetch the page never sees the noindex and can list the bare URL
+		# anyway. Let it crawl, and tell it not to index. Remove at launch.
+		X-Robots-Tag "noindex, nofollow"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# default-src 'none' and then only what the pages actually use: the
+		# Google Fonts stylesheet and its font files, images and styles from
+		# here, and the one inline script that clears the no-js class, by hash
+		# rather than 'unsafe-inline'. 'unsafe-inline' for styles is needed
+		# because the pages carry style="" attributes.
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'sha256-XwWdy3h8RLzX10dUs9n/fCAkQc+XFysyIb7c80Ymdkw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		-Server
+		-X-Powered-By
+	}
+
+	# Fingerprint-free filenames, so the HTML must not be held; the assets are
+	# replaced wholesale on each deploy and a day is short enough.
+	@assets path /img/* /css/* /js/* /favicon.ico
+	header @assets Cache-Control "public, max-age=86400"
+	@html path *.html /
+	header @html Cache-Control "public, max-age=300"
+
+	# A styled 404 rather than Caddy's bare one. The status code is preserved;
+	# nothing here rewrites unknown paths to index.html, because the site has
+	# no client-side routing and a typo should read as a typo.
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+
+	log {
+		output file /data/site-access.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+		format filter {
+			wrap json
+			fields {
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}

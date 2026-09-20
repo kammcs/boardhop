@@ -1,0 +1,1208 @@
+/* Boardhop marketing site.
+ *
+ * One stylesheet, no build step, no framework: the whole site is meant to be
+ * copied into an S3 bucket or a DocumentRoot as-is.
+ *
+ * The palette comes from the app's own theme (lib/theme/boardhop_colors.dart)
+ * and the brand mark: a near-black slate ground, the logo's indigo/blue as the
+ * accent, and the Azure DevOps entity hues (story blue, task gold, feature
+ * purple, epic orange, done green) as the categorical set.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  /* Ground and panels */
+  --bg: #0d1016;
+  --bg-2: #12161d;
+  --panel: #171c25;
+  --panel-2: #1d232d;
+  --line: #262d38;
+  --line-soft: #1e242e;
+
+  /* Type */
+  --fg: #f2f5f9;
+  --fg-muted: #a3adbd;
+  --fg-dim: #75808f;
+
+  /* Brand — sampled from assets/brand/logo.png */
+  --accent: #6c8cff;
+  --accent-strong: #5551fc;
+  --accent-blue: #0f71fe;
+  --accent-ink: #ffffff;
+
+  /* Entity hues, dark-theme variants from BoardhopColors.dark */
+  --c-story: #6fb1f5;
+  --c-task: #e2b84a;
+  --c-bug: #f2707f;
+  --c-feature: #b88be8;
+  --c-epic: #f5a35c;
+  --c-done: #6ccb8a;
+  --c-cyan: #5fc5d9;
+
+  /* Rhythm — the app's Spacing tokens */
+  --s-xs: 4px;
+  --s-sm: 8px;
+  --s-md: 12px;
+  --s-lg: 16px;
+  --s-xl: 24px;
+  --s-2xl: 32px;
+  --s-3xl: 56px;
+  --s-4xl: 96px;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  --content: 1120px;
+  --prose: 46rem;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ------------------------------------------------------------------ base */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* The sticky header must not cover the target of an in-page link. */
+  scroll-padding-top: 88px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+.display {
+  font-family: Archivo, "Archivo", "Segoe UI", system-ui, sans-serif;
+  font-variation-settings: "wdth" 92, "wght" 800;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  margin: 0 0 var(--s-lg);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(2.6rem, 7vw, 4.6rem);
+}
+h2 {
+  font-size: clamp(2rem, 4.6vw, 3.1rem);
+}
+h3 {
+  font-size: clamp(1.25rem, 2.2vw, 1.6rem);
+  line-height: 1.15;
+}
+h4 {
+  font-size: 1.05rem;
+  font-variation-settings: "wdth" 96, "wght" 700;
+}
+
+p {
+  margin: 0 0 var(--s-lg);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: var(--s-sm);
+  background: var(--accent-strong);
+  color: #fff;
+  padding: var(--s-sm) var(--s-lg);
+  border-radius: var(--r-sm);
+  z-index: 200;
+}
+.skip-link:focus {
+  left: var(--s-sm);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.wrap {
+  width: 100%;
+  max-width: var(--content);
+  margin-inline: auto;
+  padding-inline: var(--s-xl);
+}
+
+section {
+  position: relative;
+  padding-block: clamp(var(--s-3xl), 9vw, var(--s-4xl));
+}
+
+.section-head {
+  max-width: 44rem;
+  margin-bottom: var(--s-3xl);
+}
+
+.eyebrow {
+  font-family: Archivo, system-ui, sans-serif;
+  font-variation-settings: "wdth" 92, "wght" 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: var(--s-md);
+}
+
+.lede {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  color: var(--fg-muted);
+  max-width: 40rem;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+.dim {
+  color: var(--fg-dim);
+}
+.small {
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------ nav */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.25s var(--ease), background 0.25s var(--ease);
+}
+.nav[data-stuck="true"] {
+  border-bottom-color: var(--line);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+}
+
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xl);
+  height: 72px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-md);
+  color: var(--fg);
+  font-family: Archivo, system-ui, sans-serif;
+  font-variation-settings: "wdth" 96, "wght" 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.brand:hover {
+  text-decoration: none;
+}
+.brand img {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--s-xl);
+  margin-left: auto;
+  font-size: 0.95rem;
+}
+.nav-links a {
+  color: var(--fg-muted);
+}
+.nav-links a:hover,
+.nav-links a[aria-current="page"] {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+@media (max-width: 860px) {
+  .nav-links a[data-optional] {
+    display: none;
+  }
+  .nav-inner {
+    gap: var(--s-md);
+  }
+  .nav-links {
+    gap: var(--s-lg);
+  }
+}
+
+/* On a phone there is no room for text links beside the mark and the call to
+   action; the same destinations are all in the footer. */
+@media (max-width: 620px) {
+  .nav-links a:not(.btn) {
+    display: none;
+  }
+  .nav-links .btn {
+    min-height: 40px;
+    padding-inline: var(--s-lg);
+    font-size: 0.9rem;
+  }
+  .nav-inner {
+    height: 62px;
+  }
+  html {
+    scroll-padding-top: 74px;
+  }
+}
+
+/* --------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-sm);
+  min-height: 48px;
+  padding: 0 var(--s-xl);
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.98rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), background 0.2s var(--ease),
+    border-color 0.2s var(--ease);
+}
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-strong));
+  color: var(--accent-ink);
+  box-shadow: 0 8px 28px -12px var(--accent-strong);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2b84ff, #6b67ff);
+}
+.btn-ghost {
+  border-color: var(--line);
+  color: var(--fg);
+  background: transparent;
+}
+.btn-ghost:hover {
+  border-color: #3a4351;
+  background: var(--panel);
+}
+
+.btn[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-md);
+  align-items: center;
+}
+
+/* ----------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-sm);
+}
+
+.chip {
+  --chip: var(--c-story);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--chip) 38%, transparent);
+  background: color-mix(in srgb, var(--chip) 14%, transparent);
+  color: var(--chip);
+  font-family: Archivo, system-ui, sans-serif;
+  font-variation-settings: "wdth" 90, "wght" 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chip-boards {
+  --chip: var(--c-story);
+}
+.chip-work {
+  --chip: var(--c-task);
+}
+.chip-prs {
+  --chip: var(--c-done);
+}
+.chip-pipelines {
+  --chip: var(--c-feature);
+}
+.chip-dash {
+  --chip: var(--c-epic);
+}
+.chip-repos {
+  --chip: var(--c-cyan);
+}
+.chip-wiki {
+  --chip: var(--c-bug);
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero {
+  padding-top: clamp(var(--s-3xl), 7vw, 88px);
+  padding-bottom: clamp(var(--s-2xl), 5vw, var(--s-3xl));
+  overflow: hidden;
+}
+
+/* A soft wash behind the hero, in the logo's two blues. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -30% -20% auto -20%;
+  height: 120%;
+  background: radial-gradient(
+      60% 55% at 22% 18%,
+      color-mix(in srgb, var(--accent-blue) 22%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 50% at 82% 8%,
+      color-mix(in srgb, var(--accent-strong) 18%, transparent),
+      transparent 68%
+    );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(var(--s-2xl), 5vw, var(--s-4xl));
+  align-items: center;
+}
+
+.hero h1 {
+  margin-bottom: var(--s-xl);
+}
+
+.hero .lede {
+  font-size: clamp(1.1rem, 1.7vw, 1.3rem);
+}
+
+.hero-meta {
+  margin-top: var(--s-xl);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-lg) var(--s-xl);
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+}
+.hero-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------- device frames */
+
+/* A phone frame drawn in CSS: bezel, screen, Dynamic Island. The shot inside
+ * is a plain <img>, so the frame costs nothing to download.
+ *
+ * Every measurement is a proportion of --phone-w, so --phone-w MUST be a real
+ * length. A percentage there silently breaks the frame: `calc(100% * 0.088)`
+ * for the island's height resolves against the frame's *height*, not its
+ * width, and a percentage border-radius gives elliptical corners. Contexts
+ * that want a fluid phone use clamp(), not 100%. */
+.phone {
+  --phone-w: 300px;
+  position: relative;
+  width: var(--phone-w);
+  /* The bezel is part of the box, so this is not the screen's 1320/2868: it is
+     that ratio inset by the 3.1% padding on each side. Get it wrong and
+     object-fit: cover quietly crops the screenshot. */
+  aspect-ratio: 1 / 2.1;
+  margin-inline: auto;
+  border-radius: calc(var(--phone-w) * 0.158);
+  padding: calc(var(--phone-w) * 0.031);
+  background: linear-gradient(160deg, #3b4453, #1b202a 42%, #303947);
+  box-shadow: 0 2px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 40px 80px -30px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.phone-screen {
+  position: relative;
+  height: 100%;
+  border-radius: calc(var(--phone-w) * 0.128);
+  overflow: hidden;
+  background: #f6f7f9;
+}
+.phone-screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* The island sits over the shot; the captures already include a status bar. */
+.phone::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--phone-w) * 0.055);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--phone-w) * 0.3);
+  height: calc(var(--phone-w) * 0.088);
+  border-radius: var(--r-pill);
+  background: #05070a;
+  z-index: 2;
+}
+
+.phone-landscape {
+  --phone-w: min(700px, 92vw);
+  width: var(--phone-w);
+  aspect-ratio: 2.1037 / 1;
+  border-radius: calc(var(--phone-w) * 0.075);
+  padding: calc(var(--phone-w) * 0.014);
+}
+.phone-landscape::after {
+  top: 50%;
+  left: calc(var(--phone-w) * 0.022);
+  transform: translateY(-50%);
+  width: calc(var(--phone-w) * 0.014);
+  height: calc(var(--phone-w) * 0.062);
+}
+.phone-landscape .phone-screen {
+  border-radius: calc(var(--phone-w) * 0.062);
+}
+.phone-landscape .phone-screen img {
+  object-position: center;
+}
+
+/* A tablet frame for the landscape iPad captures. */
+.tablet {
+  --tablet-w: 100%;
+  position: relative;
+  width: var(--tablet-w);
+  aspect-ratio: 2752 / 2064;
+  border-radius: 22px;
+  padding: 13px;
+  background: linear-gradient(160deg, #3b4453, #1b202a 45%, #2c3441);
+  box-shadow: 0 2px 0 0 rgba(255, 255, 255, 0.07) inset,
+    0 40px 90px -35px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.tablet .phone-screen {
+  border-radius: 12px;
+}
+.tablet .phone-screen img {
+  object-position: center;
+}
+
+/* ------------------------------------------------- scroll-pinned showcase */
+
+.showcase {
+  padding-block: 0;
+}
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: clamp(var(--s-2xl), 6vw, var(--s-4xl));
+  align-items: start;
+}
+
+/* The phone pins while the feature copy scrolls past it. */
+.showcase-stage {
+  position: sticky;
+  top: calc(50vh - 330px);
+  height: 660px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: 2;
+}
+
+.showcase-stage .phone {
+  --phone-w: 300px;
+}
+
+/* Every shot is stacked in the same frame; the active one fades in. */
+.showcase-stage .phone-screen img {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity 0.5s var(--ease), transform 0.7s var(--ease);
+}
+.showcase-stage .phone-screen img.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+.showcase-steps {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.step {
+  min-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-block: var(--s-2xl);
+  opacity: 0.32;
+  transition: opacity 0.4s var(--ease);
+}
+.step.is-active {
+  opacity: 1;
+}
+
+.step .chip {
+  align-self: flex-start;
+  margin-bottom: var(--s-lg);
+}
+
+.step ul {
+  margin: var(--s-lg) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s-md);
+}
+.step li {
+  position: relative;
+  padding-left: 26px;
+  color: var(--fg-muted);
+}
+.step li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0.62em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* The pinned column is a bad fit on a phone: show each shot with its copy. */
+.step-shot {
+  display: none;
+  margin-top: var(--s-xl);
+}
+
+@media (max-width: 900px) {
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
+  .showcase-stage {
+    display: none;
+  }
+  .step {
+    min-height: 0;
+    opacity: 1;
+    padding-block: var(--s-xl);
+  }
+  .step-shot {
+    display: block;
+  }
+  .showcase {
+    padding-block: var(--s-3xl);
+  }
+}
+
+/* ----------------------------------------------------------------- cards */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: var(--s-xl);
+}
+
+.card {
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-xl);
+}
+.card h3 {
+  font-size: 1.15rem;
+  margin-bottom: var(--s-sm);
+}
+.card p {
+  color: var(--fg-muted);
+  font-size: 0.96rem;
+  margin: 0;
+}
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  margin-bottom: var(--s-lg);
+  background: color-mix(in srgb, var(--tint, var(--accent)) 16%, transparent);
+  color: var(--tint, var(--accent));
+}
+.card-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+/* --------------------------------------------------------------- pricing */
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--s-xl);
+  align-items: stretch;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: var(--s-2xl);
+}
+.plan-featured {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-strong) 10%, var(--panel)),
+    var(--panel)
+  );
+  box-shadow: 0 24px 60px -40px var(--accent-strong);
+}
+
+.plan-name {
+  font-family: Archivo, system-ui, sans-serif;
+  font-variation-settings: "wdth" 92, "wght" 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: var(--s-md);
+}
+.plan-featured .plan-name {
+  color: var(--accent);
+}
+
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: var(--s-xs);
+}
+.price strong {
+  font-family: Archivo, system-ui, sans-serif;
+  font-variation-settings: "wdth" 92, "wght" 800;
+  font-size: 2.8rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.price span {
+  color: var(--fg-dim);
+  font-size: 0.95rem;
+}
+
+.plan ul {
+  list-style: none;
+  margin: var(--s-xl) 0 var(--s-xl);
+  padding: 0;
+  display: grid;
+  gap: var(--s-md);
+  font-size: 0.96rem;
+}
+.plan li {
+  position: relative;
+  padding-left: 28px;
+  color: var(--fg-muted);
+}
+.plan li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.42em;
+  width: 15px;
+  height: 9px;
+  border-left: 2px solid var(--c-done);
+  border-bottom: 2px solid var(--c-done);
+  transform: rotate(-45deg);
+}
+.plan li[data-soon]::before {
+  border-color: var(--fg-dim);
+  border-left-style: dotted;
+  border-bottom-style: dotted;
+}
+.plan .btn {
+  margin-top: auto;
+  width: 100%;
+}
+
+.plan-note {
+  margin-top: var(--s-lg);
+  font-size: 0.85rem;
+  color: var(--fg-dim);
+  text-align: center;
+}
+
+/* --------------------------------------------------------------- roadmap */
+
+.roadmap {
+  display: grid;
+  gap: var(--s-lg);
+}
+
+.rm-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--s-xl);
+  align-items: start;
+  padding: var(--s-lg) var(--s-xl);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  background: var(--bg-2);
+}
+.rm-row h4 {
+  margin-bottom: var(--s-xs);
+}
+.rm-row p {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: var(--r-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--tint) 40%, transparent);
+  background: color-mix(in srgb, var(--tint) 13%, transparent);
+  color: var(--tint);
+  white-space: nowrap;
+}
+.badge-shipped {
+  --tint: var(--c-done);
+}
+.badge-beta {
+  --tint: var(--c-story);
+}
+.badge-building {
+  --tint: var(--c-task);
+}
+.badge-planned {
+  --tint: var(--fg-dim);
+}
+
+@media (max-width: 620px) {
+  .rm-row {
+    grid-template-columns: 1fr;
+    gap: var(--s-md);
+  }
+}
+
+/* ------------------------------------------------------------------- FAQ */
+
+.faq {
+  display: grid;
+  gap: var(--s-md);
+  max-width: var(--prose);
+}
+
+details {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  padding: var(--s-lg) var(--s-xl);
+}
+details[open] {
+  border-color: var(--line);
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-lg);
+  align-items: center;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::after {
+  content: "+";
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--fg-dim);
+  flex: none;
+}
+details[open] summary::after {
+  content: "\2212";
+}
+details p:last-child {
+  margin-bottom: 0;
+}
+details p:first-of-type {
+  margin-top: var(--s-md);
+  color: var(--fg-muted);
+}
+
+/* ------------------------------------------------------------------- CTA */
+
+.cta {
+  text-align: center;
+}
+.cta .wrap {
+  max-width: 44rem;
+}
+.cta .btn-row {
+  justify-content: center;
+}
+
+.band {
+  background: var(--bg-2);
+  border-block: 1px solid var(--line-soft);
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.footer {
+  border-top: 1px solid var(--line-soft);
+  padding-block: var(--s-3xl) var(--s-2xl);
+  color: var(--fg-dim);
+  font-size: 0.92rem;
+}
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: var(--s-2xl);
+  margin-bottom: var(--s-2xl);
+}
+.footer h4 {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: var(--s-md);
+}
+.footer ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-sm);
+}
+.footer a {
+  color: var(--fg-dim);
+}
+.footer a:hover {
+  color: var(--fg);
+}
+.footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-md) var(--s-xl);
+  justify-content: space-between;
+  padding-top: var(--s-xl);
+  border-top: 1px solid var(--line-soft);
+}
+
+@media (max-width: 780px) {
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ----------------------------------------------------------- legal pages */
+
+.doc {
+  padding-block: var(--s-3xl) var(--s-4xl);
+}
+.doc .wrap {
+  max-width: 54rem;
+}
+.doc-body {
+  max-width: var(--prose);
+}
+.doc-body h2 {
+  font-size: 1.5rem;
+  margin-top: var(--s-2xl);
+  padding-top: var(--s-sm);
+}
+.doc-body h3 {
+  font-size: 1.1rem;
+  margin-top: var(--s-xl);
+}
+.doc-body ul,
+.doc-body ol {
+  margin: 0 0 var(--s-lg);
+  padding-left: 1.3em;
+  color: var(--fg-muted);
+}
+.doc-body li {
+  margin-bottom: var(--s-sm);
+}
+.doc-body p {
+  color: var(--fg-muted);
+}
+.doc-body strong {
+  color: var(--fg);
+}
+
+.doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-md) var(--s-xl);
+  font-size: 0.88rem;
+  color: var(--fg-dim);
+  margin-bottom: var(--s-2xl);
+  padding-bottom: var(--s-lg);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Every legal page is a placeholder until counsel reviews it; say so loudly
+ * and in a way that is trivial to delete (one element, one class). */
+.placeholder-note {
+  display: flex;
+  gap: var(--s-md);
+  align-items: flex-start;
+  padding: var(--s-lg) var(--s-xl);
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--c-task) 40%, transparent);
+  background: color-mix(in srgb, var(--c-task) 10%, transparent);
+  color: var(--fg);
+  font-size: 0.93rem;
+  margin-bottom: var(--s-2xl);
+}
+.placeholder-note strong {
+  color: var(--c-task);
+}
+.placeholder-note p {
+  margin: 0;
+  color: var(--fg-muted);
+}
+.placeholder-note p strong {
+  color: var(--c-task);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--s-xl);
+  font-size: 0.93rem;
+}
+th,
+td {
+  text-align: left;
+  padding: var(--s-md) var(--s-lg);
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  color: var(--fg-muted);
+}
+th {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom-color: var(--line);
+}
+
+.toc {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  padding: var(--s-lg) var(--s-xl);
+  margin-bottom: var(--s-2xl);
+}
+.toc h4 {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: var(--s-md);
+}
+.toc ol {
+  margin: 0;
+  padding-left: 1.2em;
+  columns: 2;
+  column-gap: var(--s-2xl);
+  font-size: 0.93rem;
+}
+@media (max-width: 620px) {
+  .toc ol {
+    columns: 1;
+  }
+}
+
+/* --------------------------------------------------------- scroll reveal */
+
+/* Gated on :not(.no-js): the class is on <html> in the markup and an inline
+ * script in <head> removes it before first paint. So with JavaScript off it
+ * survives, these rules never match, and every element is simply visible —
+ * nothing here may be the only thing making content readable. */
+html:not(.no-js) [data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+html:not(.no-js) [data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* A device that floats in and settles, used for the hero and the gallery. */
+html:not(.no-js) [data-reveal="device"] {
+  transform: translateY(46px) scale(0.965);
+}
+html:not(.no-js) [data-reveal="device"].is-revealed {
+  transform: none;
+}
+
+/* Without JavaScript nothing swaps the pinned phone's shot and no step is ever
+ * made active, so drop the pinned column entirely and fall back to the same
+ * layout narrow screens get: each feature with its own screenshot under it. */
+.no-js .showcase-stage {
+  display: none;
+}
+.no-js .showcase-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.no-js .step {
+  min-height: 0;
+  opacity: 1;
+  padding-block: var(--s-xl);
+}
+.no-js .step-shot {
+  display: block;
+}
+.no-js .showcase {
+  padding-block: var(--s-3xl);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+  .step {
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------- gallery */
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s-xl);
+  align-items: end;
+  justify-items: center;
+}
+/* A real length, not 100% — see the note on .phone. */
+.gallery .phone {
+  --phone-w: clamp(160px, 15vw, 230px);
+}
+.gallery figure {
+  margin: 0;
+  width: 100%;
+}
+.gallery figcaption {
+  margin-top: var(--s-md);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--fg-dim);
+}
+
+/* A gentle stagger down the row, set per item from the markup. */
+.gallery figure:nth-child(odd) .phone {
+  transform-origin: bottom center;
+}
+
+/* --------------------------------------------------------------- tablets */
+
+/* Two across at most: an iPad shot three-up is too small to read. */
+.tablet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: var(--s-2xl);
+}
+.tablet-grid figure {
+  margin: 0;
+}
+.tablet-grid figcaption {
+  margin-top: var(--s-md);
+  font-size: 0.88rem;
+  color: var(--fg-dim);
+}

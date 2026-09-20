@@ -1,0 +1,152 @@
+<!doctype html>
+<!--
+  The source for the social share card, rendered to img/brand/og-card.png by
+  tools/make_og_card.py. It is not part of the deployed site (deploy.sh
+  excludes tools/).
+
+  It is a page rather than a drawing so the card is built from the same CSS,
+  the same fonts and the same screenshots as the site; a card drawn by hand
+  drifts from the brand the first time the brand changes.
+
+  1200x630 is the size every unfurler wants: Open Graph's recommended ratio,
+  and what Discord, Slack, iMessage, Twitter and LinkedIn all crop toward.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../css/site.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+
+      .card {
+        position: relative;
+        width: 1200px;
+        height: 630px;
+        background: var(--bg);
+        display: grid;
+        grid-template-columns: 1fr 420px;
+        align-items: center;
+        gap: 40px;
+        padding: 0 0 0 72px;
+        overflow: hidden;
+      }
+
+      /* The same two-blue wash the hero uses. */
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: -40% -10% auto -30%;
+        height: 160%;
+        background: radial-gradient(
+            55% 55% at 20% 25%,
+            color-mix(in srgb, var(--accent-blue) 26%, transparent),
+            transparent 70%
+          ),
+          radial-gradient(
+            45% 50% at 85% 10%,
+            color-mix(in srgb, var(--accent-strong) 22%, transparent),
+            transparent 68%
+          );
+      }
+
+      .left {
+        position: relative;
+        z-index: 1;
+      }
+
+      .mark {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 30px;
+      }
+      .mark img {
+        width: 60px;
+        height: 60px;
+        border-radius: 15px;
+        box-shadow: 0 0 0 1px var(--line);
+      }
+      .mark span {
+        font-family: Archivo, sans-serif;
+        font-variation-settings: "wdth" 96, "wght" 700;
+        font-size: 36px;
+        letter-spacing: -0.01em;
+        color: var(--fg);
+      }
+
+      .card h1 {
+        font-size: 74px;
+        line-height: 0.98;
+        margin: 0 0 24px;
+        max-width: 11ch;
+      }
+
+      .card p {
+        font-size: 24px;
+        line-height: 1.4;
+        color: var(--fg-muted);
+        margin: 0 0 30px;
+        max-width: 22ch;
+      }
+
+      .card .chips {
+        gap: 10px;
+      }
+      .card .chip {
+        font-size: 15px;
+        padding: 8px 16px;
+      }
+
+      /* The phone bleeds off the bottom-right corner, tilted, so the card
+         reads as a product shot rather than a slide. */
+      .device {
+        position: relative;
+        z-index: 1;
+        transform: rotate(-7deg) translate(10px, 54px);
+      }
+      .device .phone {
+        --phone-w: 360px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="left">
+        <div class="mark">
+          <img src="../img/brand/icon-256.webp" alt="" />
+          <span>Boardhop</span>
+        </div>
+        <h1>Azure&nbsp;DevOps in your pocket</h1>
+        <p>
+          Boards, work items, pull requests and pipelines — on the phone
+          already in your hand.
+        </p>
+        <div class="chips">
+          <span class="chip chip-boards">Boards</span>
+          <span class="chip chip-work">Work items</span>
+          <span class="chip chip-prs">Pull requests</span>
+          <span class="chip chip-pipelines">Pipelines</span>
+        </div>
+      </div>
+
+      <div class="device">
+        <div class="phone">
+          <div class="phone-screen">
+            <img src="../img/shots/iphone/board@2x.webp" alt="" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

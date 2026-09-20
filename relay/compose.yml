@@ -16,10 +16,26 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    # SITE_DOMAIN names the marketing site's host in the Caddyfile. It is set
+    # by website/deploy.sh; unset, the Caddyfile falls back to a .localhost
+    # name that never touches Let's Encrypt.
+    # Never interpolate to an empty string here: Caddy's {$VAR:default} only
+    # falls back when the variable is *unset*, and a set-but-empty one would
+    # leave the site block with no address at all.
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-boardhop-site.localhost}
+      SITE_ALIAS: ${SITE_ALIAS:-boardhop-site-www.localhost}
     volumes:
       - /srv/relay/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /srv/relay/caddy/data:/data
       - /srv/relay/caddy/config:/config
+      # The marketing site's static files. Under /srv/relay because the deploy
+      # user owns that tree and needs no sudo to replace them. Read-only:
+      # Caddy serves them and has no business writing there.
+      - /srv/relay/site:/srv/site:ro
+      # Caddyfile fragments written by website/deploy.sh (the site's optional
+      # basic auth). A directory, not a file, so the deploy can replace it.
+      - /srv/relay/caddy/site-extra:/etc/caddy/site-extra:ro
     depends_on:
       - relay
     # The admin API is container-local; a 200 from it means the config loaded.

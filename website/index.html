@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Removed before first paint, so the reveal animations only ever apply
+         where JavaScript can also undo them. See css/site.css. -->
+    <script>document.documentElement.classList.remove("no-js");</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boardhop — Azure DevOps in your pocket</title>
+    <meta
+      name="description"
+      content="Boardhop is a mobile client for Azure DevOps Services: boards, work items, pull request review, pipelines, repos and dashboards on iPhone, iPad and Android."
+    />
+    <link rel="canonical" href="https://boardhop.dev/" />
+
+    <meta property="og:site_name" content="Boardhop" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Boardhop — Azure DevOps in your pocket" />
+    <meta property="og:description" content="Boards, work items, pull requests, pipelines and dashboards. Everything your team runs in Azure DevOps, on the phone already in your hand." />
+    <meta property="og:url" content="https://boardhop.dev/" />
+    <meta property="og:image" content="https://boardhop.dev/img/brand/og-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Boardhop app on an iPhone showing an Azure DevOps board, beside the words Azure DevOps in your pocket." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Boardhop — Azure DevOps in your pocket" />
+    <meta name="twitter:description" content="Boards, work items, pull requests, pipelines and dashboards. Everything your team runs in Azure DevOps, on the phone already in your hand." />
+    <meta name="twitter:image" content="https://boardhop.dev/img/brand/og-card.png" />
+    <meta name="theme-color" content="#0d1016" />
+
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="img/brand/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/site.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="nav" data-nav>
+      <div class="wrap nav-inner">
+        <a class="brand" href="index.html">
+          <img src="img/brand/icon-128.webp" alt="" width="34" height="34" />
+          Boardhop
+        </a>
+        <nav class="nav-links" aria-label="Main">
+          <a href="#features">Features</a>
+          <a href="#big-screens" data-optional>Tablets</a>
+          <a href="pricing.html">Pricing</a>
+          <a href="#roadmap" data-optional>Roadmap</a>
+          <a class="btn btn-primary" href="#get">Get the beta</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ---------------------------------------------------------- hero -->
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow" data-reveal>For Azure DevOps Services</p>
+            <h1 data-reveal style="--reveal-delay: 60ms">
+              Azure&nbsp;DevOps in your pocket
+            </h1>
+            <p class="lede" data-reveal style="--reveal-delay: 120ms">
+              Boards, work items, pull requests, pipelines and dashboards.
+              Everything your team runs in Azure DevOps, on the phone already in
+              your hand — and on the tablet on your desk.
+            </p>
+            <div
+              class="chips"
+              data-reveal
+              style="--reveal-delay: 180ms; margin: 24px 0"
+            >
+              <span class="chip chip-boards">Boards</span>
+              <span class="chip chip-work">Work items</span>
+              <span class="chip chip-prs">Pull requests</span>
+              <span class="chip chip-pipelines">Pipelines</span>
+              <span class="chip chip-dash">Dashboards</span>
+              <span class="chip chip-repos">Repos</span>
+              <span class="chip chip-wiki">Wiki</span>
+            </div>
+            <div class="btn-row" data-reveal style="--reveal-delay: 240ms">
+              <a class="btn btn-primary" href="#get">Get the beta</a>
+              <a class="btn btn-ghost" href="#features">See what it does</a>
+            </div>
+            <div class="hero-meta" data-reveal style="--reveal-delay: 300ms">
+              <span>iPhone, iPad, Android phones and tablets</span>
+              <span>Sign in with your work account</span>
+              <span>Free app</span>
+            </div>
+          </div>
+
+          <div data-reveal="device" style="--reveal-delay: 160ms">
+            <div class="phone">
+              <div class="phone-screen">
+                <img
+                  src="img/shots/iphone/board.webp"
+                  srcset="
+                    img/shots/iphone/board.webp     1x,
+                    img/shots/iphone/board@2x.webp  2x
+                  "
+                  width="320"
+                  height="695"
+                  alt="The Boardhop board view on an iPhone, showing New and Ready columns with user story and bug cards."
+                  fetchpriority="high"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ landscape strip -->
+      <section class="band" style="padding-block: 56px">
+        <div class="wrap">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: minmax(0, 1fr);
+              justify-items: center;
+              gap: 24px;
+            "
+          >
+            <div class="phone phone-landscape" data-reveal="device">
+              <div class="phone-screen">
+                <img
+                  src="img/shots/iphone/hero_landscape.webp"
+                  srcset="
+                    img/shots/iphone/hero_landscape.webp     1x,
+                    img/shots/iphone/hero_landscape@2x.webp  2x
+                  "
+                  width="700"
+                  height="322"
+                  alt="A sprint taskboard filling an iPhone held in landscape, with swimlanes of task cards."
+                  loading="lazy"
+                />
+              </div>
+            </div>
+            <p class="small dim" data-reveal style="text-align: center; margin: 0">
+              Turn the phone sideways and the sprint taskboard uses every pixel.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------ showcase -->
+      <section class="showcase" id="features">
+        <div class="wrap">
+          <div class="section-head" data-reveal style="padding-top: 56px">
+            <p class="eyebrow">What it does</p>
+            <h2>The whole working day, on a screen you can hold</h2>
+            <p class="lede">
+              Not a dashboard of read-only tiles. Boardhop is built for the parts
+              of Azure DevOps you actually touch between meetings: move a card,
+              answer a review, approve a stage, close a bug.
+            </p>
+          </div>
+
+          <div class="showcase-grid">
+            <!-- The pinned phone; each shot fades in as its step scrolls past -->
+            <div class="showcase-stage" data-showcase-stage aria-hidden="true">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img data-shot="boards" src="img/shots/iphone/board.webp" srcset="img/shots/iphone/board.webp 1x, img/shots/iphone/board@2x.webp 2x" width="320" height="695" alt="" />
+                  <img data-shot="work" src="img/shots/iphone/workitem.webp" srcset="img/shots/iphone/workitem.webp 1x, img/shots/iphone/workitem@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                  <img data-shot="prs" src="img/shots/iphone/pr_diff.webp" srcset="img/shots/iphone/pr_diff.webp 1x, img/shots/iphone/pr_diff@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                  <img data-shot="pipelines" src="img/shots/iphone/run.webp" srcset="img/shots/iphone/run.webp 1x, img/shots/iphone/run@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                  <img data-shot="sprints" src="img/shots/iphone/taskboard.webp" srcset="img/shots/iphone/taskboard.webp 1x, img/shots/iphone/taskboard@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                  <img data-shot="dashboards" src="img/shots/iphone/dashboard.webp" srcset="img/shots/iphone/dashboard.webp 1x, img/shots/iphone/dashboard@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                  <img data-shot="notifications" src="img/shots/iphone/activity.webp" srcset="img/shots/iphone/activity.webp 1x, img/shots/iphone/activity@2x.webp 2x" width="320" height="695" alt="" loading="lazy" />
+                </div>
+              </div>
+            </div>
+
+            <div class="showcase-steps">
+              <article class="step" data-step="boards">
+                <span class="chip chip-boards">Boards</span>
+                <h3>Drag a card across the board</h3>
+                <p class="muted">
+                  Your team's Kanban board, column rules and swimlanes intact.
+                  Press and hold a card, drag it to the next column, and the
+                  state and board column are written back exactly as the web app
+                  would write them.
+                </p>
+                <ul>
+                  <li>Every board on the team, with backlog levels and filters</li>
+                  <li>Split columns, Doing and Done, and work-in-progress limits</li>
+                  <li>Card colours and type icons that match the web</li>
+                  <li>New item straight from the bottom of a column</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/board.webp" srcset="img/shots/iphone/board.webp 1x, img/shots/iphone/board@2x.webp 2x" width="320" height="695" alt="The board view with New and Ready columns." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="work">
+                <span class="chip chip-work">Work items</span>
+                <h3>The real work item form</h3>
+                <p class="muted">
+                  Not a cut-down summary: the fields your process template
+                  actually defines, in the groups your admin laid out, with rich
+                  text, discussion, links, attachments and the history.
+                </p>
+                <ul>
+                  <li>Edit any field, with the state transitions your type allows</li>
+                  <li>Rich-text description and comments, with @mentions and #links</li>
+                  <li>Attachments, links, children and the revision history</li>
+                  <li>Queries and recent items, with full text search</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/workitem.webp" srcset="img/shots/iphone/workitem.webp 1x, img/shots/iphone/workitem@2x.webp 2x" width="320" height="695" alt="A work item form on a phone." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="prs">
+                <span class="chip chip-prs">Pull requests</span>
+                <h3>Review a pull request properly</h3>
+                <p class="muted">
+                  A real diff viewer — syntax highlighting, word-level changes,
+                  side-by-side on wide screens — with comment threads anchored to
+                  the lines they belong to. Reply, resolve, vote, complete.
+                </p>
+                <ul>
+                  <li>File tree, per-file diffs and iteration compare</li>
+                  <li>Line comments that follow the code across pushes</li>
+                  <li>Approve, approve with suggestions, wait or reject</li>
+                  <li>Complete with squash, delete branch and work item links</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/pr_diff.webp" srcset="img/shots/iphone/pr_diff.webp 1x, img/shots/iphone/pr_diff@2x.webp 2x" width="320" height="695" alt="A syntax-highlighted diff with a comment thread." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="pipelines">
+                <span class="chip chip-pipelines">Pipelines</span>
+                <h3>Watch the build and unblock it</h3>
+                <p class="muted">
+                  Runs, stages, jobs and task logs. When a deployment is waiting
+                  on a human, that human is often holding a phone — so approvals
+                  are one tap, with the comment box right there.
+                </p>
+                <ul>
+                  <li>Run history with stage-by-stage status</li>
+                  <li>Task logs, with search inside a log</li>
+                  <li>Approve or reject a waiting environment check</li>
+                  <li>Queue a run with parameters, or re-run a failed stage</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/run.webp" srcset="img/shots/iphone/run.webp 1x, img/shots/iphone/run@2x.webp 2x" width="320" height="695" alt="A pipeline run with its stages." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="sprints">
+                <span class="chip chip-work">Sprints</span>
+                <h3>Run the sprint from the standup</h3>
+                <p class="muted">
+                  The taskboard, the sprint backlog and capacity, laid out for a
+                  phone in landscape so you can move a task while you are
+                  standing up and talking.
+                </p>
+                <ul>
+                  <li>Taskboard by person or by backlog item</li>
+                  <li>Remaining work and capacity per team member</li>
+                  <li>Burndown for the current iteration</li>
+                  <li>Past and future iterations, a swipe away</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/taskboard.webp" srcset="img/shots/iphone/taskboard.webp 1x, img/shots/iphone/taskboard@2x.webp 2x" width="320" height="695" alt="A sprint taskboard." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="dashboards">
+                <span class="chip chip-dash">Dashboards</span>
+                <h3>Your team's dashboards, to go</h3>
+                <p class="muted">
+                  The widgets your team already built — burndown, velocity,
+                  cumulative flow, query tiles, build history — redrawn for a
+                  phone screen instead of squeezed into one.
+                </p>
+                <ul>
+                  <li>Every dashboard on the project and team</li>
+                  <li>Charts drawn natively, readable at phone size</li>
+                  <li>Query tiles and counts that tap through to the list</li>
+                  <li>Light and dark, and every dynamic type size</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/dashboard.webp" srcset="img/shots/iphone/dashboard.webp 1x, img/shots/iphone/dashboard@2x.webp 2x" width="320" height="695" alt="A team dashboard with charts." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="step" data-step="notifications">
+                <span class="chip chip-prs">Activity</span>
+                <h3>Know the moment it happens</h3>
+                <p class="muted">
+                  An activity feed of everything aimed at you: review requests,
+                  mentions, assignments, failed runs and waiting approvals. Add
+                  the Boardhop extension to your organization and the same events
+                  arrive as real push notifications.
+                </p>
+                <ul>
+                  <li>One feed across every organization you belong to</li>
+                  <li>Tap through to the item, the thread or the run</li>
+                  <li>Per-event preferences and quiet hours</li>
+                  <li>Push notifications with the team plan — see pricing</li>
+                </ul>
+                <div class="step-shot">
+                  <div class="phone" data-reveal="device">
+                    <div class="phone-screen">
+                      <img src="img/shots/iphone/activity.webp" srcset="img/shots/iphone/activity.webp 1x, img/shots/iphone/activity@2x.webp 2x" width="320" height="695" alt="The activity feed." loading="lazy" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- more cards -->
+      <section class="band">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">And the rest of it</p>
+            <h2>Everything else you reach for</h2>
+          </div>
+          <div class="cards">
+            <div class="card" data-reveal style="--tint: var(--c-cyan)">
+              <div class="card-icon" style="--tint: var(--c-cyan)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </div>
+              <h3>Repos and code browsing</h3>
+              <p>
+                Browse any repository at any branch, tag or commit. Read a file
+                with syntax highlighting, follow the history, compare two
+                branches, and search code across the project.
+              </p>
+            </div>
+
+            <div class="card" data-reveal style="--reveal-delay: 60ms">
+              <div class="card-icon" style="--tint: var(--c-story)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <h3>Small edits, safely</h3>
+              <p>
+                Fix a typo in a readme or a YAML value from your phone. Boardhop
+                commits to a new branch and opens a pull request — it never
+                writes straight to your default branch.
+              </p>
+            </div>
+
+            <div class="card" data-reveal style="--reveal-delay: 120ms">
+              <div class="card-icon" style="--tint: var(--c-bug)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M8 8h7M8 12h7"/></svg>
+              </div>
+              <h3>Wiki</h3>
+              <p>
+                Project wikis and code wikis, rendered with their tables,
+                Mermaid diagrams and page tree, searchable, and readable from
+                the cache when you have no signal.
+              </p>
+            </div>
+
+            <div class="card" data-reveal style="--reveal-delay: 180ms">
+              <div class="card-icon" style="--tint: var(--c-done)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6"/><path d="M22 4 12 14.01l-3-3"/></svg>
+              </div>
+              <h3>Works without a signal</h3>
+              <p>
+                Every page you have opened is cached on the device, so the app
+                opens instantly on a train or in a basement and shows you the
+                last thing it knew, clearly marked.
+              </p>
+            </div>
+
+            <div class="card" data-reveal style="--reveal-delay: 240ms">
+              <div class="card-icon" style="--tint: var(--c-feature)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+              </div>
+              <h3>Several accounts at once</h3>
+              <p>
+                Consultants and contractors keep every tenant signed in side by
+                side and switch between them — and between organizations and
+                projects — without signing out.
+              </p>
+            </div>
+
+            <div class="card" data-reveal style="--reveal-delay: 300ms">
+              <div class="card-icon" style="--tint: var(--c-epic)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+              </div>
+              <h3>Built for tablets too</h3>
+              <p>
+                On an iPad or an Android tablet the layout opens out into two
+                panes — list beside detail, diff side by side — instead of
+                stretching a phone screen.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------- big screens -->
+      <section id="big-screens">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">Big screens</p>
+            <h2>The tablet is not a stretched phone</h2>
+            <p class="lede">
+              Past a certain width Boardhop changes shape: a navigation rail
+              instead of a bottom bar, a list beside the thing it opens, and a
+              diff that finally has room to sit side by side.
+            </p>
+          </div>
+
+          <div class="tablet-grid">
+            <figure data-reveal="device">
+              <div class="tablet">
+                <div class="phone-screen">
+                  <img src="img/shots/ipad/board.webp" srcset="img/shots/ipad/board.webp 1x, img/shots/ipad/board@2x.webp 2x" width="640" height="480" alt="The board on an iPad in landscape, with several columns visible at once." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Every column of the board at once.</figcaption>
+            </figure>
+
+            <figure data-reveal="device" style="--reveal-delay: 80ms">
+              <div class="tablet">
+                <div class="phone-screen">
+                  <img src="img/shots/ipad/pr_diff.webp" srcset="img/shots/ipad/pr_diff.webp 1x, img/shots/ipad/pr_diff@2x.webp 2x" width="640" height="480" alt="A pull request diff side by side on an iPad, with the file tree beside it." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Side-by-side diff with the file list beside it.</figcaption>
+            </figure>
+
+            <figure data-reveal="device" style="--reveal-delay: 160ms">
+              <div class="tablet">
+                <div class="phone-screen">
+                  <img src="img/shots/ipad/dashboard.webp" srcset="img/shots/ipad/dashboard.webp 1x, img/shots/ipad/dashboard@2x.webp 2x" width="640" height="480" alt="A team dashboard on an iPad with several chart widgets." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Dashboards with room for their widgets.</figcaption>
+            </figure>
+
+            <figure data-reveal="device" style="--reveal-delay: 240ms">
+              <div class="tablet">
+                <div class="phone-screen">
+                  <img src="img/shots/ipad/taskboard.webp" srcset="img/shots/ipad/taskboard.webp 1x, img/shots/ipad/taskboard@2x.webp 2x" width="640" height="480" alt="A sprint taskboard on an iPad with swimlanes across the screen." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>The taskboard as a standup actually needs it.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- gallery -->
+      <section class="band">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">A look around</p>
+            <h2>More of the app</h2>
+          </div>
+          <div class="gallery">
+            <figure data-reveal="device">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img src="img/shots/iphone/pr_detail.webp" srcset="img/shots/iphone/pr_detail.webp 1x, img/shots/iphone/pr_detail@2x.webp 2x" width="320" height="695" alt="A pull request overview with reviewers and policies." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Pull request overview</figcaption>
+            </figure>
+            <figure data-reveal="device" style="--reveal-delay: 80ms">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img src="img/shots/iphone/approvals.webp" srcset="img/shots/iphone/approvals.webp 1x, img/shots/iphone/approvals@2x.webp 2x" width="320" height="695" alt="A pipeline approval waiting for a decision." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Approvals</figcaption>
+            </figure>
+            <figure data-reveal="device" style="--reveal-delay: 160ms">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img src="img/shots/iphone/workitem.webp" srcset="img/shots/iphone/workitem.webp 1x, img/shots/iphone/workitem@2x.webp 2x" width="320" height="695" alt="A work item form." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Work item form</figcaption>
+            </figure>
+            <figure data-reveal="device" style="--reveal-delay: 240ms">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img src="img/shots/iphone/activity.webp" srcset="img/shots/iphone/activity.webp 1x, img/shots/iphone/activity@2x.webp 2x" width="320" height="695" alt="The activity feed." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Activity feed</figcaption>
+            </figure>
+            <figure data-reveal="device" style="--reveal-delay: 320ms">
+              <div class="phone">
+                <div class="phone-screen">
+                  <img src="img/shots/iphone/run.webp" srcset="img/shots/iphone/run.webp 1x, img/shots/iphone/run@2x.webp 2x" width="320" height="695" alt="A pipeline run." loading="lazy" />
+                </div>
+              </div>
+              <figcaption>Pipeline run</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- pricing -->
+      <section id="pricing">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">Pricing</p>
+            <h2>The app is free. The relay is the product.</h2>
+            <p class="lede">
+              Boardhop itself costs nothing and never will. What an organization
+              can buy is the Boardhop relay: the piece that turns your Azure
+              DevOps events into real push notifications, and the live features
+              that need a server listening on your behalf.
+            </p>
+          </div>
+
+          <div class="plans">
+            <div class="plan" data-reveal>
+              <p class="plan-name">Free</p>
+              <div class="price"><strong>$0</strong><span>always</span></div>
+              <p class="muted small">
+                Everything in the app, for anyone with an Azure DevOps account.
+              </p>
+              <ul>
+                <li>Boards, backlogs, sprints and taskboards</li>
+                <li>Work item forms, queries and search</li>
+                <li>Pull request review, diffs and votes</li>
+                <li>Pipelines, logs and approvals</li>
+                <li>Repos, code browsing and wiki</li>
+                <li>Dashboards and charts</li>
+                <li>Activity feed, refreshed while the app is open</li>
+                <li>Offline cache and multiple accounts</li>
+              </ul>
+              <a class="btn btn-ghost" href="#get">Get the beta</a>
+            </div>
+
+            <div class="plan plan-featured" data-reveal style="--reveal-delay: 80ms">
+              <p class="plan-name">Team relay</p>
+              <div class="price">
+                <strong>$3</strong><span>per active user / month</span>
+              </div>
+              <p class="muted small">
+                $15 a month minimum. Annual is about ten months' price. Bought by
+                an organization, not by a person — and you only pay for people
+                who actually opened the app that month.
+              </p>
+              <ul>
+                <li>Everything in Free</li>
+                <li>Real push notifications, app closed</li>
+                <li>Review requests, mentions and assignments</li>
+                <li>Failed runs and waiting approvals</li>
+                <li>Per-user event preferences and quiet hours</li>
+                <li>One-click setup from the Azure DevOps Marketplace extension</li>
+                <li>Subscription health and repair in the admin hub</li>
+                <li data-soon>Live pipeline log tail — on the roadmap</li>
+              </ul>
+              <a class="btn btn-primary" href="pricing.html">How it works</a>
+              <p class="plan-note">30-day trial, no card, for the whole organization.</p>
+            </div>
+
+            <div class="plan" data-reveal style="--reveal-delay: 160ms">
+              <p class="plan-name">Self-hosted relay</p>
+              <div class="price"><strong>Talk to us</strong></div>
+              <p class="muted small">
+                For tenants whose rules say event metadata may not leave their
+                own cloud.
+              </p>
+              <ul>
+                <li>The same relay, deployed in your tenancy</li>
+                <li>Event metadata never leaves your boundary</li>
+                <li>Only opaque pointers reach Apple and Google</li>
+                <li>Annual agreement, invoiced</li>
+              </ul>
+              <a class="btn btn-ghost" href="mailto:hello@boardhop.dev?subject=Boardhop%20self-hosted%20relay">Get in touch</a>
+            </div>
+          </div>
+
+          <p class="small dim" data-reveal style="margin-top: 24px; max-width: 46rem">
+            Pushes carry a pointer, not your content: who did what, to which
+            item, and a link. Comment text, code and descriptions are fetched by
+            your phone with your own credentials and never pass through us.
+            <a href="legal/privacy.html">How Boardhop handles data</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- roadmap -->
+      <section class="band" id="roadmap">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">Roadmap</p>
+            <h2>Where it is and where it is going</h2>
+            <p class="lede">
+              Boardhop is in beta. This is an honest list, not a wish list: what
+              works today, what is being built, and what is planned.
+            </p>
+          </div>
+
+          <div class="roadmap">
+            <div class="rm-row" data-reveal>
+              <span class="badge badge-shipped">Shipped</span>
+              <div>
+                <h4>Boards, work items, pull requests, pipelines, repos, wiki, dashboards, sprints, search</h4>
+                <p>The full app on iPhone, iPad and Android phones and tablets, in light and dark, with an offline cache and multiple accounts.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 60ms">
+              <span class="badge badge-beta">In beta</span>
+              <div>
+                <h4>Push notifications and the Marketplace extension</h4>
+                <p>The relay and the Boardhop extension are running against real organizations. Free for beta organizations; the team plan starts when the beta ends.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 120ms">
+              <span class="badge badge-building">Building</span>
+              <div>
+                <h4>Live pipeline log tail</h4>
+                <p>Azure DevOps only publishes a task's log once the task finishes, so following a running step needs the relay to listen on your behalf. It will be part of the team plan at no extra cost.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 180ms">
+              <span class="badge badge-building">Building</span>
+              <div>
+                <h4>Foldables and dual-screen phones</h4>
+                <p>Layouts that respect the hinge and the system's edge, so a board or a diff splits along the fold instead of across it.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 240ms">
+              <span class="badge badge-planned">Planned</span>
+              <div>
+                <h4>Personal access token sign-in</h4>
+                <p>For people whose tenant will not let a third-party app use their work account. Microsoft Entra sign-in is the only option today.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 300ms">
+              <span class="badge badge-planned">Planned</span>
+              <div>
+                <h4>Test plans, artifacts and richer queries</h4>
+                <p>The parts of Azure DevOps Boardhop does not reach yet, in the order beta teams ask for them.</p>
+              </div>
+            </div>
+            <div class="rm-row" data-reveal style="--reveal-delay: 360ms">
+              <span class="badge badge-planned">Not planned</span>
+              <div>
+                <h4>Azure DevOps Server (on-premises)</h4>
+                <p>Boardhop targets Azure DevOps Services in the cloud. On-premises collections are not supported and are not currently on the plan.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------------ FAQ -->
+      <section id="faq">
+        <div class="wrap">
+          <div class="section-head" data-reveal>
+            <p class="eyebrow">Questions</p>
+            <h2>The things people ask first</h2>
+          </div>
+          <div class="faq">
+            <details data-reveal>
+              <summary>How do I sign in?</summary>
+              <p>
+                With the same Microsoft work or school account you use for Azure
+                DevOps, through Microsoft Entra ID. Boardhop never sees your
+                password; sign-in happens in the system browser or the Microsoft
+                Authenticator app, and the app receives a token scoped to the
+                Azure DevOps permissions you already have.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>Does my administrator have to approve anything?</summary>
+              <p>
+                Some tenants require an administrator to consent to a new
+                application once, for everyone. If yours does, the sign-in screen
+                will say so and your administrator can approve it in a couple of
+                minutes. Push notifications separately need an administrator to
+                install the Boardhop extension in the organization.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>Can Boardhop see my code and my comments?</summary>
+              <p>
+                No. The app talks to Azure DevOps directly from your device with
+                your own token. Nothing you read or write passes through our
+                servers. The only thing that touches our relay is the event
+                metadata Azure DevOps sends when something happens — ids, an
+                event type and a short title — which is turned into a
+                notification pointer and not kept.
+                <a href="legal/privacy.html">Read the detail</a>.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>What does Boardhop cost?</summary>
+              <p>
+                The app is free, with no adverts, no tracking and no upgrade
+                prompts. An organization that wants push notifications buys the
+                team relay at $3 per active user per month, with a $15 monthly
+                minimum and a 30-day trial that needs no card. Nothing is sold
+                inside the app.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>What counts as an "active user"?</summary>
+              <p>
+                Someone who opened Boardhop for your organization at least once
+                during the calendar month. If a person does not open the app that
+                month, you are not billed for them — and your administrator can
+                see the counted list in the admin hub before the invoice.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>Does it work with Azure DevOps Server on-premises?</summary>
+              <p>
+                Not today. Boardhop is built for Azure DevOps Services, the
+                cloud-hosted product at dev.azure.com.
+              </p>
+            </details>
+            <details data-reveal>
+              <summary>Which devices are supported?</summary>
+              <p>
+                iPhone and iPad, and Android phones and tablets. Both layouts are
+                designed for the size they are on — phone, tablet, portrait and
+                landscape — and the app supports dynamic type, dark mode and
+                screen readers.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------------ CTA -->
+      <section class="cta band" id="get">
+        <div class="wrap">
+          <p class="eyebrow" data-reveal>Beta</p>
+          <h2 data-reveal>Try it on your own boards</h2>
+          <p class="lede" data-reveal style="margin-inline: auto">
+            Boardhop is in closed beta on TestFlight and Google Play. Tell us the
+            organization you would try it against and we will send an invitation.
+          </p>
+          <div class="btn-row" data-reveal style="margin-top: 32px">
+            <a
+              class="btn btn-primary"
+              href="mailto:hello@boardhop.dev?subject=Boardhop%20beta%20invitation"
+              >Ask for an invitation</a
+            >
+            <a class="btn btn-ghost" href="pricing.html">See pricing</a>
+          </div>
+          <p class="small dim" data-reveal style="margin-top: 24px">
+            App Store and Google Play links appear here at public launch.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer-grid">
+          <div>
+            <a class="brand" href="index.html" style="margin-bottom: 12px">
+              <img src="img/brand/icon-128.webp" alt="" width="34" height="34" />
+              Boardhop
+            </a>
+            <p style="max-width: 24rem">
+              A mobile client for Azure DevOps Services. Built by KammCS.
+            </p>
+          </div>
+          <div>
+            <h4>Product</h4>
+            <ul>
+              <li><a href="index.html#features">Features</a></li>
+              <li><a href="index.html#big-screens">Tablets</a></li>
+              <li><a href="pricing.html">Pricing</a></li>
+              <li><a href="index.html#roadmap">Roadmap</a></li>
+              <li><a href="index.html#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Legal</h4>
+            <ul>
+              <li><a href="legal/privacy.html">Privacy policy</a></li>
+              <li><a href="legal/terms.html">Terms of service</a></li>
+              <li><a href="legal/refunds.html">Refund policy</a></li>
+              <li><a href="legal/dpa.html">Data processing addendum</a></li>
+              <li><a href="legal/subprocessors.html">Subprocessors</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Contact</h4>
+            <ul>
+              <li><a href="mailto:hello@boardhop.dev">hello@boardhop.dev</a></li>
+              <li><a href="legal/security.html">Security</a></li>
+              <li><a href="mailto:support@boardhop.dev">Support</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>&copy; <span data-year>2026</span> KammCS. All rights reserved.</span>
+          <span
+            >Azure DevOps is a trademark of Microsoft Corporation. Boardhop is not
+            affiliated with or endorsed by Microsoft.</span
+          >
+        </div>
+      </div>
+    </footer>
+
+    <script src="js/site.js" defer></script>
+  </body>
+</html>

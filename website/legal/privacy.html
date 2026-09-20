@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Removed before first paint, so the reveal animations only ever apply
+         where JavaScript can also undo them. See css/site.css. -->
+    <script>document.documentElement.classList.remove("no-js");</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy policy — Boardhop</title>
+    <meta name="description" content="How Boardhop handles your data: the app talks to Azure DevOps directly from your device, and notifications carry a pointer, never your content." />
+    <link rel="canonical" href="https://boardhop.dev/legal/privacy.html" />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:site_name" content="Boardhop" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Privacy policy — Boardhop" />
+    <meta property="og:description" content="How Boardhop handles your data: the app talks to Azure DevOps directly from your device, and notifications carry a pointer, never your content." />
+    <meta property="og:url" content="https://boardhop.dev/legal/privacy.html" />
+    <meta property="og:image" content="https://boardhop.dev/img/brand/og-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Boardhop app on an iPhone showing an Azure DevOps board, beside the words Azure DevOps in your pocket." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Privacy policy — Boardhop" />
+    <meta name="twitter:description" content="How Boardhop handles your data: the app talks to Azure DevOps directly from your device, and notifications carry a pointer, never your content." />
+    <meta name="twitter:image" content="https://boardhop.dev/img/brand/og-card.png" />
+    <meta name="theme-color" content="#0d1016" />
+    <link rel="icon" href="../favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="../img/brand/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../css/site.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="nav" data-nav>
+      <div class="wrap nav-inner">
+        <a class="brand" href="../index.html">
+          <img src="../img/brand/icon-128.webp" alt="" width="34" height="34" />
+          Boardhop
+        </a>
+        <nav class="nav-links" aria-label="Main">
+          <a href="../index.html#features">Features</a>
+          <a href="../index.html#big-screens" data-optional>Tablets</a>
+          <a href="../pricing.html">Pricing</a>
+          <a href="../index.html#roadmap" data-optional>Roadmap</a>
+          <a class="btn btn-primary" href="../index.html#get">Get the beta</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="doc">
+      <div class="wrap">
+        <p class="eyebrow">Legal</p>
+        <h1 style="font-size: clamp(2.1rem, 5vw, 3.1rem)">Privacy policy</h1>
+        <div class="doc-meta">
+          <span>Effective 20 September 2026</span>
+          <span>Last updated 20 September 2026</span>
+          <span>KammCS, publisher of Boardhop</span>
+        </div>
+
+      <div class="placeholder-note" role="note">
+        <p>
+          <strong>Placeholder.</strong> This document describes how Boardhop
+          actually works, but its wording has not been reviewed by a lawyer and
+          it is not yet binding. It is published so the app stores, the
+          Marketplace listing and prospective customers have something to read
+          during the beta. The reviewed version replaces it before public
+          launch.
+        </p>
+      </div>
+      <nav class="toc" aria-label="On this page">
+        <h4>On this page</h4>
+        <ol>
+            <li><a href="#who">Who we are</a></li>
+            <li><a href="#short">The short version</a></li>
+            <li><a href="#app">What the app does with your data</a></li>
+            <li><a href="#relay">What the relay sees</a></li>
+            <li><a href="#counting">The active-user count</a></li>
+            <li><a href="#diagnostics">Diagnostics and crash data</a></li>
+            <li><a href="#sharing">Who else is involved</a></li>
+            <li><a href="#retention">How long anything is kept</a></li>
+            <li><a href="#rights">Your rights</a></li>
+            <li><a href="#children">Children</a></li>
+            <li><a href="#changes">Changes</a></li>
+            <li><a href="#contact-privacy">Contact</a></li>
+        </ol>
+      </nav>
+
+        <div class="doc-body">
+          <h2 id="who">1. Who we are</h2>
+          <p>
+            Boardhop is a mobile application for Azure DevOps Services published
+            by KammCS (&ldquo;we&rdquo;, &ldquo;us&rdquo;). This policy covers
+            the Boardhop mobile app, the Boardhop extension for the Azure DevOps
+            Marketplace, the Boardhop relay service, and this website.
+          </p>
+          <p>
+            Where an organization turns on the Boardhop relay for its Azure
+            DevOps organization, that organization is the controller of the
+            event metadata described in section 4 and we act as its processor.
+            For your own account and billing details we are the controller.
+          </p>
+
+          <h2 id="short">2. The short version</h2>
+          <ul>
+            <li>
+              <strong>Your work content never reaches us.</strong> The app talks
+              to Azure DevOps directly from your device using your own
+              credentials. Work items, comments, code, diffs and wiki pages go
+              between your device and Microsoft, not through us.
+            </li>
+            <li>
+              <strong>We have no accounts.</strong> There is no Boardhop login,
+              no password and no profile. You sign in with your existing
+              Microsoft work or school account.
+            </li>
+            <li>
+              <strong>No advertising and no tracking.</strong> We do not sell
+              data, we do not run advertising, and there are no third-party
+              analytics or advertising SDKs in the app.
+            </li>
+            <li>
+              <strong>Notifications carry a pointer, not content.</strong> A push
+              says who did what to which item, and links to it. Your device then
+              fetches the detail with your own credentials.
+            </li>
+          </ul>
+
+          <h2 id="app">3. What the app does with your data</h2>
+          <h3>Sign-in</h3>
+          <p>
+            You sign in through Microsoft Entra ID. We never see your password.
+            The access and refresh tokens Microsoft issues are stored in the
+            operating system's secure store on your device (the iOS Keychain or
+            the Android Keystore) and are used only to call Azure DevOps. They
+            are not transmitted to us, except for the one-off organization
+            check described in section 4, where the token is used and discarded
+            and never written down.
+          </p>
+          <h3>The offline cache</h3>
+          <p>
+            Pages you open are cached on your device so the app works without a
+            signal. That cache lives only on your device, is namespaced per
+            account, and is deleted when you sign that account out or remove the
+            app.
+          </p>
+          <h3>Settings</h3>
+          <p>
+            Your preferences — theme, default project, notification choices —
+            are stored on your device. Notification preferences are additionally
+            stored by the relay when your organization uses it, because the
+            relay needs them to decide what to send.
+          </p>
+
+          <h2 id="relay">4. What the relay sees</h2>
+          <p>
+            The relay only exists for organizations whose administrator has
+            installed the Boardhop extension and turned it on. If your
+            organization has not, nothing in this section applies to you and the
+            relay holds nothing about you.
+          </p>
+          <h3>Device registration</h3>
+          <p>
+            To receive notifications your device registers with the relay. It
+            presents its Apple or Google push token together with your Azure
+            DevOps token. We use your token once, to confirm with Microsoft that
+            you are a member of that organization and to learn your user id, and
+            then discard it. <strong>We never store your Azure DevOps
+            token.</strong> What we keep is the organization id, your Azure
+            DevOps user id, your device's push token, and your notification
+            preferences.
+          </p>
+          <h3>Events</h3>
+          <p>
+            Azure DevOps sends the relay a webhook when something happens in
+            your organization — a comment, a review request, an assignment, a
+            finished run, a waiting approval. The relay reads that payload in
+            memory to work out who should be told and which item it concerns,
+            and <strong>persists nothing from it</strong>: not the payload, not
+            comment text, not descriptions, not code.
+          </p>
+          <h3>What is sent to Apple and Google</h3>
+          <p>
+            Only a pointer: the organization, the event type, the type and id of
+            the item, the display name of the person who acted, a short verb
+            such as &ldquo;replied on&rdquo;, a title of at most 80 characters,
+            and a link. Item titles are metadata that appear in every list view
+            in Azure DevOps; comment bodies, descriptions and code are content
+            and are never included. Your device fetches the detail itself, with
+            your own credentials, before showing you the notification.
+          </p>
+          <h3>Logs</h3>
+          <p>
+            The relay logs the pointer it emitted, the organization, and
+            technical delivery results, with credentials redacted. These logs
+            exist to debug delivery failures.
+          </p>
+
+          <h2 id="counting">5. The active-user count</h2>
+          <p>
+            Organizations on the paid plan are billed per active user. To do
+            that the relay records, for each organization and each calendar
+            month, the set of Azure DevOps user ids that opened the app for that
+            organization. It records that a user was active, not what they did.
+            Your organization's administrators can see this list — it is shown
+            in the admin hub so an invoice can be checked.
+          </p>
+
+          <h2 id="diagnostics">6. Diagnostics and crash data</h2>
+          <p>
+            Store builds of the app contain no analytics SDK and no crash
+            reporting service. Diagnostic screens exist only in internal builds
+            and never leave the device. If you send us a diagnostic report
+            yourself, you choose what it contains before it is sent.
+          </p>
+          <p>
+            Apple and Google may provide us with aggregate, anonymised crash and
+            install statistics from their own stores; this is governed by their
+            policies and we cannot identify you from it.
+          </p>
+
+          <h2 id="sharing">7. Who else is involved</h2>
+          <p>
+            We use a small number of service providers. They are listed, with
+            what each one receives and where it is processed, on the
+            <a href="subprocessors.html">subprocessors page</a>. We do not sell
+            personal data and we do not share it for advertising.
+          </p>
+          <p>
+            We will disclose data if we are legally required to. Where the law
+            allows, we will tell the affected organization first.
+          </p>
+
+          <h2 id="retention">8. How long anything is kept</h2>
+          <table>
+            <thead>
+              <tr><th>What</th><th>Where</th><th>Kept for</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Azure DevOps tokens</td><td>Your device only</td><td>Until you sign out</td></tr>
+              <tr><td>Offline cache</td><td>Your device only</td><td>Until you sign out or remove the app</td></tr>
+              <tr><td>Device registration</td><td>Relay</td><td>Until the device unregisters, the token is rejected by Apple or Google, or 90 days of inactivity</td></tr>
+              <tr><td>Webhook payloads</td><td>Relay, in memory</td><td>Not persisted</td></tr>
+              <tr><td>Delivery logs</td><td>Relay</td><td>30 days</td></tr>
+              <tr><td>Active-user ledger</td><td>Relay</td><td>24 months, for billing history</td></tr>
+              <tr><td>Billing records</td><td>Stripe and our records</td><td>As long as tax law requires</td></tr>
+            </tbody>
+          </table>
+
+          <h2 id="rights">9. Your rights</h2>
+          <p>
+            Depending on where you live you may have the right to access,
+            correct, delete or export the personal data we hold, to object to
+            processing, or to complain to a supervisory authority. Because most
+            of what concerns you sits in your employer's Azure DevOps
+            organization rather than with us, the fastest route is usually your
+            own administrator. For the little we hold — your device
+            registration, your notification preferences and the fact that you
+            were active in a month — write to
+            <a href="mailto:privacy@boardhop.dev">privacy@boardhop.dev</a> and
+            we will respond within 30 days.
+          </p>
+          <p>
+            You can remove everything we hold about you at any time by turning
+            off notifications in the app or by signing out, which unregisters
+            the device.
+          </p>
+
+          <h2 id="children">10. Children</h2>
+          <p>
+            Boardhop is a tool for workplaces and is not directed at children. We
+            do not knowingly collect data from anyone under 16.
+          </p>
+
+          <h2 id="changes">11. Changes</h2>
+          <p>
+            If we change this policy materially we will update the date at the
+            top and, for organizations on a paid plan, notify the billing contact
+            before the change takes effect.
+          </p>
+
+          <h2 id="contact-privacy">12. Contact</h2>
+          <p>
+            KammCS, publisher of Boardhop —
+            <a href="mailto:privacy@boardhop.dev">privacy@boardhop.dev</a>.
+            Postal address to be added before public launch.
+          </p>
+
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer-grid">
+          <div>
+            <a class="brand" href="../index.html" style="margin-bottom: 12px">
+              <img src="../img/brand/icon-128.webp" alt="" width="34" height="34" />
+              Boardhop
+            </a>
+            <p style="max-width: 24rem">
+              A mobile client for Azure DevOps Services. Built by KammCS.
+            </p>
+          </div>
+          <div>
+            <h4>Product</h4>
+            <ul>
+              <li><a href="../index.html#features">Features</a></li>
+              <li><a href="../index.html#big-screens">Tablets</a></li>
+              <li><a href="../pricing.html">Pricing</a></li>
+              <li><a href="../index.html#roadmap">Roadmap</a></li>
+              <li><a href="../index.html#faq">FAQ</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Legal</h4>
+            <ul>
+              <li><a href="privacy.html">Privacy policy</a></li>
+              <li><a href="terms.html">Terms of service</a></li>
+              <li><a href="refunds.html">Refund policy</a></li>
+              <li><a href="dpa.html">Data processing addendum</a></li>
+              <li><a href="subprocessors.html">Subprocessors</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Contact</h4>
+            <ul>
+              <li><a href="mailto:hello@boardhop.dev">hello@boardhop.dev</a></li>
+              <li><a href="security.html">Security</a></li>
+              <li><a href="mailto:support@boardhop.dev">Support</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>&copy; <span data-year>2026</span> KammCS. All rights reserved.</span>
+          <span
+            >Azure DevOps is a trademark of Microsoft Corporation. Boardhop is not
+            affiliated with or endorsed by Microsoft.</span
+          >
+        </div>
+      </div>
+    </footer>
+
+    <script src="../js/site.js" defer></script>
+  </body>
+</html>

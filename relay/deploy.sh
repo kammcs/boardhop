@@ -35,6 +35,13 @@ say "deploying $VERSION to $HOST"
 
 run "mkdir -p $REMOTE/src $REMOTE/caddy/data $REMOTE/caddy/config $REMOTE/data/capture"
 
+# The marketing site (website/, deployed by website/deploy.sh) shares Caddy.
+# Seed both paths it needs: the document root, so Docker does not create it as
+# root, and the auth fragment, because the Caddyfile imports it unconditionally
+# and a missing import fails the adapt.
+run "mkdir -p $REMOTE/site $REMOTE/caddy/site-extra
+     [ -f $REMOTE/caddy/site-extra/auth.caddyfile ] || : > $REMOTE/caddy/site-extra/auth.caddyfile"
+
 # The capture secret. Generated once, never printed, never leaves the box.
 run "if [ ! -s $REMOTE/relay.env ]; then
        umask 077
