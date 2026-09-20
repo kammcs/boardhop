@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' hide Durations;
 
 import '../../core/display_cutout.dart';
+import '../../core/display_environment.dart' show DisplayEnvironment;
 import '../../theme/layout.dart';
 import '../../theme/theme_controller.dart' show RailSide;
 import '../../theme/tokens.dart';
@@ -68,6 +69,16 @@ import '../shared/widgets/glass_navigation_rail.dart';
 ///   left; the 80 % rule is the pill's, not theirs.
 /// * The selected destination keeps its capsule of brighter glass behind
 ///   icon and label, the one thing the bare chrome keeps.
+/// * The page keeps clear of the display's **rounded corners** at the top
+///   and on the side the rail is not on ([cornerInsets]): iOS reports zero
+///   padding on both of those edges of an iPhone Duo — the status bar is
+///   in the trailing column — while the corner is curved all the same, so
+///   the app bar's leading icon was cut by it (Kelly, 2026-09-20). The
+///   corner-adapted safe area is what says so: **16 pt** on the leading
+///   edge of the inner display and 2.3 on the cover, measured
+///   (research/23 section 9.11). The clearance is handed to the page as
+///   `MediaQuery.padding`, so its app bar and its content both take it
+///   with nothing of their own.
 /// * The page fades out at the column's inner edge ([columnFade]), on a
 ///   cliff [fadeWidth] wide, so nothing shows under the destinations or
 ///   the status cluster. A sideways scroller still scrolls under the
@@ -101,6 +112,7 @@ class GlassShellLayout extends StatelessWidget {
     this.cutoutSide = CutoutSide.unknown,
     this.systemRailSide,
     this.occlusions = const [],
+    this.cornerInsets = EdgeInsets.zero,
     this.creaseBand,
     this.creaseAxis,
   });
@@ -129,6 +141,12 @@ class GlassShellLayout extends StatelessWidget {
   /// stacked status bar in the corner of the bar edge. The rail keeps
   /// clear of the ones that fall on its own edge.
   final List<Rect> occlusions;
+
+  /// What the display's rounded corners cost each edge, from iOS 26's
+  /// corner-adapted safe area (`DisplayEnvironment.cornerInsets`).
+  /// [EdgeInsets.zero] where nothing answered, which on a system edge
+  /// falls back to [cornerFallback].
+  final EdgeInsets cornerInsets;
 
   /// The active fold's keep-out band, margins included, or null when
   /// nothing is folded.
@@ -414,6 +432,14 @@ class GlassShellLayout extends StatelessWidget {
       left = onRight ? size.width - edge - railWidth : edge;
       gutter = railGutterFor(context) + (railSideClear ? 0 : railSideInset);
     }
+    // What the page is given as its own `MediaQuery.padding`. On a system
+    // edge the top and the far side are widened to clear the display's
+    // rounded corner, which iOS does not report there: the app bar then
+    // takes the top itself, as it takes the Dynamic Island's inset on a
+    // phone, and the SafeArea below takes the side.
+    final pageInset = system == null
+        ? inset
+        : _corneredInset(inset, onRight: onRight);
     final page = _keyboardSafe(
       context,
       keyboard,
@@ -421,25 +447,35 @@ class GlassShellLayout extends StatelessWidget {
           ? MediaQuery(
               data: mq.copyWith(
                 viewInsets: mq.viewInsets.copyWith(bottom: 0),
-                padding: inset.copyWith(
-                  left: onRight ? inset.left : gutter,
-                  right: onRight ? gutter : inset.right,
+                padding: pageInset.copyWith(
+                  left: onRight ? pageInset.left : gutter,
+                  right: onRight ? gutter : pageInset.right,
                 ),
               ),
               child: _page,
             )
-          : SafeArea(
-              top: false,
-              bottom: false,
-              child: AnimatedPadding(
-                duration: Durations.normal,
-                curve: Motion.standard,
-                // The SafeArea already took the inset off this side.
-                padding: EdgeInsets.only(
-                  left: onRight ? 0 : math.max(0, gutter - inset.left),
-                  right: onRight ? math.max(0, gutter - inset.right) : 0,
+          : MediaQuery(
+              // The keyboard's inset is spent by [_keyboardSafe] above,
+              // as it is in the bleeding branch; this media query is
+              // inside it, so it has to say so again or it would hand the
+              // page back an inset that is no longer there.
+              data: mq.copyWith(
+                padding: pageInset,
+                viewInsets: mq.viewInsets.copyWith(bottom: 0),
+              ),
+              child: SafeArea(
+                top: false,
+                bottom: false,
+                child: AnimatedPadding(
+                  duration: Durations.normal,
+                  curve: Motion.standard,
+                  // The SafeArea already took the inset off this side.
+                  padding: EdgeInsets.only(
+                    left: onRight ? 0 : math.max(0, gutter - pageInset.left),
+                    right: onRight ? math.max(0, gutter - pageInset.right) : 0,
+                  ),
+                  child: _page,
                 ),
-                child: _page,
               ),
             ),
     );
@@ -471,6 +507,22 @@ class GlassShellLayout extends StatelessWidget {
       axis: Axis.vertical,
       chrome: chrome,
       page: masked,
+    );
+  }
+
+  /// [inset] widened at the top and on the side away from the rail to
+  /// clear the display's rounded corner.
+  ///
+  /// Only those two edges: the rail's own side is the system's 84 pt bar
+  /// column, which clears any corner several times over, and the bottom
+  /// carries the home indicator's 34 pt. Zero where iOS measured no
+  /// corner, which leaves the page exactly where it was.
+  EdgeInsets _corneredInset(EdgeInsets inset, {required bool onRight}) {
+    final clear = DisplayEnvironment.chromeInsetsOf(inset, cornerInsets);
+    return inset.copyWith(
+      top: clear.top,
+      left: onRight ? clear.left : inset.left,
+      right: onRight ? inset.right : clear.right,
     );
   }
 

@@ -49,6 +49,12 @@ void main() {
   const coverInsets = EdgeInsets.fromLTRB(0, 0, 84, 34);
   const coverStatusBar = Rect.fromLTWH(382, 0, 84, 170);
   const pane = Size(475, 669);
+  // What the corner-adapted safe area answers on each panel
+  // (research/23 section 9.11, measured 2026-09-20): 16 pt on the inner
+  // display's leading edge and 2.3 on the cover's, where `padding` is
+  // zero and the corner is rounded all the same.
+  const innerCorner = EdgeInsets.fromLTRB(16, 0, 84, 34);
+  const coverCorner = EdgeInsets.fromLTRB(2.3, 0, 84, 34);
   // The tall pose, half folded: the crease runs across the window with
   // 20 pt of keep-out on each side of it.
   const tallCrease = Rect.fromLTWH(0, 455.5, 669, 40);
@@ -66,6 +72,7 @@ void main() {
     double keyboard = 0,
     RailSide? systemSide,
     List<Rect> occlusions = const [],
+    EdgeInsets corner = EdgeInsets.zero,
     Rect? creaseBand,
     Axis? creaseAxis,
   }) async {
@@ -92,6 +99,7 @@ void main() {
           cutoutSide: cutout,
           systemRailSide: systemSide,
           occlusions: occlusions,
+          cornerInsets: corner,
           creaseBand: creaseBand,
           creaseAxis: creaseAxis,
           body: Builder(
@@ -397,6 +405,98 @@ void main() {
     expect(rail(tester).center.dx, 42);
     expect(body(tester).left, 84);
     expect(body(tester).width, 382);
+  });
+
+  testWidgets('the rounded corner clears the page, and only where the '
+      'system reserved nothing', (tester) async {
+    await pump(
+      tester,
+      size: inner,
+      insets: innerInsets,
+      systemSide: RailSide.right,
+      occlusions: const [innerStatusBar],
+      corner: innerCorner,
+    );
+    // The app bar's leading icon sat about 9 pt from an edge iOS reports
+    // as zero, inside an 18 pt corner (Kelly, 2026-09-20). The page now
+    // starts at the corner-adapted inset instead, which the leading icon
+    // takes with it.
+    final b = body(tester);
+    expect(b.left, 16);
+    // And stops where it did: the bar column's 84 pt is untouched.
+    expect(b.right, 867);
+    // The top is the corner's own answer for the horizontal axis, which
+    // is zero: the bar spans the width and its items are the ones that
+    // move, so nothing is pushed down.
+    expect(seen, const EdgeInsets.only(bottom: 34));
+    // The rail is the system's column, not the page's, so it is where it
+    // was: lined up under the status cluster.
+    expect(rail(tester).center.dx, innerStatusBar.center.dx);
+  });
+
+  testWidgets('the cover takes the corner it was given, not the inner '
+      "display's", (tester) async {
+    await pump(
+      tester,
+      size: cover,
+      insets: coverInsets,
+      systemSide: RailSide.right,
+      occlusions: const [coverStatusBar],
+      corner: coverCorner,
+    );
+    expect(body(tester).left, closeTo(2.3, 0.01));
+    expect(body(tester).right, 382);
+  });
+
+  testWidgets('the rail on the leading edge: the corner clears the far '
+      'side', (tester) async {
+    await pump(
+      tester,
+      size: inner,
+      insets: const EdgeInsets.fromLTRB(84, 0, 0, 34),
+      systemSide: RailSide.left,
+      occlusions: const [Rect.fromLTWH(0, 0, 84, 120)],
+      corner: const EdgeInsets.fromLTRB(84, 0, 16, 34),
+    );
+    final b = body(tester);
+    expect(b.left, 84);
+    expect(b.right, inner.width - 16);
+  });
+
+  testWidgets('no system edge: the corner insets change nothing', (
+    tester,
+  ) async {
+    // An iPhone in landscape reports a corner too, and there today's
+    // rules stand: the page's own SafeArea and the rail's gutter, exactly
+    // as in the first test in this file.
+    await pump(
+      tester,
+      size: phone,
+      insets: phoneInsets,
+      corner: const EdgeInsets.fromLTRB(59, 21, 59, 21),
+    );
+    final b = body(tester);
+    expect(b.left, 59);
+    expect(b.right, phone.width - 59 - GlassShellLayout.railGutter);
+    expect(seen, const EdgeInsets.only(bottom: 21));
+  });
+
+  testWidgets('a sideways scroller takes the corner as padding, not as a '
+      'gap', (tester) async {
+    await pump(
+      tester,
+      size: inner,
+      insets: innerInsets,
+      systemSide: RailSide.right,
+      occlusions: const [innerStatusBar],
+      corner: innerCorner,
+      bleed: true,
+    );
+    // The board fills the window and gets both edges as padding, so its
+    // first column rests clear of the corner and its last slides under
+    // the system's column.
+    expect(body(tester).left, 0);
+    expect(seen, const EdgeInsets.fromLTRB(16, 0, 84, 34));
   });
 
   testWidgets('a compact pane keeps the rail and its labels', (tester) async {

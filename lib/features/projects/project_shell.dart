@@ -271,6 +271,7 @@ class _ProjectShellState extends State<ProjectShell>
         // and the fold.
         systemRailSide: display.railSide(Directionality.of(context)),
         occlusions: display.occlusions,
+        cornerInsets: display.cornerInsets,
         creaseBand: display.creaseBand,
         creaseAxis: display.creaseAxis,
       );

@@ -262,6 +262,14 @@ import UserNotifications
   /// * `verticalBarEdge` — the edge iOS puts its own vertical bar on, which
   ///   is where the glass rail belongs (research/23 D1).
   /// * `hinge` — the fold's status and angle, from a `UIHingeInteraction`.
+  /// * `cornerInsets` — the corner-adapted safe area (iOS 26's layout
+  ///   regions), which is what a rounded corner costs the leading and
+  ///   trailing ends of a top bar. `padding` is genuinely zero on those
+  ///   edges of an iPhone Duo, so only this can say the corner is there
+  ///   (research/23 section 4.3).
+  /// * `regionInsets` — the same query for the plain safe area and for
+  ///   both adaptivity axes, side by side. Diagnostics: the Display probe
+  ///   page shows them so a pose can be measured rather than guessed.
   ///
   /// **Push, not poll (research/23 §9.2).** Folding an iPhone Duo changes
   /// no metric Flutter can see: `MediaQuery.size`, `padding` and
@@ -319,6 +327,8 @@ import UserNotifications
       "verticalBarEdge": verticalBarEdge(),
       "hinge": hingeState(),
       "interfaceOrientation": Self.interfaceOrientation(),
+      "cornerInsets": cornerInsets(),
+      "regionInsets": regionInsets(),
     ]
   }
 
@@ -376,6 +386,10 @@ import UserNotifications
       state["interfaceOrientation"] as? String ?? "",
       (state["hinge"] as? [String: Any])?["status"] as? String ?? "",
     ]
+    let corner = state["cornerInsets"] as? [String: Any] ?? [:]
+    for edge in ["left", "top", "right", "bottom"] {
+      parts.append("\(corner[edge] ?? "")")
+    }
     for region in state["regions"] as? [[String: Any]] ?? [] {
       parts.append(
         "\(region["kind"] ?? "")|\(region["x"] ?? "")|\(region["y"] ?? "")"
@@ -537,6 +551,49 @@ import UserNotifications
       }
     }
     return out
+  }
+
+  /// The corner-adapted safe area on the Flutter view, as
+  /// `{left, top, right, bottom}` in points.
+  ///
+  /// An iPhone Duo reports **zero** padding on the top and leading edges
+  /// in its wide pose and on its cover — the status bar lives in the
+  /// trailing column — while the display's own corners are rounded, so a
+  /// leading app-bar icon laid out against a zero inset is cut by the
+  /// corner. `UIView.LayoutRegion.safeArea(cornerAdaptation:)` is Apple's
+  /// answer: the region is pulled in far enough that a horizontal row of
+  /// controls clears the curve. `.horizontal` is the axis a top bar wants.
+  ///
+  /// iOS 26, not 27.1: the layout regions shipped a release before the
+  /// reserved regions did, so this answers on every iOS 26 device too.
+  private func cornerInsets() -> [String: Any] {
+    guard #available(iOS 26.0, *), let view = displayViews().first?.1 else {
+      return Self.encode(.zero)
+    }
+    return Self.encode(view.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal)))
+  }
+
+  /// The plain safe area beside both corner-adapted axes, for the Display
+  /// probe page: what each query answers in this pose, measured.
+  private func regionInsets() -> [String: Any] {
+    guard #available(iOS 26.0, *), let view = displayViews().first?.1 else {
+      return [:]
+    }
+    return [
+      "safeArea": Self.encode(view.edgeInsets(for: .safeArea())),
+      "cornerHorizontal": Self.encode(
+        view.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal))),
+      "cornerVertical": Self.encode(
+        view.edgeInsets(for: .safeArea(cornerAdaptation: .vertical))),
+      "margins": Self.encode(view.edgeInsets(for: .margins())),
+    ]
+  }
+
+  private static func encode(_ insets: UIEdgeInsets) -> [String: Any] {
+    return [
+      "left": insets.left, "top": insets.top,
+      "right": insets.right, "bottom": insets.bottom,
+    ]
   }
 
   /// `"leading"`, `"trailing"` or `"unspecified"`.

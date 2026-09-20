@@ -46,16 +46,27 @@ void main() {
     'source': 'flutterView',
   };
 
+  Map<String, Object?> insets(double l, double t, double r, double b) => {
+    'left': l,
+    'top': t,
+    'right': r,
+    'bottom': b,
+  };
+
   Map<String, Object?> state({
     List<Map<String, Object?>> regions = const [],
     String barEdge = 'unspecified',
     Map<String, Object?> hinge = const {'status': 'none'},
     String orientation = 'portrait',
+    Map<String, Object?>? corner,
+    Map<String, Object?>? regionInsets,
   }) => {
     'regions': regions,
     'verticalBarEdge': barEdge,
     'hinge': hinge,
     'interfaceOrientation': orientation,
+    'cornerInsets': ?corner,
+    'regionInsets': ?regionInsets,
   };
 
   /// The cover panel: no division at all, so the pre-27.1 cutout answer
@@ -67,7 +78,10 @@ void main() {
     regions: [region('occlusion', 382, 0, 84, 170)],
   );
 
-  /// Wide pose, flat: the division is reported but inactive.
+  /// Wide pose, flat: the division is reported but inactive. The
+  /// corner-adapted safe area is what iOS answered on the device
+  /// (research/23 §9.11): 16 pt on the leading edge, where `padding` is
+  /// zero and the display's corner is rounded all the same.
   final wideFlat = state(
     barEdge: 'trailing',
     hinge: const {'status': 'fullyOpen', 'angle': 3.14},
@@ -76,6 +90,13 @@ void main() {
       region('division', 455.5, 0, 40, 669, active: false),
       region('occlusion', 867, 0, 84, 120),
     ],
+    corner: insets(16, 0, 84, 34),
+    regionInsets: {
+      'safeArea': insets(0, 0, 84, 34),
+      'cornerHorizontal': insets(16, 0, 84, 34),
+      'cornerVertical': insets(0, 16, 84, 34),
+      'margins': insets(20, 0, 84, 34),
+    },
   );
 
   /// Wide pose, half folded: the same rect, now active, with 20 pt of
@@ -215,6 +236,45 @@ void main() {
       window: window,
     );
   }
+
+  test('the corner-adapted safe area comes across whole', () async {
+    final environment = await live(wideFlat);
+    // What `MediaQuery.padding` cannot say: the leading edge is zero and
+    // the corner is rounded anyway (Kelly, 2026-09-20).
+    expect(environment.cornerInsets, const EdgeInsets.fromLTRB(16, 0, 84, 34));
+    expect(
+      environment.regionInsets['safeArea'],
+      EdgeInsets.zero.copyWith(right: 84, bottom: 34),
+    );
+    expect(
+      environment.regionInsets['cornerVertical'],
+      const EdgeInsets.fromLTRB(0, 16, 84, 34),
+    );
+  });
+
+  test('chromeInsets is the larger of the two on every edge', () async {
+    final environment = await live(wideFlat);
+    // The bar column and the home indicator already clear any corner and
+    // win; the leading edge has nothing but the corner, so it takes it.
+    expect(
+      environment.chromeInsets(const EdgeInsets.fromLTRB(0, 0, 84, 34)),
+      const EdgeInsets.fromLTRB(16, 0, 84, 34),
+    );
+    // A padding that is wider everywhere is left alone.
+    expect(
+      environment.chromeInsets(const EdgeInsets.fromLTRB(59, 24, 84, 34)),
+      const EdgeInsets.fromLTRB(59, 24, 84, 34),
+    );
+  });
+
+  test('nothing answered: the corner costs nothing', () async {
+    final environment = await live(null);
+    expect(environment.cornerInsets, EdgeInsets.zero);
+    expect(environment.regionInsets, isEmpty);
+    // Which leaves every page exactly where it was.
+    const padding = EdgeInsets.fromLTRB(0, 59, 0, 34);
+    expect(environment.chromeInsets(padding), padding);
+  });
 
   test('cover panel: a vertical bar edge, no fold at all', () {
     const window = Size(466, 678);

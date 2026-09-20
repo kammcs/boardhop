@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
@@ -50,6 +51,7 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
     DisplayRegions regions = const DisplayRegions(),
     BarEdge barEdge = BarEdge.unspecified,
     HingeState hinge = const HingeState(),
+    EdgeInsets cornerInsets = EdgeInsets.zero,
     Size? window,
     List<ui.DisplayFeature> displayFeatures = const [],
   }) : _channel = const MethodChannel(DisplayCutout.channelName),
@@ -57,6 +59,7 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
     _regions = regions;
     _barEdge = barEdge;
     _hinge = hinge;
+    _cornerInsets = cornerInsets;
     _window = window;
     _displayFeatures = displayFeatures;
   }
@@ -70,6 +73,8 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
   DisplayRegions _regions = const DisplayRegions();
   BarEdge _barEdge = BarEdge.unspecified;
   HingeState _hinge = const HingeState();
+  EdgeInsets _cornerInsets = EdgeInsets.zero;
+  Map<String, EdgeInsets> _regionInsets = const {};
   Size? _window;
   List<ui.DisplayFeature> _displayFeatures = const [];
   int _pushes = 0;
@@ -86,6 +91,46 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
   /// How far open the fold is. [HingeStatus.none] on hardware that does
   /// not fold.
   HingeState get hinge => _hinge;
+
+  /// What a **rounded corner** costs the edges, from iOS 26's
+  /// corner-adapted safe area, or [EdgeInsets.zero] where nothing answers.
+  ///
+  /// This is not the same question as `MediaQuery.padding`, and on an
+  /// iPhone Duo the two disagree: iOS reports **zero** padding on the top
+  /// and leading edges of the inner display and of the cover (the status
+  /// bar is in the trailing column), while both displays have rounded
+  /// corners — 55 px on the inner panel, 59 on the cover — so an app bar's
+  /// leading icon laid out against that zero is cut by the curve. A
+  /// `SafeArea` cannot help, because the inset really is zero; Apple's
+  /// answer is the corner-adapted layout region, which this carries
+  /// (research/23 section 4.3, Kelly 2026-09-20).
+  EdgeInsets get cornerInsets => _cornerInsets;
+
+  /// Every layout region the Runner measured, keyed by name
+  /// (`safeArea`, `cornerHorizontal`, `cornerVertical`, `margins`).
+  /// Diagnostics: the Display probe page shows them so a pose can be
+  /// recorded rather than guessed.
+  Map<String, EdgeInsets> get regionInsets => _regionInsets;
+
+  /// [padding] widened to clear a rounded corner: the larger of the two on
+  /// every edge.
+  ///
+  /// What chrome pinned to an edge should use in place of the raw padding.
+  /// Where iOS reports a real inset (the 84 pt bar column, the 34 pt home
+  /// indicator) that inset already clears the corner and wins; where it
+  /// reports zero the corner is all there is.
+  EdgeInsets chromeInsets(EdgeInsets padding) =>
+      chromeInsetsOf(padding, _cornerInsets);
+
+  /// [chromeInsets] as a pure function, for the shell, which is handed the
+  /// corner insets rather than reading the scope itself.
+  static EdgeInsets chromeInsetsOf(EdgeInsets padding, EdgeInsets corner) =>
+      EdgeInsets.fromLTRB(
+        math.max(padding.left, corner.left),
+        math.max(padding.top, corner.top),
+        math.max(padding.right, corner.right),
+        math.max(padding.bottom, corner.bottom),
+      );
 
   /// Which side of the window the Dynamic Island is on in landscape, or
   /// [CutoutSide.unknown] on a folding display where the question has no
@@ -153,6 +198,8 @@ class DisplayEnvironment extends ChangeNotifier with WidgetsBindingObserver {
     );
     _barEdge = DisplayCutout.decodeBarEdge(map?['verticalBarEdge']);
     _hinge = DisplayCutout.decodeHinge(map?['hinge']);
+    _cornerInsets = DisplayCutout.decodeInsets(map?['cornerInsets']);
+    _regionInsets = DisplayCutout.decodeInsetMap(map?['regionInsets']);
   }
 
   void _readWindow() {
@@ -323,6 +370,7 @@ class DisplayScope extends InheritedNotifier<DisplayEnvironment> {
     DisplayRegions regions = const DisplayRegions(),
     BarEdge barEdge = BarEdge.unspecified,
     HingeState hinge = const HingeState(),
+    EdgeInsets cornerInsets = EdgeInsets.zero,
     Size? window,
     List<ui.DisplayFeature> displayFeatures = const [],
     required Widget child,
@@ -332,6 +380,7 @@ class DisplayScope extends InheritedNotifier<DisplayEnvironment> {
            regions: regions,
            barEdge: barEdge,
            hinge: hinge,
+           cornerInsets: cornerInsets,
            window: window,
            displayFeatures: displayFeatures,
          ),

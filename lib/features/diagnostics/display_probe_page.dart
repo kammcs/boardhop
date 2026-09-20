@@ -83,6 +83,11 @@ class _DisplayProbePageState extends State<DisplayProbePage>
       'padding': insets(media.padding),
       'viewPadding': insets(media.viewPadding),
       'viewInsets': insets(media.viewInsets),
+      'cornerInsets': insets(display.cornerInsets),
+      'chromeInsets': insets(display.chromeInsets(media.padding)),
+      'regionInsets': {
+        for (final e in display.regionInsets.entries) e.key: insets(e.value),
+      },
       'textScale': media.textScaler.scale(14) / 14,
       'displayFeatures': [
         for (final f in media.displayFeatures)
@@ -187,6 +192,23 @@ class _DisplayProbePageState extends State<DisplayProbePage>
                   ('padding', _insets(media.padding)),
                   ('viewPadding', _insets(media.viewPadding)),
                   ('viewInsets', _insets(media.viewInsets)),
+                ],
+              ),
+              _Section(
+                // The corner is the one thing `padding` cannot say: it is
+                // zero on the top and leading edges of an iPhone Duo and
+                // the corner is rounded all the same (research/23 4.3).
+                title: 'Corner-adapted layout regions',
+                rows: [
+                  ('cornerInsets', _insets(display.cornerInsets)),
+                  (
+                    'chromeInsets',
+                    _insets(display.chromeInsets(media.padding)),
+                  ),
+                  if (display.regionInsets.isEmpty)
+                    ('regions', 'nothing answered (before iOS 26, or Android)'),
+                  for (final e in display.regionInsets.entries)
+                    (e.key, _insets(e.value)),
                 ],
               ),
               _Section(

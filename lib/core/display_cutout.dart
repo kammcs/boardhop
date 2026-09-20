@@ -198,6 +198,31 @@ class DisplayCutout {
     _ => BarEdge.unspecified,
   };
 
+  /// `{left, top, right, bottom}` from the channel, in points; anything
+  /// else is [EdgeInsets.zero], which is also what iOS answers on a
+  /// display with no rounded corner in the way.
+  static EdgeInsets decodeInsets(Object? raw) {
+    if (raw is! Map) return EdgeInsets.zero;
+    final map = raw.cast<String, dynamic>();
+    double at(String key) => (map[key] as num?)?.toDouble() ?? 0;
+    return EdgeInsets.fromLTRB(
+      at('left'),
+      at('top'),
+      at('right'),
+      at('bottom'),
+    );
+  }
+
+  /// `{name: {left, top, right, bottom}}` from the channel: every layout
+  /// region the Runner measured, for the Display probe page.
+  static Map<String, EdgeInsets> decodeInsetMap(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        '${entry.key}': decodeInsets(entry.value),
+    };
+  }
+
   /// `{status, angle, updates, view}` from the channel; a null map is a
   /// platform that does not fold.
   static HingeState decodeHinge(Object? raw) {

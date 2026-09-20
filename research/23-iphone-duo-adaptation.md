@@ -480,7 +480,12 @@ engine populates it yet (§1.5).
    measured constant.
 5. **Does `MediaQuery` update during a fold?** No — see §9.2. It does not update at all. There is
    nothing to animate from `MediaQuery`; the animation in D7 has to be driven by the channel.
-6. **The editor under a live resize.** Phase 4; not touched.
+6. **The editor under a live resize.** **Nothing breaks.** Folding, unfolding, rotating and
+   folding again with the `html_editor_enhanced` WebView live left the content intact, the
+   WebView un-recreated (one `onInit`, no dispose) and the log clean; `getText()` still
+   answered afterwards. The one imperfection is the slot's **height**, which is frozen at
+   the value of the first build and is not worth unfreezing. Measured in §9.12, recorded as
+   F6 in `research/spikes/results/README.md`.
 7. **What the display channel returns on the inner display.** Everything, once the view lookup is
    right (§9.1): both region kinds with margins and `isActive`, the bar edge, and a live hinge.
    The old selector path returned an empty list, which Dart read as "asked, nothing in the way" —
@@ -807,3 +812,132 @@ typechooser2,drag,drag-back2}`), wide book in dark (`phase3-wide-book-dark`), ta
 (`phase3-tall-book-{board,pipelines,pr}`), and the restored state (`phase3-restored`). A full
 circuit — wide flat, wide book, tall book, tall flat, dialogs, two drags — logged **no exception
 and no overflow at all**. The Duo is left open, base rotation, light.
+
+### 9.11 Phase 4A landed: corner clearance (2026-09-20)
+
+Kelly's observation: in the wide pose and on the cover the project picker's icon sits about 9 pt
+from the left edge and 14 pt from the top, on edges iOS reports as **zero** padding (the status
+bar is in the trailing column), and the display's corners are rounded — 55 px on the inner panel,
+59 on the cover — so the icon is cut by the curve in Device Hub's bezel and on hardware.
+`SafeArea` cannot help, because the inset genuinely is zero.
+
+**The API answers, and it is iOS 26, not 27.1.** `UIView.LayoutRegion.safeArea(cornerAdaptation:)`
+with `view.edgeInsets(for:)` (the Swift refinement of `edgeInsetsForLayoutRegion:`, confirmed
+against `UIKit.swiftmodule`'s `.swiftinterface` in the 27.1 SDK — `UIViewLayoutRegion.h` marks the
+whole class `NS_REFINED_FOR_SWIFT`) is available from **iOS 26.0**, a release before the reserved
+regions. There is **no public corner radius**: `UIScreen._displayCornerRadius` is private and
+nothing in `UIScreen.h`, `UIWindow.h` or `UIWindowScene.h` replaces it, so the clearance comes
+from the corner-adapted insets alone. What it answers, measured on the device in each pose
+(l / t / r / b, points):
+
+| Pose | window | `safeArea` | `cornerAdaptation: .horizontal` | `.vertical` | `margins` |
+|---|---|---|---|---|---|
+| Wide, inner | 951 x 669 | 0 / 0 / 84 / 34 | **16** / 0 / 84 / 34 | 0 / **16** / 84 / 34 | 20 / 0 / 84 / 34 |
+| Cover, portrait | 466 x 678 | 0 / 0 / 84 / 34 | **2.3** / 0 / 84 / 34 | 0 / **17.3** / 84 / 34 | 20 / 0 / 84 / 34 |
+| Tall, inner | 669 x 951 | 0 / 82 / 0 / 34 | **16** / 82 / **16** / 34 | 0 / 82 / 0 / 34 | 20 / 82 / 20 / 34 |
+
+Three things to read off it. The two axes are **alternatives, not a pair**: the horizontal one
+buys the clearance on the leading and trailing edges and leaves the top at zero, the vertical one
+does the opposite, and a layout picks the axis its content runs along. A horizontal app bar whose
+items sit in a row wants the **horizontal** one, so that is what the payload carries as
+`cornerInsets`; taking the larger of the two per edge would inset twice for one corner. And the
+number is **not the corner radius**: the cover's corner is the larger of the two in points (19.7
+against 18.3) and its horizontal answer is the smaller by a factor of seven, so UIKit is answering
+"how far in must a row start", not "how round is the corner". On the trailing edge the corner is
+subsumed by the bar column's 84 pt, and in the tall pose the 82 pt status bar covers the top, so
+**only the leading edge ever changes** on this hardware. No `Spacing.lg` fallback was needed and
+none shipped: where nothing answers, `cornerInsets` is zero and every page stays exactly where it
+was.
+
+What landed: `cornerInsets` and a diagnostic `regionInsets` (all four regions) on the polled
+`displayState` and the pushed `displayChanged`, with the corner in the push signature so a pose
+that moves it pushes; `DisplayEnvironment.cornerInsets`, `regionInsets`, `chromeInsets(padding)`
+(the larger of the two per edge) and the static `chromeInsetsOf` the shell uses; a
+**Corner-adapted layout regions** card on the Display probe page showing all of it;
+`GlassShellLayout.cornerInsets`, applied on a system edge to the top and the **non-rail** side
+only and handed to the page through `MediaQuery.padding`, so its app bar takes the top itself (as
+it takes the Dynamic Island's inset on a phone) and the shell's `SafeArea` takes the side, with
+nothing to change in any page. Tests: three in `display_environment_test.dart` and five in
+`glass_shell_layout_test.dart` (the corner on either edge, the cover's own smaller answer, a
+sideways scroller taking it as padding, and no system edge — where the corner insets change
+nothing at all).
+
+**Two smaller findings.** The page's media query had to be re-declared **inside**
+`_keyboardSafe`, not outside it: that wrapper builds a `MediaQuery.removeViewInsets` from the
+shell's own context, so a media query nested under it that copies the ambient `mq` hands the page
+back the keyboard inset the wrapper had just spent — caught by the existing landscape-keyboard
+test, and now the rail branch zeroes the bottom view inset the way the bleeding branch always
+did. And the page's content box on the inner display is **851 pt**, not phase 2's 867: the fade
+cliff and the bar column are where they were, the 16 pt comes off the leading edge.
+
+Verified on the device, debug build, signed in, scratch project (D8): `.shots/duo/`
+`phase4-corner-{wide,cover}-{before,after}.png` (the top-left corner at 2x, "before" taken from
+the phase 3 build first) plus `phase4-corner-{wide,cover}-after-hub.png`, which are crops of
+**Device Hub's own window** (`screencapture -l <id>` with the id from `CGWindowList`) so the
+bezel's corner mask is in the picture — that mask is what cuts the icon, and the shots show it
+clear on both panels. `phase4-wide-work.png` is the Work page's app bar on the same inset, and
+`phase4-probe-wide.png` is the Display page's new **Corner-adapted layout regions** card reading
+the table above back off the device. `idb ui describe-all` puts the picker's button box at
+**x = 16** where it was at 0. A full pose circuit logged no exception and no overflow.
+
+**What this does not cover: a route outside the project shell.** The clearance is the shell's,
+handed down through its own media query, so everything inside it takes it — including a page the
+branch navigator pushes, such as a work item or a pull request. A route that is not in the shell
+at all (the Organizations screen, every `/diagnostics/*` page, the launch flow) still lays out
+against a zero inset and its back arrow still sits in the curve; `phase4-probe-wide.png` shows it.
+Those pages follow the `SafeArea(top: false, bottom: false)` convention, which cannot help here for
+the same reason it cannot help the shell, and giving them the corner means either a `DisplayScope`
+read in each one or a wrapper above the router. It is a small, separate change, and §7 is the
+place for it.
+
+### 9.12 Phase 4B: the rich text editor under a live resize (2026-09-20)
+
+The §4.5 test, on the device, scratch work item **15546** (`[phase2] tablet dialog HTML`, a
+description with real `<b>`): open the form, open the description editor so the WebView is live,
+then `book`, `open`, `rotate` (tall), `book`, `open`, `rotate 3` back to the wide pose, with a
+temporary `debugPrint` counting editor builds, `onInit`s and disposes (removed again).
+
+**Nothing breaks, and nothing needed fixing.** Across the whole circuit: **one** build, **one**
+`onInit`, **no** dispose, the content visible and unchanged in every pose, and **no exception and
+no overflow** in the log. Pressing **Done** afterwards round-tripped through the WebView —
+`getText()` answered and the form's description card showed the text — so the editor was still
+live at the end, not a stale picture. Folding with the form open and the editor closed was clean
+as well. Shots: `.shots/duo/phase4-editor-{wide,book,open,tall,tall-book,back,roundtrip,
+form-book}.png`.
+
+Why it survives is worth writing down, because it is one line of code: `HtmlFieldEditor` keeps its
+`HtmlEditor` in a **`late final`** field and `build` returns that same instance, so a rebuild
+hands the element an identical widget and the WebView is never recreated. The `LayoutBuilder` in
+`RichTextControl` is outside the slot and the slot's position in the `ListView` never moves, which
+is the F3 rule. The mitigations §4.5 held in reserve — debouncing the width, snapshotting the HTML
+— are not needed and were not built.
+
+**The one imperfection: the slot's height is frozen.** `otherOptions: OtherOptions(height:)` is
+read once, so after a rotation the WebView keeps the height the first layout gave it: 507 pt in
+the wide pose against the 520 a fresh open in the tall pose would compute. Thirteen points, and
+invisible — the blank space under the editor in the tall shots is the 520 pt clamp from F3, not
+the staleness. Unfreezing it would mean building a new `HtmlEditor` widget with the new height,
+which is exactly the recreation this design exists to prevent, so it stays frozen. Recorded as F6.
+
+**A tooling note.** `idb ui tap --api ax` does not press an `AlertDialog.adaptive` button on iOS
+(the "Discard your changes?" confirmation ignored four presses of `Discard` while `Close` and
+`Done` worked in the same session), and an ax tap by **coordinates** on the inner panel answers
+"No translation object returned for simulator". `tool/duo-drag click X Y` through Device Hub does
+it. idb's `describe-all` also keeps reporting the **Application** element at the pre-rotation size
+while every child is in the new one, so trust the children's frames, not the root's.
+
+### Phase 4 landed
+
+4.3's corner clearance (A) and 4.5's live-resize test (B) are done, on the device, in the poses
+above. Phase 4 changed `ios/Runner/AppDelegate.swift`, `lib/core/display_cutout.dart`,
+`lib/core/display_environment.dart`, `lib/features/diagnostics/display_probe_page.dart`,
+`lib/features/projects/glass_shell_layout.dart` and `lib/features/projects/project_shell.dart`,
+with eight new tests. Nothing in the rich text editor changed: B was a test, and it passed.
+
+Left for later, with the reason: **Split View** is still unstarted (§9.5), so the corner insets of
+a pane are unmeasured — a pane's inner edge is not a display corner at all, and this build simply
+takes whatever iOS answers there. And the **rich text editor's dialog does not move to one half**
+when the fold happens while it is already open: `showBoardhopDialog` settles the alignment when
+the route is shown, and `openRichTextEditor` does not go through it at all. Both are phase 3's
+scope, not a phase 4 regression; §7 is the place for them.
+
