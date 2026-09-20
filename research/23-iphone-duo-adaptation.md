@@ -161,7 +161,7 @@ were identical in every row and `viewInsets` was zero throughout.
 | Open, tall pose, flat | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **inactive**, horizontal, (0, 455.5) 669 x 40 | fullyOpen, 3.14 |
 | Open, tall pose, partly folded (book) | **669 x 951** | medium | 0 / **82** / 0 / 34 | **unspecified** | **active**, **horizontal**, (0, 455.5) 669 x 40, margins 20 top and bottom | partiallyOpen, 2.23 |
 | Split View, left pane (Kelly started it by hand, 2026-09-20, Safari on the right) | 469 x 669 | compact | 0 / 0 / 8.7 / 34 | **leading** | inactive, vertical, clipped to the pane at x 455.5 (13.5 pt of the 40 pt band visible), margins 20 | fullyOpen 3.14 |
-| Split View, right pane | not measured | — | — | — | — | — |
+| Split View, right pane (Kelly swapped the sides) | 469 x 669 | compact | 8.7 / 0 / **84** / 34 | **trailing** | inactive, vertical, clipped to the pane at x 0 to 13.5, margins 20 | fullyOpen 3.14 |
 
 Three corrections to what this table used to predict:
 
@@ -1102,4 +1102,15 @@ Kelly put Boardhop on the left and Safari on the right. Measured with the Displa
   the pane; nothing in the pane should split (each pane is one panel) and `paneWidthFor` will
   ignore it because 455.5 is above every pane maximum.
 - `pushes` 4 while entering Split View; `metricsChanges` 1 (the resize itself).
-- The right pane is measured when Kelly swaps the sides.
+- **Right pane** (Kelly swapped the sides; `split-right.json`, `split-right-home.png`,
+  `split-right-probe.png`): 469 x 669, `compact`, `verticalBarEdge` **trailing**, `railSide`
+  right; `padding` **8.7 / 0 / 84 / 34**, so here the 84 pt status column *is* reported and the
+  bare rail sits inside it under the cluster exactly as on the full display; 8.7 pt on the
+  divider side again. The division region is inactive and clipped to x 0 to 13.5. Two
+  occlusions: the status cluster **active** at (385, 0) 84 x 120, and an **inactive** one at
+  (195.3, 21) 58 x 37 that is most likely the front camera housing (inactive because nothing is
+  drawn there in this pose). `pushes` 7, `metricsChanges` 6 across the swap. The accessibility
+  backend (`idb ui tap --api ax`, `describe-all`) sees only the leading app in Split View, so the
+  right pane was driven with `tool/duo-drag click` (mapping `DUO_OX=877 DUO_OY=315 DUO_SC=0.7003`).
+  Both panes verified by eye: the rail on each pane's outer edge, D1 holds in Split View.
+- Question 2 of 12b (is the divider draggable) is still Kelly's to answer by trying it.
